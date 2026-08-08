@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                  String        @id @default(cuid())
+  fullName            String
+  email               String        @unique
+  phone               String        @unique
+  password            String
+  walletBalance       Float         @default(1000)
+  role                Role          @default(USER)
+  resetPasswordToken  String?
+  resetPasswordExpires DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  transactions        Transaction[]
+  examPins             ExamPin[]
+}
+
+model Transaction {
+  id          String          @id @default(cuid())
+  userId      String
+  type        TransactionType
+  amount      Float
+  description String
+  status      String
+  reference   String          @unique
+  createdAt   DateTime        @default(now())
+  provider    String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum TransactionType {
+  FUND_WALLET
+  AIRTIME
+  DATA
+  ELECTRICITY
+  CABLE
+  EXAM_PIN
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+model ExamPin {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String
+  pin       String
+  serial    String
+  amount    Float
+  reference String   @unique
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
