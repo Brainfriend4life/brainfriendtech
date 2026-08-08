@@ -1,8 +1,10 @@
-
 "use client";
 
-import { useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import {
+  useSearchParams,
+  useRouter,
+} from "next/navigation";
 import Link from "next/link";
 import {
   LockKeyhole,
@@ -11,7 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -71,10 +73,12 @@ export default function ResetPasswordPage() {
         "/api/auth/reset-password",
         {
           method: "POST",
+
           headers: {
             "Content-Type":
               "application/json",
           },
+
           body: JSON.stringify({
             token,
             newPassword,
@@ -90,6 +94,7 @@ export default function ResetPasswordPage() {
           data.message ||
             "Failed to reset password."
         );
+
         return;
       }
 
@@ -118,8 +123,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-
+    <div className="flex min-h-[70vh] items-center justify-center px-4 py-8">
       <div className="w-full max-w-md">
 
         {/* HEADER */}
@@ -136,7 +140,7 @@ export default function ResetPasswordPage() {
 
           <p className="mt-2 text-gray-500">
             Create a new password for your
-            Brainfriend VTU account.
+            Brainfriend Tech account.
           </p>
 
         </div>
@@ -176,7 +180,8 @@ export default function ResetPasswordPage() {
                     )
                   }
                   placeholder="Enter new password"
-                  className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  disabled={loading}
+                  className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
                 />
 
               </div>
@@ -205,16 +210,15 @@ export default function ResetPasswordPage() {
 
                 <input
                   type="password"
-                  value={
-                    confirmPassword
-                  }
+                  value={confirmPassword}
                   onChange={(e) =>
                     setConfirmPassword(
                       e.target.value
                     )
                   }
                   placeholder="Confirm new password"
-                  className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  disabled={loading}
+                  className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
                 />
 
               </div>
@@ -252,8 +256,28 @@ export default function ResetPasswordPage() {
         </div>
 
       </div>
-
     </div>
   );
 }
 
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[70vh] items-center justify-center px-4">
+          <div className="text-center">
+
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+
+            <p className="mt-4 text-sm text-gray-500">
+              Loading reset password...
+            </p>
+
+          </div>
+        </div>
+      }
+    >
+      <ResetPasswordContent />
+    </Suspense>
+  );
+}
