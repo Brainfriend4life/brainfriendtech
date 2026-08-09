@@ -3,25 +3,27 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
 model User {
-  id                  String        @id @default(cuid())
-  fullName            String
-  email               String        @unique
-  phone               String        @unique
-  password            String
-  walletBalance       Float         @default(0)
-  role                Role          @default(USER)
-  resetPasswordToken  String?
+  id                   String     @id @default(cuid())
+  fullName             String
+  email                String     @unique
+  phone                String     @unique
+  password             String
+  walletBalance        Float      @default(0)
+  role                 Role       @default(USER)
+  status               UserStatus @default(ACTIVE)
+  resetPasswordToken   String?
   resetPasswordExpires DateTime?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 
   transactions Transaction[]
+  withdrawals  Withdrawal[]
   examPins     ExamPin[]
   cbtAttempts  CbtAttempt[]
 }
@@ -40,8 +42,43 @@ model Transaction {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model Withdrawal {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount Float
+
+  accountName   String
+  accountNumber String
+  bankName      String
+
+  status WithdrawalStatus @default(PENDING)
+
+  reference String @unique
+
+  adminNote String?
+
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
 enum TransactionType {
   FUND_WALLET
+  WITHDRAWAL
   AIRTIME
   DATA
   ELECTRICITY
@@ -52,6 +89,11 @@ enum TransactionType {
 enum Role {
   USER
   ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
 }
 
 model ExamPin {
@@ -77,10 +119,11 @@ model PasswordResetToken {
   @@index([email])
 }
 
-
-/* =========================================================
-   BRAINFRIEND TECH EDUCATION / CBT
-   ========================================================= */
+/**
+ * =========================================================
+ * BRAINFRIEND TECH EDUCATION / CBT
+ * =========================================================
+ */
 
 model CbtExam {
   id          String   @id @default(cuid())
@@ -141,7 +184,7 @@ model CbtAttempt {
   id String @id @default(cuid())
 
   userId String
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   examId String
   exam   CbtExam @relation(fields: [examId], references: [id], onDelete: Cascade)
