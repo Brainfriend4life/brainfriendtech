@@ -1,5 +1,5 @@
 import UserActions from "./UserActions";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 
 type Props = {

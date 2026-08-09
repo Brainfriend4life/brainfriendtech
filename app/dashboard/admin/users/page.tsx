@@ -1,5 +1,5 @@
 import Link from "next/link";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { Users, ShieldCheck, UserCheck, UserX } from "lucide-react";
 
 export default async function AdminUsersPage() {

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import axios from "axios";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { vtpassConfig } from "@/lib/vtpass";
 import { generateRequestId } from "@/lib/requestId";
 

@@ -6,7 +6,7 @@ import {
   Wallet,
   Clock,
 } from "lucide-react";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export default async function AdminDashboardPage() {
   const [

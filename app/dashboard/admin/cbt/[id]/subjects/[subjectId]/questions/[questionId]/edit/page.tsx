@@ -1,6 +1,6 @@
 
 import Link from "next/link";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import EditQuestionForm from "./EditQuestionForm";
