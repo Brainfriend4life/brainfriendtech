@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
+  provider = "postgresql"
+  url = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -20,8 +20,10 @@ model User {
   resetPasswordExpires DateTime?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
-  transactions        Transaction[]
-  examPins             ExamPin[]
+
+  transactions Transaction[]
+  examPins     ExamPin[]
+  cbtAttempts  CbtAttempt[]
 }
 
 model Transaction {
@@ -34,7 +36,8 @@ model Transaction {
   reference   String          @unique
   createdAt   DateTime        @default(now())
   provider    String
-  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum TransactionType {
@@ -74,3 +77,106 @@ model PasswordResetToken {
   @@index([email])
 }
 
+
+/* =========================================================
+   BRAINFRIEND TECH EDUCATION / CBT
+   ========================================================= */
+
+model CbtExam {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  duration    Int
+  totalMarks  Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subjects CbtSubject[]
+  attempts CbtAttempt[]
+}
+
+model CbtSubject {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  examId String
+  exam   CbtExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  questions CbtQuestion[]
+
+  @@unique([examId, name])
+}
+
+model CbtQuestion {
+  id       String @id @default(cuid())
+  question String
+
+  optionA String
+  optionB String
+  optionC String
+  optionD String
+
+  correctAnswer String
+  explanation   String?
+
+  marks    Int     @default(1)
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subjectId String
+  subject   CbtSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  answers CbtAnswer[]
+
+  @@index([subjectId])
+}
+
+model CbtAttempt {
+  id String @id @default(cuid())
+
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  examId String
+  exam   CbtExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  status String @default("pending")
+
+  score      Int   @default(0)
+  totalMarks Int   @default(0)
+  percentage Float @default(0)
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  answers CbtAnswer[]
+
+  @@index([userId])
+  @@index([examId])
+}
+
+model CbtAnswer {
+  id String @id @default(cuid())
+
+  attemptId String
+  attempt   CbtAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  questionId String
+  question   CbtQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  selectedAnswer String?
+
+  isCorrect    Boolean @default(false)
+  marksAwarded Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@unique([attemptId, questionId])
+  @@index([questionId])
+}

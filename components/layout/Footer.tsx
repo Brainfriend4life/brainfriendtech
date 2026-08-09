@@ -99,10 +99,17 @@ export default function Footer() {
               </Link>
 
               <Link
-                href="/dashboard/exams"
+                href="/dashboard/CbtExamClient"
                 className="block transition hover:text-white"
               >
                 Exams & Education
+              </Link>
+
+              <Link
+                href="/dashboard/exams"
+                className="block transition hover:text-white"
+              >
+                CBT/Education
               </Link>
 
             </div>

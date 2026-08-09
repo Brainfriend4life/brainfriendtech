@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -16,6 +15,7 @@ import {
   Wallet,
   LockKeyhole,
   X,
+  BookOpen,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -47,33 +47,45 @@ export default function Sidebar({
     <>
       {/* MOBILE OVERLAY */}
       {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+        <button
+          type="button"
+          aria-label="Close sidebar"
           onClick={onClose}
+          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
         />
       )}
 
       {/* SIDEBAR */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-indigo-700 p-6 text-white transition-transform duration-300 lg:static lg:z-auto lg:block lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 overflow-y-auto bg-indigo-700 p-6 text-white transition-transform duration-300 lg:static lg:z-auto lg:block lg:translate-x-0 ${
           isOpen
             ? "translate-x-0"
             : "-translate-x-full"
         }`}
       >
         {/* HEADER */}
-        <div className="flex items-center gap-3"/>
-  <img
-    src="/logo.png"
-    alt="Brainfriend Tech"
-    className="h-10 w-10 rounded-lg object-contain"
-  />
-        <div className="mb-10 flex items-center justify-between">
-          <h2 className="text-2xl font-bold">
-            Brainfriend Tech
-          </h2>
+        <div className="mb-8 flex items-center justify-between">
+          <Link
+            href="/dashboard"
+            onClick={onClose}
+            className="flex items-center gap-3"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-indigo-700">
+              <GraduationCap size={22} />
+            </div>
 
-          {/* MOBILE CLOSE BUTTON */}
+            <div>
+              <p className="font-bold leading-tight">
+                Brainfriend
+              </p>
+
+              <p className="text-xs text-indigo-200">
+                Tech
+              </p>
+            </div>
+          </Link>
+
+          {/* MOBILE CLOSE */}
           <button
             type="button"
             onClick={onClose}
@@ -86,6 +98,7 @@ export default function Sidebar({
 
         {/* NAVIGATION */}
         <nav className="space-y-2">
+          {/* DASHBOARD */}
           <Link
             href="/dashboard"
             onClick={onClose}
@@ -95,6 +108,7 @@ export default function Sidebar({
             Dashboard
           </Link>
 
+          {/* WALLET */}
           <Link
             href="/dashboard/wallet"
             onClick={onClose}
@@ -104,6 +118,7 @@ export default function Sidebar({
             Wallet
           </Link>
 
+          {/* AIRTIME */}
           <Link
             href="/dashboard/airtime"
             onClick={onClose}
@@ -113,6 +128,7 @@ export default function Sidebar({
             Airtime
           </Link>
 
+          {/* DATA */}
           <Link
             href="/dashboard/data"
             onClick={onClose}
@@ -122,6 +138,7 @@ export default function Sidebar({
             Data
           </Link>
 
+          {/* ELECTRICITY */}
           <Link
             href="/dashboard/electricity"
             onClick={onClose}
@@ -131,6 +148,7 @@ export default function Sidebar({
             Electricity
           </Link>
 
+          {/* CABLE */}
           <Link
             href="/dashboard/cable"
             onClick={onClose}
@@ -140,6 +158,17 @@ export default function Sidebar({
             Cable TV
           </Link>
 
+          {/* EDUCATION / CBT */}
+          <Link
+            href="/dashboard/education"
+            onClick={onClose}
+            className="flex items-center gap-3 rounded-lg bg-indigo-600 p-3 font-medium hover:bg-indigo-500"
+          >
+            <BookOpen size={20} />
+            Education / CBT
+          </Link>
+
+          {/* EXAM PINS */}
           <Link
             href="/dashboard/exams"
             onClick={onClose}
@@ -149,6 +178,7 @@ export default function Sidebar({
             Exam Pins
           </Link>
 
+          {/* TRANSACTIONS */}
           <Link
             href="/dashboard/transactions"
             onClick={onClose}
@@ -158,6 +188,7 @@ export default function Sidebar({
             Transactions
           </Link>
 
+          {/* PROFILE */}
           <Link
             href="/dashboard/profile"
             onClick={onClose}
@@ -167,6 +198,7 @@ export default function Sidebar({
             Profile
           </Link>
 
+          {/* CHANGE PASSWORD */}
           <Link
             href="/dashboard/profile/change-password"
             onClick={onClose}
@@ -194,4 +226,3 @@ export default function Sidebar({
     </>
   );
 }
-

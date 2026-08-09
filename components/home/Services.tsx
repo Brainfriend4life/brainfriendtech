@@ -5,6 +5,7 @@ import {
   Zap,
   Tv,
   GraduationCap,
+  BookOpen,
 } from "lucide-react";
 
 const services = [
@@ -43,28 +44,38 @@ const services = [
     icon: GraduationCap,
     href: "/dashboard/exams",
   },
+  {
+    title: "CBT Examination",
+    description:
+      "Practice and take CBT examinations online with instant results.",
+    icon: BookOpen,
+    href: "/dashboard/education/cbt",
+  },
 ];
 
 export default function Services() {
   return (
     <section
       id="services"
-      className="bg-gray-50 px-4 py-16 sm:px-6 lg:px-8"
+      className="px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20"
     >
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
+
         {/* SECTION HEADER */}
-        <div className="mb-10 text-center">
-          <h2 className="text-3xl font-bold text-gray-900 sm:text-4xl">
+
+        <div className="px-2 text-center sm:px-0">
+          <h2 className="text-2xl font-bold text-gray-900 sm:text-3xl lg:text-4xl">
             Our Services
           </h2>
 
-          <p className="mx-auto mt-3 max-w-2xl text-gray-600">
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-gray-600 sm:text-base">
             Everything you need in one secure VTU platform.
           </p>
         </div>
 
         {/* SERVICES */}
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+
+        <div className="mt-8 grid grid-cols-1 gap-5 sm:mt-10 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 lg:gap-8">
           {services.map((service) => {
             const Icon = service.icon;
 
@@ -72,25 +83,29 @@ export default function Services() {
               <Link
                 key={service.title}
                 href={service.href}
-                className="group block rounded-2xl bg-white p-6 shadow-md transition-all duration-300 hover:-translate-y-2 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                className="group block rounded-2xl bg-white p-5 shadow-md transition-all duration-300 hover:-translate-y-2 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:p-6"
               >
                 {/* ICON */}
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-indigo-100 transition-colors duration-300 group-hover:bg-indigo-600">
-                  <Icon className="h-7 w-7 text-indigo-600 transition-colors duration-300 group-hover:text-white" />
+
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 transition-colors duration-300 group-hover:bg-indigo-600 sm:h-14 sm:w-14">
+                  <Icon className="h-6 w-6 text-indigo-600 transition-colors duration-300 group-hover:text-white sm:h-7 sm:w-7" />
                 </div>
 
                 {/* TITLE */}
-                <h3 className="mb-2 text-xl font-semibold text-gray-900 transition-colors duration-300 group-hover:text-indigo-600">
+
+                <h3 className="mb-2 text-lg font-semibold text-gray-900 transition-colors duration-300 group-hover:text-indigo-600 sm:text-xl">
                   {service.title}
                 </h3>
 
                 {/* DESCRIPTION */}
-                <p className="text-gray-600">
+
+                <p className="text-sm leading-6 text-gray-600 sm:text-base">
                   {service.description}
                 </p>
 
                 {/* LINK TEXT */}
-                <div className="mt-5 text-sm font-semibold text-indigo-600">
+
+                <div className="mt-4 text-sm font-semibold text-indigo-600 sm:mt-5">
                   Get Started{" "}
                   <span className="inline-block transition-transform duration-300 group-hover:translate-x-1">
                     →
@@ -100,6 +115,7 @@ export default function Services() {
             );
           })}
         </div>
+
       </div>
     </section>
   );
