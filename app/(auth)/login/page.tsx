@@ -9,6 +9,7 @@ import AuthButton from "@/components/auth/AuthButton";
 import Link from "next/link";
 import toast from "react-hot-toast";
 
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -44,15 +45,22 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg">
+     <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg">
+    {/* BACK TO HOME */}
+    <Link
+      href="/"
+      className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 transition hover:text-indigo-800"
+    >
+      ← Back to Home
+    </Link>
 
-      <h1 className="mb-2 text-center text-3xl font-bold">
-        Welcome Back
-      </h1>
+    <h1 className="mb-2 text-center text-3xl font-bold">
+      Welcome Back
+    </h1>
 
-      <p className="mb-8 text-center text-gray-500">
-        Login to your Brainfriend VTU account
-      </p>
+    <p className="mb-8 text-center text-gray-500">
+      Login to your Brainfriend VTU account
+    </p>
 
       <form
         onSubmit={handleSubmit}

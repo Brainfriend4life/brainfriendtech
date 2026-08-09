@@ -14,7 +14,7 @@ model User {
   email               String        @unique
   phone               String        @unique
   password            String
-  walletBalance       Float         @default(1000)
+  walletBalance       Float         @default(0)
   role                Role          @default(USER)
   resetPasswordToken  String?
   resetPasswordExpires DateTime?

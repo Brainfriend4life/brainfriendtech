@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import AuthInput from "@/components/auth/AuthInput";
 import AuthButton from "@/components/auth/AuthButton";
+import Link from "next/link";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -55,9 +56,12 @@ export default function RegisterPage() {
 
   return (
     <div className="mx-auto mt-10 w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-      <h1 className="mb-6 text-center text-3xl font-bold">
-        Create Account
-      </h1>
+      <Link
+  href="/"
+  className="mb-6 inline-flex items-center text-sm font-medium text-indigo-600 transition hover:text-indigo-800"
+>
+  ← Back to Home
+</Link>
 
       <form
         onSubmit={handleSubmit}
