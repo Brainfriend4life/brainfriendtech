@@ -14,29 +14,63 @@ export const authOptions: AuthOptions = {
       },
 
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        if (
+          !credentials?.email ||
+          !credentials?.password
+        ) {
           throw new Error("Missing credentials");
         }
 
-        const user = await prisma.user.findUnique({
-          where: {
-            email: credentials.email,
-          },
-        });
+        const email =
+          credentials.email.trim().toLowerCase();
+
+        const user =
+          await prisma.user.findUnique({
+            where: {
+              email,
+            },
+          });
 
         if (!user) {
           throw new Error("User not found");
         }
 
-        const validPassword = await compare(
-          credentials.password,
-          user.password
-        );
-
-        if (!validPassword) {
-          throw new Error("Invalid password");
+        /*
+         * CHECK ACCOUNT STATUS
+         */
+        if (user.status !== "ACTIVE") {
+          throw new Error(
+            "Your account has been suspended."
+          );
         }
 
+        /*
+         * CHECK EMAIL VERIFICATION
+         */
+        if (!user.emailVerified) {
+          throw new Error(
+            "Please verify your email before logging in."
+          );
+        }
+
+        /*
+         * CHECK PASSWORD
+         */
+        const validPassword =
+          await compare(
+            credentials.password,
+            user.password
+          );
+
+        if (!validPassword) {
+          throw new Error(
+            "Invalid email or password"
+          );
+        }
+
+        /*
+         * RETURN USER
+         */
         return {
           id: user.id,
           name: user.fullName,
@@ -63,8 +97,11 @@ export const authOptions: AuthOptions = {
 
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as string;
+        session.user.id =
+          token.id as string;
+
+        session.user.role =
+          token.role as string;
       }
 
       return session;

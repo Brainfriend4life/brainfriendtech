@@ -9,6 +9,8 @@ import {
   GraduationCap,
   Trophy,
   Wallet,
+  TrendingUp,
+  ArrowDownToLine,
   LogOut,
   Menu,
   X,
@@ -178,6 +180,30 @@ export default function AdminSidebar() {
             <Wallet className="h-5 w-5" />
 
             <span>Wallet Activity</span>
+          </Link>
+
+          {/* REVENUE & PROFIT */}
+
+          <Link
+            href="/dashboard/admin/revenue"
+            onClick={closeSidebar}
+            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
+          >
+            <TrendingUp className="h-5 w-5" />
+
+            <span>Revenue & Profit</span>
+          </Link>
+
+          {/* WITHDRAW REVENUE */}
+
+          <Link
+            href="/dashboard/admin/revenue/withdraw"
+            onClick={closeSidebar}
+            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
+          >
+            <ArrowDownToLine className="h-5 w-5" />
+
+            <span>Withdraw Revenue</span>
           </Link>
         </nav>
 

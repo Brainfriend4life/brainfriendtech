@@ -8,25 +8,41 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// =========================================================
+// USER
+// =========================================================
+
 model User {
-  id                   String     @id @default(cuid())
-  fullName             String
-  email                String     @unique
-  phone                String     @unique
-  password             String
-  walletBalance        Float      @default(0)
-  role                 Role       @default(USER)
-  status               UserStatus @default(ACTIVE)
+  id            String     @id @default(cuid())
+  fullName      String
+  email         String     @unique
+  phone         String     @unique
+  password      String
+  walletBalance Float      @default(0)
+  role          Role       @default(USER)
+  status        UserStatus @default(ACTIVE)
+
+  // EMAIL VERIFICATION
+  emailVerified            Boolean   @default(false)
+  emailVerificationToken   String?   @unique
+  emailVerificationExpires DateTime?
+
+  // PASSWORD RESET
   resetPasswordToken   String?
   resetPasswordExpires DateTime?
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   transactions Transaction[]
   withdrawals  Withdrawal[]
   examPins     ExamPin[]
   cbtAttempts  CbtAttempt[]
 }
+
+// =========================================================
+// TRANSACTIONS
+// =========================================================
 
 model Transaction {
   id          String          @id @default(cuid())
@@ -39,14 +55,24 @@ model Transaction {
   createdAt   DateTime        @default(now())
   provider    String
 
+  cost   Float @default(0)
+  profit Float @default(0)
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
 }
 
-model Withdrawal {
-  id String @id @default(cuid())
+// =========================================================
+// CUSTOMER WITHDRAWALS
+// =========================================================
 
+model Withdrawal {
+  id     String @id @default(cuid())
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   amount Float
 
@@ -56,7 +82,41 @@ model Withdrawal {
 
   status WithdrawalStatus @default(PENDING)
 
+  reference String  @unique
+  adminNote String?
+
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// =========================================================
+// BUSINESS / ADMIN WITHDRAWALS
+// =========================================================
+
+model BusinessWithdrawal {
+  id String @id @default(cuid())
+
+  amount Float
+
+  method BusinessWithdrawalMethod @default(MANUAL)
+
+  accountName   String
+  accountNumber String
+  bankName      String
+
+  recipientCode String?
+  transferCode  String?
+
   reference String @unique
+
+  status BusinessWithdrawalStatus @default(PENDING)
 
   adminNote String?
 
@@ -64,41 +124,19 @@ model Withdrawal {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  @@index([userId])
   @@index([status])
+  @@index([method])
   @@index([createdAt])
 }
 
-enum WithdrawalStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  PAID
-}
-
-enum TransactionType {
-  FUND_WALLET
-  WITHDRAWAL
-  AIRTIME
-  DATA
-  ELECTRICITY
-  CABLE
-  EXAM_PIN
-}
-
-enum Role {
-  USER
-  ADMIN
-}
-
-enum UserStatus {
-  ACTIVE
-  SUSPENDED
-}
+// =========================================================
+// EXAM PINS
+// =========================================================
 
 model ExamPin {
-  id        String   @id @default(cuid())
-  userId    String
+  id     String @id @default(cuid())
+  userId String
+
   provider  String
   pin       String
   serial    String
@@ -107,7 +145,14 @@ model ExamPin {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
 }
+
+// =========================================================
+// PASSWORD RESET TOKEN
+// =========================================================
 
 model PasswordResetToken {
   id        String   @id @default(cuid())
@@ -119,40 +164,50 @@ model PasswordResetToken {
   @@index([email])
 }
 
-/**
- * =========================================================
- * BRAINFRIEND TECH EDUCATION / CBT
- * =========================================================
- */
+// =========================================================
+// CBT EXAM
+// =========================================================
 
 model CbtExam {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
   duration    Int
-  totalMarks  Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  totalMarks  Int     @default(0)
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   subjects CbtSubject[]
   attempts CbtAttempt[]
 }
 
+// =========================================================
+// CBT SUBJECT
+// =========================================================
+
 model CbtSubject {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   examId String
-  exam   CbtExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  exam CbtExam @relation(fields: [examId], references: [id], onDelete: Cascade)
 
   questions CbtQuestion[]
 
   @@unique([examId, name])
+  @@index([examId])
 }
+
+// =========================================================
+// CBT QUESTION
+// =========================================================
 
 model CbtQuestion {
   id       String @id @default(cuid())
@@ -173,21 +228,23 @@ model CbtQuestion {
   updatedAt DateTime @updatedAt
 
   subjectId String
-  subject   CbtSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  subject CbtSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
   answers CbtAnswer[]
 
   @@index([subjectId])
 }
 
+// =========================================================
+// CBT ATTEMPT
+// =========================================================
+
 model CbtAttempt {
   id String @id @default(cuid())
 
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   examId String
-  exam   CbtExam @relation(fields: [examId], references: [id], onDelete: Cascade)
 
   status String @default("pending")
 
@@ -198,20 +255,25 @@ model CbtAttempt {
   startedAt   DateTime  @default(now())
   completedAt DateTime?
 
+  user User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exam CbtExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
   answers CbtAnswer[]
 
   @@index([userId])
   @@index([examId])
+  @@index([status])
 }
+
+// =========================================================
+// CBT ANSWER
+// =========================================================
 
 model CbtAnswer {
   id String @id @default(cuid())
 
-  attemptId String
-  attempt   CbtAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-
+  attemptId  String
   questionId String
-  question   CbtQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   selectedAnswer String?
 
@@ -220,6 +282,53 @@ model CbtAnswer {
 
   createdAt DateTime @default(now())
 
+  attempt  CbtAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question CbtQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
   @@unique([attemptId, questionId])
   @@index([questionId])
+}
+
+// =========================================================
+// ENUMS
+// =========================================================
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum BusinessWithdrawalMethod {
+  MANUAL
+  PAYSTACK
+}
+
+enum BusinessWithdrawalStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  REVERSED
+}
+
+enum TransactionType {
+  FUND_WALLET
+  WITHDRAWAL
+  AIRTIME
+  DATA
+  ELECTRICITY
+  CABLE
+  EXAM_PIN
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
 }

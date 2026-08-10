@@ -1,6 +1,6 @@
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -10,12 +10,6 @@ function generateReference() {
     .substring(2, 8)
     .toUpperCase()}`;
 }
-
-const PAYSTACK_SECRET_KEY =
-  process.env.PAYSTACK_SECRET_KEY;
-
-const PAYSTACK_BASE_URL =
-  "https://api.paystack.co";
 
 // =========================================================
 // GET BUSINESS BALANCE + WITHDRAWAL HISTORY
@@ -27,8 +21,7 @@ export async function GET() {
     // ADMIN AUTHENTICATION
     // -------------------------------------------------------
 
-    const session =
-      await getServerSession(authOptions);
+    const session = await getServerSession(authOptions);
 
     if (
       !session?.user ||
@@ -36,7 +29,6 @@ export async function GET() {
     ) {
       return NextResponse.json(
         {
-          success: false,
           error: "Unauthorized.",
         },
         {
@@ -46,7 +38,7 @@ export async function GET() {
     }
 
     // -------------------------------------------------------
-    // TOTAL PROFIT
+    // CALCULATE TOTAL PROFIT
     // -------------------------------------------------------
 
     const profitResult =
@@ -55,7 +47,7 @@ export async function GET() {
           profit: true,
         },
         where: {
-          status: "SUCCESS",
+          status: "success",
         },
       });
 
@@ -63,7 +55,7 @@ export async function GET() {
       profitResult._sum.profit ?? 0;
 
     // -------------------------------------------------------
-    // ALREADY PROCESSED WITHDRAWALS
+    // CALCULATE BUSINESS MONEY ALREADY WITHDRAWN
     // -------------------------------------------------------
 
     const withdrawnResult =
@@ -85,7 +77,7 @@ export async function GET() {
       withdrawnResult._sum.amount ?? 0;
 
     // -------------------------------------------------------
-    // PENDING WITHDRAWALS
+    // CALCULATE PENDING REQUESTS
     // -------------------------------------------------------
 
     const pendingResult =
@@ -102,7 +94,7 @@ export async function GET() {
       pendingResult._sum.amount ?? 0;
 
     // -------------------------------------------------------
-    // AVAILABLE BALANCE
+    // AVAILABLE BUSINESS BALANCE
     // -------------------------------------------------------
 
     const availableBalance =
@@ -114,7 +106,7 @@ export async function GET() {
       );
 
     // -------------------------------------------------------
-    // WITHDRAWAL HISTORY
+    // RECENT WITHDRAWALS
     // -------------------------------------------------------
 
     const withdrawals =
@@ -145,7 +137,6 @@ export async function GET() {
 
     return NextResponse.json(
       {
-        success: false,
         error:
           "Failed to load business withdrawal information.",
       },
@@ -157,7 +148,7 @@ export async function GET() {
 }
 
 // =========================================================
-// CREATE BUSINESS WITHDRAWAL
+// CREATE BUSINESS WITHDRAWAL REQUEST
 // =========================================================
 
 export async function POST(
@@ -168,8 +159,9 @@ export async function POST(
     // ADMIN AUTHENTICATION
     // -------------------------------------------------------
 
-    const session =
-      await getServerSession(authOptions);
+    const session = await getServerSession(
+      authOptions
+    );
 
     if (
       !session?.user ||
@@ -177,7 +169,6 @@ export async function POST(
     ) {
       return NextResponse.json(
         {
-          success: false,
           error: "Unauthorized.",
         },
         {
@@ -187,28 +178,7 @@ export async function POST(
     }
 
     // -------------------------------------------------------
-    // CHECK PAYSTACK KEY
-    // -------------------------------------------------------
-
-    if (!PAYSTACK_SECRET_KEY) {
-      console.error(
-        "PAYSTACK_SECRET_KEY is missing."
-      );
-
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Paystack is not configured.",
-        },
-        {
-          status: 500,
-        }
-      );
-    }
-
-    // -------------------------------------------------------
-    // READ REQUEST
+    // READ BODY
     // -------------------------------------------------------
 
     let body: {
@@ -216,7 +186,6 @@ export async function POST(
       accountName?: string;
       accountNumber?: string;
       bankName?: string;
-      bankCode?: string;
     };
 
     try {
@@ -224,7 +193,6 @@ export async function POST(
     } catch {
       return NextResponse.json(
         {
-          success: false,
           error: "Invalid request body.",
         },
         {
@@ -233,8 +201,9 @@ export async function POST(
       );
     }
 
-    const amount =
-      Number(body?.amount);
+    const amount = Number(
+      body?.amount
+    );
 
     const accountName =
       typeof body?.accountName ===
@@ -254,12 +223,6 @@ export async function POST(
         ? body.bankName.trim()
         : "";
 
-    const bankCode =
-      typeof body?.bankCode ===
-      "string"
-        ? body.bankCode.trim()
-        : "";
-
     // -------------------------------------------------------
     // VALIDATION
     // -------------------------------------------------------
@@ -270,7 +233,6 @@ export async function POST(
     ) {
       return NextResponse.json(
         {
-          success: false,
           error:
             "Enter a valid withdrawal amount.",
         },
@@ -283,7 +245,6 @@ export async function POST(
     if (!accountName) {
       return NextResponse.json(
         {
-          success: false,
           error:
             "Account name is required.",
         },
@@ -293,14 +254,11 @@ export async function POST(
       );
     }
 
-    if (
-      !/^\d{10}$/.test(accountNumber)
-    ) {
+    if (!accountNumber) {
       return NextResponse.json(
         {
-          success: false,
           error:
-            "Enter a valid 10-digit Nigerian bank account number.",
+            "Account number is required.",
         },
         {
           status: 400,
@@ -311,7 +269,6 @@ export async function POST(
     if (!bankName) {
       return NextResponse.json(
         {
-          success: false,
           error:
             "Bank name is required.",
         },
@@ -321,21 +278,8 @@ export async function POST(
       );
     }
 
-    if (!bankCode) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Bank code is required.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
     // -------------------------------------------------------
-    // GET CURRENT PROFIT
+    // CALCULATE TOTAL PROFIT
     // -------------------------------------------------------
 
     const profitResult =
@@ -344,7 +288,7 @@ export async function POST(
           profit: true,
         },
         where: {
-          status: "SUCCESS",
+          status: "success",
         },
       });
 
@@ -352,7 +296,7 @@ export async function POST(
       profitResult._sum.profit ?? 0;
 
     // -------------------------------------------------------
-    // ALREADY WITHDRAWN
+    // CALCULATE MONEY ALREADY WITHDRAWN
     // -------------------------------------------------------
 
     const withdrawnResult =
@@ -374,7 +318,7 @@ export async function POST(
       withdrawnResult._sum.amount ?? 0;
 
     // -------------------------------------------------------
-    // PENDING
+    // CALCULATE PENDING WITHDRAWALS
     // -------------------------------------------------------
 
     const pendingResult =
@@ -402,51 +346,13 @@ export async function POST(
         0
       );
 
-    console.log(
-      "=========================================="
-    );
-
-    console.log(
-      "BUSINESS WITHDRAWAL REQUEST"
-    );
-
-    console.log(
-      "TOTAL PROFIT:",
-      totalProfit
-    );
-
-    console.log(
-      "TOTAL WITHDRAWN:",
-      totalWithdrawn
-    );
-
-    console.log(
-      "PENDING:",
-      pendingWithdrawals
-    );
-
-    console.log(
-      "AVAILABLE:",
-      availableBalance
-    );
-
-    console.log(
-      "REQUESTED:",
-      amount
-    );
-
-    console.log(
-      "=========================================="
-    );
-
     // -------------------------------------------------------
-    // CHECK AVAILABLE BALANCE
+    // CHECK BALANCE
     // -------------------------------------------------------
 
     if (amount > availableBalance) {
       return NextResponse.json(
         {
-          success: false,
           error:
             "Insufficient available business balance.",
           availableBalance,
@@ -458,74 +364,7 @@ export async function POST(
     }
 
     // -------------------------------------------------------
-    // GENERATE REFERENCE
-    // -------------------------------------------------------
-
-    const reference =
-      generateReference();
-
-    // -------------------------------------------------------
-    // CREATE PAYSTACK RECIPIENT
-    // -------------------------------------------------------
-    //
-    // Paystack requires a transfer recipient before
-    // initiating a bank transfer.
-    //
-
-    const recipientResponse =
-      await fetch(
-        `${PAYSTACK_BASE_URL}/transferrecipient`,
-        {
-          method: "POST",
-
-          headers: {
-            Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify({
-            type: "nuban",
-            name: accountName,
-            account_number:
-              accountNumber,
-            bank_code: bankCode,
-            currency: "NGN",
-          }),
-        }
-      );
-
-    const recipientData =
-      await recipientResponse.json();
-
-    console.log(
-      "PAYSTACK RECIPIENT RESPONSE:",
-      recipientData
-    );
-
-    if (
-      !recipientResponse.ok ||
-      !recipientData.status ||
-      !recipientData.data?.recipient_code
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            recipientData.message ||
-            "Unable to create Paystack transfer recipient.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    const recipientCode =
-      recipientData.data.recipient_code;
-
-    // -------------------------------------------------------
-    // CREATE PENDING WITHDRAWAL
+    // CREATE WITHDRAWAL REQUEST
     // -------------------------------------------------------
 
     const withdrawal =
@@ -539,170 +378,21 @@ export async function POST(
 
           bankName,
 
-          bankCode,
-
-          recipientCode,
-
-          reference,
+          reference:
+            generateReference(),
 
           status: "PENDING",
         },
       });
-
-    // -------------------------------------------------------
-    // INITIATE PAYSTACK TRANSFER
-    // -------------------------------------------------------
-
-    const transferResponse =
-      await fetch(
-        `${PAYSTACK_BASE_URL}/transfer`,
-        {
-          method: "POST",
-
-          headers: {
-            Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify({
-            source: "balance",
-
-            amount: Math.round(
-              amount * 100
-            ),
-
-            recipient:
-              recipientCode,
-
-            reference,
-
-            reason:
-              "Brainfriend Tech business profit withdrawal",
-
-            currency: "NGN",
-          }),
-        }
-      );
-
-    const transferData =
-      await transferResponse.json();
-
-    console.log(
-      "PAYSTACK TRANSFER RESPONSE:",
-      transferData
-    );
-
-    // -------------------------------------------------------
-    // PAYSTACK FAILED
-    // -------------------------------------------------------
-
-    if (
-      !transferResponse.ok ||
-      !transferData.status
-    ) {
-      await prisma.businessWithdrawal.update({
-        where: {
-          id: withdrawal.id,
-        },
-
-        data: {
-          status: "FAILED",
-
-          adminNote:
-            transferData.message ||
-            "Paystack transfer failed.",
-
-          processedAt:
-            new Date(),
-        },
-      });
-
-      return NextResponse.json(
-        {
-          success: false,
-
-          error:
-            transferData.message ||
-            "Paystack transfer failed.",
-
-          reference,
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    // -------------------------------------------------------
-    // UPDATE WITHDRAWAL
-    // -------------------------------------------------------
-
-    const paystackTransfer =
-      transferData.data;
-
-    const transferStatus =
-      String(
-        paystackTransfer?.status ||
-          ""
-      ).toLowerCase();
-
-    const finalStatus =
-      transferStatus ===
-      "success"
-        ? "SUCCESS"
-        : "PROCESSING";
-
-    const updatedWithdrawal =
-      await prisma.businessWithdrawal.update({
-        where: {
-          id: withdrawal.id,
-        },
-
-        data: {
-          status:
-            finalStatus,
-
-          transferCode:
-            paystackTransfer?.transfer_code ||
-            null,
-
-          adminNote:
-            transferData.message ||
-            null,
-
-          processedAt:
-            finalStatus === "SUCCESS"
-              ? new Date()
-              : null,
-        },
-      });
-
-    // -------------------------------------------------------
-    // RESPONSE
-    // -------------------------------------------------------
 
     return NextResponse.json(
       {
         success: true,
 
         message:
-          finalStatus ===
-          "SUCCESS"
-            ? "Withdrawal completed successfully."
-            : "Withdrawal has been sent to Paystack for processing.",
+          "Business withdrawal request created successfully.",
 
-        withdrawal:
-          updatedWithdrawal,
-
-        reference,
-
-        transferCode:
-          paystackTransfer?.transfer_code ||
-          null,
-
-        status:
-          finalStatus,
+        withdrawal,
 
         availableBalance:
           availableBalance - amount,
@@ -711,33 +401,16 @@ export async function POST(
         status: 201,
       }
     );
-  } catch (error: any) {
+  } catch (error) {
     console.error(
-      "=========================================="
-    );
-
-    console.error(
-      "BUSINESS WITHDRAWAL ERROR:"
-    );
-
-    console.error(
-      error?.response?.data ||
-        error
-    );
-
-    console.error(
-      error?.message
-    );
-
-    console.error(
-      "=========================================="
+      "BUSINESS WITHDRAWAL POST ERROR:",
+      error
     );
 
     return NextResponse.json(
       {
-        success: false,
         error:
-          "Failed to process business withdrawal.",
+          "Failed to create business withdrawal request.",
       },
       {
         status: 500,
@@ -745,3 +418,4 @@ export async function POST(
     );
   }
 }
+

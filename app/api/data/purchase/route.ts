@@ -86,8 +86,16 @@ export async function POST(req: NextRequest) {
 
     /*
      * ==========================================
-     * CALCULATE 5% SERVICE FEE
+     * CALCULATE SERVICE FEE
      * ==========================================
+     *
+     * Example:
+     *
+     * Data amount     = ₦1,000
+     * Service fee 5%  = ₦50
+     * Customer pays   = ₦1,050
+     *
+     * VTpass receives the actual data amount.
      */
 
     const serviceFee = dataAmount * 0.05;
@@ -165,15 +173,34 @@ export async function POST(req: NextRequest) {
       requestId
     );
 
+    console.log(
+      "DATA SERVICE:",
+      serviceID
+    );
+
+    console.log(
+      "DATA PHONE:",
+      String(phone).trim()
+    );
+
+    console.log(
+      "DATA AMOUNT:",
+      dataAmount
+    );
+
+    console.log(
+      "DATA SERVICE FEE:",
+      serviceFee
+    );
+
+    console.log(
+      "DATA CUSTOMER CHARGE:",
+      totalAmount
+    );
+
     /*
      * ==========================================
      * VTPASS PAYLOAD
-     *
-     * billersCode = customer's phone number
-     *
-     * VTpass receives only the actual
-     * data amount. The 5% fee belongs
-     * to our platform.
      * ==========================================
      */
 
@@ -193,7 +220,7 @@ export async function POST(req: NextRequest) {
 
     /*
      * ==========================================
-     * SEND PURCHASE REQUEST TO VTPASS
+     * SEND REQUEST TO VTPASS
      * ==========================================
      */
 
@@ -223,15 +250,68 @@ export async function POST(req: NextRequest) {
 
     /*
      * ==========================================
-     * TRANSACTION STATUS
+     * GET VTPASS TRANSACTION DETAILS
      * ==========================================
      */
 
+    const transaction =
+      vtpass.content?.transactions;
+
     const transactionStatus =
-      vtpass.content?.transactions
-        ?.status ||
+      transaction?.status ||
       vtpass.status ||
       "unknown";
+
+    /*
+     * ==========================================
+     * PROVIDER COST
+     * ==========================================
+     *
+     * VTpass returns:
+     *
+     * amount       = customer/service amount
+     * total_amount = actual amount charged by VTpass
+     *
+     * Example:
+     *
+     * amount       = 1000
+     * total_amount = 965
+     * commission   = 35
+     *
+     * Therefore provider cost = 965.
+     */
+
+    const providerCost =
+      Number(
+        transaction?.total_amount
+      );
+
+    const validProviderCost =
+      Number.isFinite(providerCost) &&
+      providerCost >= 0
+        ? providerCost
+        : dataAmount;
+
+    /*
+     * ==========================================
+     * CALCULATE PLATFORM PROFIT
+     * ==========================================
+     *
+     * Revenue = customer charge
+     *
+     * Profit =
+     * customer charge - provider cost
+     *
+     * Example:
+     *
+     * Revenue       = ₦1,050
+     * Provider cost = ₦965
+     * Profit        = ₦85
+     */
+
+    const platformProfit =
+      totalAmount -
+      validProviderCost;
 
     console.log(
       "DATA RESPONSE CODE:",
@@ -246,6 +326,16 @@ export async function POST(req: NextRequest) {
     console.log(
       "DATA TRANSACTION STATUS:",
       transactionStatus
+    );
+
+    console.log(
+      "DATA PROVIDER COST:",
+      validProviderCost
+    );
+
+    console.log(
+      "DATA PLATFORM PROFIT:",
+      platformProfit
     );
 
     /*
@@ -263,8 +353,6 @@ export async function POST(req: NextRequest) {
     /*
      * ==========================================
      * PURCHASE FAILED
-     *
-     * Do NOT deduct wallet.
      * ==========================================
      */
 
@@ -276,10 +364,25 @@ export async function POST(req: NextRequest) {
             type: "DATA",
             provider:
               serviceID.toUpperCase(),
+
+            /*
+             * The amount charged to the
+             * customer.
+             */
             amount: totalAmount,
+
+            /*
+             * No cost/profit because
+             * purchase failed.
+             */
+            cost: 0,
+            profit: 0,
+
             reference: requestId,
+
             status:
               transactionStatus.toUpperCase(),
+
             description:
               vtpass.response_description ||
               "Data purchase failed",
@@ -327,6 +430,8 @@ export async function POST(req: NextRequest) {
           message:
             vtpass.response_description ||
             "Data purchase failed.",
+          code: vtpass.code,
+          status: transactionStatus,
           data: vtpass,
         },
         {
@@ -338,30 +443,64 @@ export async function POST(req: NextRequest) {
     /*
      * ==========================================
      * SUCCESS
-     *
-     * Save transaction and deduct:
-     *
-     * DATA AMOUNT + 5% SERVICE FEE
      * ==========================================
+     *
+     * Save:
+     *
+     * amount = customer charge
+     * cost   = VTpass provider cost
+     * profit = platform profit
      */
 
     await prisma.$transaction(
       async (tx) => {
         /*
-         * Save transaction
+         * SAVE TRANSACTION
          */
 
         await tx.transaction.create({
           data: {
             userId: user.id,
+
             type: "DATA",
+
             provider:
               serviceID.toUpperCase(),
+
+            /*
+             * CUSTOMER REVENUE
+             *
+             * Example:
+             * ₦1,050
+             */
             amount: totalAmount,
+
+            /*
+             * ACTUAL PROVIDER COST
+             *
+             * Example:
+             * ₦965
+             */
+            cost: validProviderCost,
+
+            /*
+             * PLATFORM PROFIT
+             *
+             * Example:
+             * ₦85
+             */
+            profit: platformProfit,
+
             reference: requestId,
+
             status: "SUCCESS",
+
             description: `₦${dataAmount.toLocaleString(
-              "en-NG"
+              "en-NG",
+              {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              }
             )} data + 5% service fee (₦${serviceFee.toLocaleString(
               "en-NG",
               {
@@ -373,13 +512,18 @@ export async function POST(req: NextRequest) {
         });
 
         /*
-         * Deduct wallet
+         * DEDUCT CUSTOMER WALLET
+         *
+         * Customer pays:
+         *
+         * data amount + service fee
          */
 
         await tx.user.update({
           where: {
             id: user.id,
           },
+
           data: {
             walletBalance: {
               decrement:
@@ -392,7 +536,7 @@ export async function POST(req: NextRequest) {
 
     /*
      * ==========================================
-     * SUCCESS RESPONSE
+     * SUCCESS LOG
      * ==========================================
      */
 
@@ -415,6 +559,21 @@ export async function POST(req: NextRequest) {
     );
 
     console.log(
+      "CUSTOMER CHARGE:",
+      totalAmount
+    );
+
+    console.log(
+      "PROVIDER COST:",
+      validProviderCost
+    );
+
+    console.log(
+      "PLATFORM PROFIT:",
+      platformProfit
+    );
+
+    console.log(
       "TOTAL DEDUCTED:",
       totalAmount
     );
@@ -423,13 +582,32 @@ export async function POST(req: NextRequest) {
       "=========================================="
     );
 
+    /*
+     * ==========================================
+     * SUCCESS RESPONSE
+     * ==========================================
+     */
+
     return NextResponse.json({
       success: true,
+
       message:
         "Data purchased successfully.",
+
       amount: dataAmount,
+
       serviceFee,
+
       totalAmount,
+
+      providerCost:
+        validProviderCost,
+
+      profit:
+        platformProfit,
+
+      reference: requestId,
+
       vtpass,
     });
   } catch (error: any) {
@@ -442,11 +620,12 @@ export async function POST(req: NextRequest) {
     );
 
     console.error(
-      error.response?.data ||
-        error
+      "ERROR RESPONSE:",
+      error.response?.data
     );
 
     console.error(
+      "ERROR MESSAGE:",
       error.message
     );
 
@@ -457,11 +636,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
+
         message:
           error.response?.data
             ?.response_description ||
           error.response?.data?.message ||
           "Data purchase failed.",
+
         data:
           error.response?.data ||
           null,

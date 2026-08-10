@@ -10,11 +10,9 @@ import { generateRequestId } from "@/lib/requestId";
 
 export async function POST(req: NextRequest) {
   try {
-    /*
-     * ==========================================
-     * AUTHENTICATION
-     * ==========================================
-     */
+    // ==========================================
+    // AUTHENTICATION
+    // ==========================================
 
     const session = await getServerSession(authOptions);
 
@@ -30,11 +28,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /*
-     * ==========================================
-     * GET REQUEST DATA
-     * ==========================================
-     */
+    // ==========================================
+    // GET REQUEST DATA
+    // ==========================================
 
     const {
       serviceID,
@@ -42,11 +38,9 @@ export async function POST(req: NextRequest) {
       amount,
     } = await req.json();
 
-    /*
-     * ==========================================
-     * VALIDATION
-     * ==========================================
-     */
+    // ==========================================
+    // VALIDATION
+    // ==========================================
 
     if (!serviceID || !phone || !amount) {
       return NextResponse.json(
@@ -78,20 +72,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /*
-     * ==========================================
-     * CALCULATE 5% SERVICE FEE
-     * ==========================================
-     *
-     * Example:
-     *
-     * Airtime = ₦1,000
-     * Fee     = ₦50
-     * Total   = ₦1,050
-     *
-     * VTpass receives only ₦1,000.
-     * Your platform keeps the ₦50 fee.
-     */
+    // ==========================================
+    // CALCULATE 5% SERVICE FEE
+    // ==========================================
+    //
+    // Example:
+    //
+    // Airtime       = ₦1,000
+    // Service fee   = ₦50
+    // Customer pays = ₦1,050
+    //
+    // VTpass receives = ₦1,000
+    // Platform profit = ₦50
+    //
 
     const serviceFee =
       airtimeAmount * 0.05;
@@ -99,11 +92,9 @@ export async function POST(req: NextRequest) {
     const totalAmount =
       airtimeAmount + serviceFee;
 
-    /*
-     * ==========================================
-     * FIND USER
-     * ==========================================
-     */
+    // ==========================================
+    // FIND USER
+    // ==========================================
 
     const user =
       await prisma.user.findUnique({
@@ -124,11 +115,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /*
-     * ==========================================
-     * CHECK WALLET BALANCE
-     * ==========================================
-     */
+    // ==========================================
+    // CHECK WALLET BALANCE
+    // ==========================================
 
     if (
       user.walletBalance <
@@ -151,11 +140,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /*
-     * ==========================================
-     * GENERATE REQUEST ID
-     * ==========================================
-     */
+    // ==========================================
+    // GENERATE REQUEST ID
+    // ==========================================
 
     const requestId =
       generateRequestId();
@@ -190,19 +177,13 @@ export async function POST(req: NextRequest) {
     );
 
     console.log(
-      "AIRTIME TOTAL WALLET CHARGE:",
+      "AIRTIME CUSTOMER CHARGE:",
       totalAmount
     );
 
-    /*
-     * ==========================================
-     * VTPASS PAYLOAD
-     * ==========================================
-     *
-     * VTpass receives ONLY the airtime amount.
-     *
-     * The 5% service fee is NOT sent to VTpass.
-     */
+    // ==========================================
+    // VTPASS PAYLOAD
+    // ==========================================
 
     const payload = {
       request_id: requestId,
@@ -216,11 +197,9 @@ export async function POST(req: NextRequest) {
       payload
     );
 
-    /*
-     * ==========================================
-     * SEND REQUEST TO VTPASS
-     * ==========================================
-     */
+    // ==========================================
+    // SEND REQUEST TO VTPASS
+    // ==========================================
 
     const response =
       await axios.post(
@@ -241,25 +220,14 @@ export async function POST(req: NextRequest) {
     const vtpass =
       response.data;
 
-    /*
-     * ==========================================
-     * FULL VTPASS RESPONSE LOG
-     * ==========================================
-     */
+    // ==========================================
+    // FULL VTPASS RESPONSE LOG
+    // ==========================================
 
     console.log(
       "AIRTIME VTPASS RESPONSE:",
       vtpass
     );
-
-    /*
-     * ==========================================
-     * DETAILED TRANSACTION LOG
-     * ==========================================
-     *
-     * This is especially useful for sandbox
-     * failures such as code 016.
-     */
 
     console.log(
       "AIRTIME TRANSACTION DETAILS:",
@@ -302,11 +270,9 @@ export async function POST(req: NextRequest) {
       vtpass.purchased_code
     );
 
-    /*
-     * ==========================================
-     * CHECK TRANSACTION STATUS
-     * ==========================================
-     */
+    // ==========================================
+    // CHECK TRANSACTION STATUS
+    // ==========================================
 
     const transactionStatus =
       vtpass.content?.transactions
@@ -318,11 +284,9 @@ export async function POST(req: NextRequest) {
         .toLowerCase() ===
         "delivered";
 
-    /*
-     * ==========================================
-     * PURCHASE FAILED
-     * ==========================================
-     */
+    // ==========================================
+    // PURCHASE FAILED
+    // ==========================================
 
     if (!isSuccessful) {
       console.error(
@@ -361,21 +325,36 @@ export async function POST(req: NextRequest) {
         "=========================================="
       );
 
-      /*
-       * Save failed transaction
-       */
+      // ------------------------------------------
+      // SAVE FAILED TRANSACTION
+      // ------------------------------------------
+      //
+      // Important:
+      // Failed transactions do NOT count toward
+      // revenue or profit.
+      //
 
       try {
         await prisma.transaction.create({
           data: {
             userId: user.id,
+
             type: "AIRTIME",
+
             provider:
               serviceID.toUpperCase(),
+
             amount: totalAmount,
+
+            cost: 0,
+
+            profit: 0,
+
             reference: requestId,
+
             status:
               transactionStatus.toUpperCase(),
+
             description:
               vtpass.response_description ||
               "Airtime purchase failed",
@@ -390,22 +369,23 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      /*
-       * IMPORTANT:
-       *
-       * Wallet is NOT deducted when
-       * VTpass fails.
-       */
+      // ------------------------------------------
+      // WALLET IS NOT DEDUCTED
+      // ------------------------------------------
 
       return NextResponse.json(
         {
           success: false,
+
           message:
             vtpass.response_description ||
             "Airtime purchase failed.",
+
           code: vtpass.code,
+
           status:
             transactionStatus,
+
           data: vtpass,
         },
         {
@@ -414,57 +394,84 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    /*
-     * ==========================================
-     * SUCCESS
-     * ==========================================
-     *
-     * Only now do we:
-     *
-     * 1. Save successful transaction
-     * 2. Deduct airtime amount
-     * 3. Deduct 5% service fee
-     *
-     * Total wallet deduction:
-     *
-     * airtimeAmount + serviceFee
-     */
+    // ==========================================
+    // SUCCESS
+    // ==========================================
+    //
+    // Customer pays:
+    //
+    // airtimeAmount + serviceFee
+    //
+    // Example:
+    //
+    // Customer charge = ₦1,050
+    // Provider cost   = ₦1,000
+    // Platform profit = ₦50
+    //
+
+    const revenue =
+      totalAmount;
+
+    const providerCost =
+      airtimeAmount;
+
+    const profit =
+      revenue - providerCost;
+
+    // ==========================================
+    // SAVE TRANSACTION + DEDUCT WALLET
+    // ==========================================
 
     await prisma.$transaction(
       async (tx) => {
-        /*
-         * Save transaction
-         */
+        // ----------------------------------------
+        // SAVE SUCCESSFUL TRANSACTION
+        // ----------------------------------------
 
         await tx.transaction.create({
           data: {
             userId: user.id,
+
             type: "AIRTIME",
+
             provider:
               serviceID.toUpperCase(),
-            amount: totalAmount,
+
+            // Money charged to customer
+            amount: revenue,
+
+            // Money paid to VTpass
+            cost: providerCost,
+
+            // Platform earnings
+            profit,
+
             reference: requestId,
+
             status: "SUCCESS",
-            description: `₦${airtimeAmount.toLocaleString(
-              "en-NG"
-            )} airtime + 5% service fee (₦${serviceFee.toLocaleString(
-              "en-NG",
-              {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              }
-            )})`,
+
+            description:
+              `₦${airtimeAmount.toLocaleString(
+                "en-NG"
+              )} airtime + 5% service fee (₦${serviceFee.toLocaleString(
+                "en-NG",
+                {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                }
+              )})`,
           },
         });
 
-        /*
-         * Deduct airtime + 5% fee
-         */
+        // ----------------------------------------
+        // DEDUCT CUSTOMER WALLET
+        // ----------------------------------------
 
         await tx.user.update({
           where: {
             id: user.id,
           },
+
           data: {
             walletBalance: {
               decrement:
@@ -475,11 +482,9 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    /*
-     * ==========================================
-     * SUCCESS RESPONSE
-     * ==========================================
-     */
+    // ==========================================
+    // SUCCESS LOG
+    // ==========================================
 
     console.log(
       "=========================================="
@@ -500,6 +505,21 @@ export async function POST(req: NextRequest) {
     );
 
     console.log(
+      "CUSTOMER CHARGE:",
+      revenue
+    );
+
+    console.log(
+      "PROVIDER COST:",
+      providerCost
+    );
+
+    console.log(
+      "PLATFORM PROFIT:",
+      profit
+    );
+
+    console.log(
       "TOTAL DEDUCTED:",
       totalAmount
     );
@@ -508,21 +528,36 @@ export async function POST(req: NextRequest) {
       "=========================================="
     );
 
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
     return NextResponse.json({
       success: true,
+
       message:
         "Airtime purchased successfully.",
-      amount: airtimeAmount,
+
+      amount:
+        airtimeAmount,
+
       serviceFee,
+
       totalAmount,
+
+      revenue,
+
+      cost:
+        providerCost,
+
+      profit,
+
       vtpass,
     });
   } catch (error: any) {
-    /*
-     * ==========================================
-     * ERROR HANDLING
-     * ==========================================
-     */
+    // ==========================================
+    // ERROR HANDLING
+    // ==========================================
 
     console.error(
       "=========================================="
@@ -549,6 +584,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
+
         message:
           error.response?.data
             ?.response_description ||
