@@ -14,6 +14,10 @@ export const authOptions: AuthOptions = {
       },
 
       async authorize(credentials) {
+        // -----------------------------------------
+        // CHECK CREDENTIALS
+        // -----------------------------------------
+
         if (
           !credentials?.email ||
           !credentials?.password
@@ -21,8 +25,16 @@ export const authOptions: AuthOptions = {
           throw new Error("Missing credentials");
         }
 
+        // -----------------------------------------
+        // NORMALIZE EMAIL
+        // -----------------------------------------
+
         const email =
           credentials.email.trim().toLowerCase();
+
+        // -----------------------------------------
+        // FIND USER
+        // -----------------------------------------
 
         const user =
           await prisma.user.findUnique({
@@ -32,30 +44,37 @@ export const authOptions: AuthOptions = {
           });
 
         if (!user) {
-          throw new Error("User not found");
+          throw new Error(
+            "Invalid email or password"
+          );
         }
 
-        /*
-         * CHECK ACCOUNT STATUS
-         */
+        // -----------------------------------------
+        // CHECK ACCOUNT STATUS
+        // -----------------------------------------
+
         if (user.status !== "ACTIVE") {
           throw new Error(
             "Your account has been suspended."
           );
         }
 
-        /*
-         * CHECK EMAIL VERIFICATION
-         */
-        if (!user.emailVerified) {
-          throw new Error(
-            "Please verify your email before logging in."
-          );
-        }
+        // -----------------------------------------
+        // EMAIL VERIFICATION TEMPORARILY DISABLED
+        // -----------------------------------------
+        //
+        // We are NOT checking emailVerified here.
+        //
+        // Existing users whose emailVerified is false
+        // can still log in.
+        //
+        // Email verification can be enabled later.
+        //
 
-        /*
-         * CHECK PASSWORD
-         */
+        // -----------------------------------------
+        // CHECK PASSWORD
+        // -----------------------------------------
+
         const validPassword =
           await compare(
             credentials.password,
@@ -68,9 +87,10 @@ export const authOptions: AuthOptions = {
           );
         }
 
-        /*
-         * RETURN USER
-         */
+        // -----------------------------------------
+        // RETURN USER
+        // -----------------------------------------
+
         return {
           id: user.id,
           name: user.fullName,
@@ -81,9 +101,17 @@ export const authOptions: AuthOptions = {
     }),
   ],
 
+  // -----------------------------------------
+  // SESSION
+  // -----------------------------------------
+
   session: {
     strategy: "jwt",
   },
+
+  // -----------------------------------------
+  // CALLBACKS
+  // -----------------------------------------
 
   callbacks: {
     async jwt({ token, user }) {
@@ -108,9 +136,17 @@ export const authOptions: AuthOptions = {
     },
   },
 
+  // -----------------------------------------
+  // LOGIN PAGE
+  // -----------------------------------------
+
   pages: {
     signIn: "/login",
   },
+
+  // -----------------------------------------
+  // SECRET
+  // -----------------------------------------
 
   secret: process.env.NEXTAUTH_SECRET,
 };
