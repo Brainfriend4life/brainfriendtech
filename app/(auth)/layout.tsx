@@ -12,7 +12,7 @@ export default function AuthLayout({
         {/* Left Side */}
         <div className="hidden lg:flex flex-col justify-center px-16 text-white">
           <h1 className="text-5xl font-bold leading-tight">
-            Brainfriend VTU
+            Brainfriend Global Tech
           </h1>
 
           <p className="mt-6 max-w-md text-lg text-indigo-100">

@@ -55,36 +55,7 @@ export async function GET() {
     startOfWeek.setHours(0, 0, 0, 0);
 
     // ============================================================
-    // BUSINESS WALLET
-    // ============================================================
-
-    let businessWallet =
-      await prisma.businessWallet.findUnique({
-        where: {
-          name: "Brainfriend Tech",
-        },
-      });
-
-    if (!businessWallet) {
-      businessWallet =
-        await prisma.businessWallet.create({
-          data: {
-            name: "Brainfriend Tech",
-            totalRevenue: 0,
-            totalCost: 0,
-            totalProfit: 0,
-            withdrawnProfit: 0,
-            availableProfit: 0,
-            balance: 0,
-          },
-        });
-    }
-
-    // ============================================================
-    // BASE FILTER
-    //
-    // VERY IMPORTANT:
-    // isTest: false means test money does NOT enter the wallet.
+    // BASE LIVE SERVICE FILTER
     // ============================================================
 
     const liveServiceWhere = {
@@ -96,34 +67,29 @@ export async function GET() {
     };
 
     // ============================================================
-    // TOTAL LIVE REVENUE
+    // TOTAL REVENUE
     // ============================================================
 
     const totalRevenue =
       await prisma.transaction.aggregate({
         where: liveServiceWhere,
-
         _sum: {
           amount: true,
           cost: true,
-          profit: true,
         },
-
         _count: {
           id: true,
         },
       });
 
-    const totalAmount =
-      Number(totalRevenue._sum.amount ?? 0);
+    const totalAmount = Number(
+      totalRevenue._sum.amount ?? 0
+    );
 
-    const totalCost =
-      Number(totalRevenue._sum.cost ?? 0);
+    const totalCost = Number(
+      totalRevenue._sum.cost ?? 0
+    );
 
-    /*
-     * Calculate from amount - cost instead of trusting
-     * old profit values.
-     */
     const totalProfit =
       totalAmount - totalCost;
 
@@ -139,25 +105,25 @@ export async function GET() {
             gte: startOfDay,
           },
         },
-
         _sum: {
           amount: true,
           cost: true,
         },
-
         _count: {
           id: true,
         },
       });
 
-    const todayAmount =
-      Number(todayRevenue._sum.amount ?? 0);
+    const todayAmount = Number(
+      todayRevenue._sum.amount ?? 0
+    );
 
-    const todayCost =
-      Number(todayRevenue._sum.cost ?? 0);
+    const todayCost = Number(
+      todayRevenue._sum.cost ?? 0
+    );
 
     // ============================================================
-    // THIS WEEK
+    // WEEK
     // ============================================================
 
     const weekRevenue =
@@ -168,25 +134,25 @@ export async function GET() {
             gte: startOfWeek,
           },
         },
-
         _sum: {
           amount: true,
           cost: true,
         },
-
         _count: {
           id: true,
         },
       });
 
-    const weekAmount =
-      Number(weekRevenue._sum.amount ?? 0);
+    const weekAmount = Number(
+      weekRevenue._sum.amount ?? 0
+    );
 
-    const weekCost =
-      Number(weekRevenue._sum.cost ?? 0);
+    const weekCost = Number(
+      weekRevenue._sum.cost ?? 0
+    );
 
     // ============================================================
-    // THIS MONTH
+    // MONTH
     // ============================================================
 
     const monthRevenue =
@@ -197,29 +163,33 @@ export async function GET() {
             gte: startOfMonth,
           },
         },
-
         _sum: {
           amount: true,
           cost: true,
         },
-
         _count: {
           id: true,
         },
       });
 
-    const monthAmount =
-      Number(monthRevenue._sum.amount ?? 0);
+    const monthAmount = Number(
+      monthRevenue._sum.amount ?? 0
+    );
 
-    const monthCost =
-      Number(monthRevenue._sum.cost ?? 0);
+    const monthCost = Number(
+      monthRevenue._sum.cost ?? 0
+    );
 
     // ============================================================
     // TRANSACTION COUNTS
     // ============================================================
 
-    const successfulTransactions =
-      await prisma.transaction.count({
+    const [
+      successfulTransactions,
+      failedTransactions,
+      pendingTransactions,
+    ] = await Promise.all([
+      prisma.transaction.count({
         where: {
           status: "SUCCESS",
           isTest: false,
@@ -227,10 +197,9 @@ export async function GET() {
             in: [...SERVICE_TYPES],
           },
         },
-      });
+      }),
 
-    const failedTransactions =
-      await prisma.transaction.count({
+      prisma.transaction.count({
         where: {
           status: "FAILED",
           isTest: false,
@@ -238,10 +207,9 @@ export async function GET() {
             in: [...SERVICE_TYPES],
           },
         },
-      });
+      }),
 
-    const pendingTransactions =
-      await prisma.transaction.count({
+      prisma.transaction.count({
         where: {
           status: "PENDING",
           isTest: false,
@@ -249,7 +217,8 @@ export async function GET() {
             in: [...SERVICE_TYPES],
           },
         },
-      });
+      }),
+    ]);
 
     // ============================================================
     // WALLET FUNDING
@@ -262,11 +231,9 @@ export async function GET() {
           status: "SUCCESS",
           isTest: false,
         },
-
         _sum: {
           amount: true,
         },
-
         _count: {
           id: true,
         },
@@ -281,54 +248,9 @@ export async function GET() {
         where: {
           status: "PAID",
         },
-
         _sum: {
           amount: true,
         },
-
-        _count: {
-          id: true,
-        },
-      });
-
-    // ============================================================
-    // BUSINESS WITHDRAWALS
-    //
-    // NOTE:
-    // BusinessWithdrawal DOES NOT have isTest.
-    // So do not use isTest here.
-    // ============================================================
-
-    const businessWithdrawals =
-      await prisma.businessWithdrawal.aggregate({
-        where: {
-          status: "SUCCESS",
-        },
-
-        _sum: {
-          amount: true,
-        },
-
-        _count: {
-          id: true,
-        },
-      });
-
-    const pendingBusinessWithdrawals =
-      await prisma.businessWithdrawal.aggregate({
-        where: {
-          status: {
-            in: [
-              "PENDING",
-              "PROCESSING",
-            ],
-          },
-        },
-
-        _sum: {
-          amount: true,
-        },
-
         _count: {
           id: true,
         },
@@ -341,45 +263,44 @@ export async function GET() {
     const revenueByType =
       await prisma.transaction.groupBy({
         by: ["type"],
-
         where: liveServiceWhere,
-
         _sum: {
           amount: true,
           cost: true,
-          profit: true,
         },
-
         _count: {
           id: true,
         },
-
-        orderBy: {
-          _sum: {
-            profit: "desc",
-          },
-        },
       });
 
-    // Add calculated profit so old bad profit values
-    // do not affect the dashboard.
-    const byType = revenueByType.map(
-      (item) => {
-        const revenue =
-          Number(item._sum.amount ?? 0);
+    const byType = revenueByType
+      .map((item) => {
+        const revenue = Number(
+          item._sum.amount ?? 0
+        );
 
-        const cost =
-          Number(item._sum.cost ?? 0);
+        const cost = Number(
+          item._sum.cost ?? 0
+        );
 
         return {
           type: item.type,
+          _sum: {
+            amount: revenue,
+          },
+          _count: {
+            id: item._count.id,
+          },
           revenue,
           cost,
           profit: revenue - cost,
           transactions: item._count.id,
         };
-      }
-    );
+      })
+      .sort(
+        (a, b) =>
+          b.profit - a.profit
+      );
 
     // ============================================================
     // PROVIDER BREAKDOWN
@@ -388,86 +309,41 @@ export async function GET() {
     const revenueByProvider =
       await prisma.transaction.groupBy({
         by: ["provider"],
-
         where: liveServiceWhere,
-
         _sum: {
           amount: true,
           cost: true,
         },
-
         _count: {
           id: true,
-        },
-
-        orderBy: {
-          _sum: {
-            amount: "desc",
-          },
         },
       });
 
     const byProvider =
-      revenueByProvider.map(
-        (item) => {
-          const revenue =
-            Number(item._sum.amount ?? 0);
+      revenueByProvider
+        .map((item) => {
+          const revenue = Number(
+            item._sum.amount ?? 0
+          );
 
-          const cost =
-            Number(item._sum.cost ?? 0);
+          const cost = Number(
+            item._sum.cost ?? 0
+          );
 
           return {
-            provider: item.provider,
+            provider:
+              item.provider || "UNKNOWN",
             revenue,
             cost,
             profit: revenue - cost,
-            transactions: item._count.id,
+            transactions:
+              item._count.id,
           };
-        }
-      );
-
-    // ============================================================
-    // RECENT LIVE REVENUE
-    // ============================================================
-
-    const recentRevenue =
-      await prisma.transaction.findMany({
-        where: liveServiceWhere,
-
-        orderBy: {
-          createdAt: "desc",
-        },
-
-        take: 20,
-
-        select: {
-          id: true,
-          type: true,
-          provider: true,
-          amount: true,
-          cost: true,
-          profit: true,
-          description: true,
-          reference: true,
-          createdAt: true,
-          user: {
-            select: {
-              fullName: true,
-              email: true,
-            },
-          },
-        },
-      });
-
-    const formattedRecentRevenue =
-      recentRevenue.map(
-        (transaction) => ({
-          ...transaction,
-          profit:
-            Number(transaction.amount) -
-            Number(transaction.cost),
         })
-      );
+        .sort(
+          (a, b) =>
+            b.profit - a.profit
+        );
 
     // ============================================================
     // RECENT TRANSACTIONS
@@ -475,6 +351,8 @@ export async function GET() {
 
     const recentTransactions =
       await prisma.transaction.findMany({
+        where: liveServiceWhere,
+
         orderBy: {
           createdAt: "desc",
         },
@@ -491,47 +369,109 @@ export async function GET() {
           status: true,
           reference: true,
           provider: true,
-          isTest: true,
           createdAt: true,
 
           user: {
             select: {
+              id: true,
               fullName: true,
               email: true,
+              phone: true,
             },
           },
         },
       });
 
+    const formattedRecentTransactions =
+      recentTransactions.map(
+        (transaction) => ({
+          id: transaction.id,
+          type: transaction.type,
+          amount: Number(
+            transaction.amount
+          ),
+          cost: Number(
+            transaction.cost
+          ),
+          profit:
+            Number(transaction.amount) -
+            Number(transaction.cost),
+          description:
+            transaction.description || "",
+          status: transaction.status,
+          reference:
+            transaction.reference,
+          provider:
+            transaction.provider || "UNKNOWN",
+          createdAt:
+            transaction.createdAt.toISOString(),
+
+          user: {
+            id: transaction.user.id,
+            fullName:
+              transaction.user.fullName,
+            email:
+              transaction.user.email,
+            phone:
+              transaction.user.phone,
+          },
+        })
+      );
+
     // ============================================================
-    // SYNC BUSINESS WALLET
+    // BUSINESS WALLET
     // ============================================================
 
-    const withdrawnProfit =
-      Number(
+    let businessWallet =
+      await prisma.businessWallet.findUnique({
+        where: {
+          name: "Brainfriend Tech",
+        },
+      });
+
+    if (!businessWallet) {
+      businessWallet =
+        await prisma.businessWallet.create({
+          data: {
+            name: "Brainfriend Tech",
+            totalRevenue: totalAmount,
+            totalCost: totalCost,
+            totalProfit: totalProfit,
+            withdrawnProfit: 0,
+            availableProfit:
+              Math.max(totalProfit, 0),
+            balance:
+              Math.max(totalProfit, 0),
+          },
+        });
+    } else {
+      const withdrawnProfit = Number(
         businessWallet.withdrawnProfit ?? 0
       );
 
-    const availableProfit =
-      Math.max(
-        totalProfit - withdrawnProfit,
-        0
-      );
+      const availableProfit =
+        Math.max(
+          totalProfit -
+            withdrawnProfit,
+          0
+        );
 
-    businessWallet =
-      await prisma.businessWallet.update({
-        where: {
-          id: businessWallet.id,
-        },
-
-        data: {
-          totalRevenue: totalAmount,
-          totalCost: totalCost,
-          totalProfit: totalProfit,
-          availableProfit: availableProfit,
-          balance: availableProfit,
-        },
-      });
+      businessWallet =
+        await prisma.businessWallet.update({
+          where: {
+            id: businessWallet.id,
+          },
+          data: {
+            totalRevenue: totalAmount,
+            totalCost: totalCost,
+            totalProfit: totalProfit,
+            availableProfit:
+              availableProfit,
+            balance:
+              availableProfit,
+          },
+        });
+    }
 
     // ============================================================
     // RESPONSE
@@ -543,68 +483,53 @@ export async function GET() {
       businessWallet: {
         id: businessWallet.id,
         name: businessWallet.name,
-
-        totalRevenue:
-          businessWallet.totalRevenue,
-
-        totalCost:
-          businessWallet.totalCost,
-
-        totalProfit:
-          businessWallet.totalProfit,
-
-        withdrawnProfit:
-          businessWallet.withdrawnProfit,
-
-        availableProfit:
-          businessWallet.availableProfit,
-
-        balance:
-          businessWallet.balance,
-
+        totalRevenue: Number(
+          businessWallet.totalRevenue
+        ),
+        totalCost: Number(
+          businessWallet.totalCost
+        ),
+        totalProfit: Number(
+          businessWallet.totalProfit
+        ),
+        withdrawnProfit: Number(
+          businessWallet.withdrawnProfit
+        ),
+        availableProfit: Number(
+          businessWallet.availableProfit
+        ),
+        balance: Number(
+          businessWallet.balance
+        ),
         recipientCode:
           businessWallet.recipientCode,
-
         createdAt:
           businessWallet.createdAt,
-
         updatedAt:
           businessWallet.updatedAt,
       },
 
       revenue: {
         total: totalAmount,
-        cost: totalCost,
-        profit: totalProfit,
-        transactions:
+        today: todayAmount,
+        week: weekAmount,
+        month: monthAmount,
+
+        totalTransactions:
           totalRevenue._count.id ?? 0,
 
-        today: {
-          revenue: todayAmount,
-          cost: todayCost,
-          profit:
-            todayAmount - todayCost,
-          transactions:
-            todayRevenue._count.id ?? 0,
-        },
+        todayTransactions:
+          todayRevenue._count.id ?? 0,
 
-        week: {
-          revenue: weekAmount,
-          cost: weekCost,
-          profit:
-            weekAmount - weekCost,
-          transactions:
-            weekRevenue._count.id ?? 0,
-        },
+        weekTransactions:
+          weekRevenue._count.id ?? 0,
 
-        month: {
-          revenue: monthAmount,
-          cost: monthCost,
-          profit:
-            monthAmount - monthCost,
-          transactions:
-            monthRevenue._count.id ?? 0,
-        },
+        monthTransactions:
+          monthRevenue._count.id ?? 0,
+
+        cost: totalCost,
+
+        profit: totalProfit,
       },
 
       transactions: {
@@ -619,43 +544,27 @@ export async function GET() {
       },
 
       wallet: {
-        funding:
-          walletFunding._sum.amount ?? 0,
+        funding: Number(
+          walletFunding._sum.amount ?? 0
+        ),
 
         fundingCount:
           walletFunding._count.id ?? 0,
 
-        userWithdrawals:
-          userWithdrawals._sum.amount ?? 0,
+        withdrawals: Number(
+          userWithdrawals._sum.amount ?? 0
+        ),
 
-        userWithdrawalCount:
+        withdrawalCount:
           userWithdrawals._count.id ?? 0,
-      },
-
-      businessWithdrawals: {
-        total:
-          businessWithdrawals._sum.amount ?? 0,
-
-        count:
-          businessWithdrawals._count.id ?? 0,
-
-        pending:
-          pendingBusinessWithdrawals
-            ._sum.amount ?? 0,
-
-        pendingCount:
-          pendingBusinessWithdrawals
-            ._count.id ?? 0,
       },
 
       byType,
 
       byProvider,
 
-      recentRevenue:
-        formattedRecentRevenue,
-
-      recentTransactions,
+      recentTransactions:
+        formattedRecentTransactions,
     });
   } catch (error) {
     console.error(
@@ -668,6 +577,11 @@ export async function GET() {
         success: false,
         error:
           "Failed to load revenue data.",
+        details:
+          process.env.NODE_ENV ===
+          "development"
+            ? String(error)
+            : undefined,
       },
       { status: 500 }
     );

@@ -30,7 +30,7 @@ export default function Navbar() {
           />
 
           <span className="text-lg font-bold text-indigo-600 sm:text-xl">
-            Brainfriend Tech
+            Brainfriend Global Tech
           </span>
         </Link>
 

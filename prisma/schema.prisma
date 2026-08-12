@@ -8,68 +8,47 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ============================================================
-// USER
-// ============================================================
-
 model User {
-  id       String @id @default(cuid())
-  fullName String
-  email    String @unique
-  phone    String @unique
-  password String
-
-  walletBalance Float @default(0)
-
-  role   Role       @default(USER)
-  status UserStatus @default(ACTIVE)
-
-  emailVerified            Boolean   @default(false)
-  emailVerificationToken   String?   @unique
+  id                       String            @id @default(cuid())
+  fullName                 String
+  email                    String            @unique
+  phone                    String            @unique
+  password                 String
+  walletBalance            Float             @default(0)
+  role                     Role              @default(USER)
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  resetPasswordExpires     DateTime?
+  resetPasswordToken       String?
+  status                   UserStatus        @default(ACTIVE)
   emailVerificationExpires DateTime?
-
-  resetPasswordToken   String?
-  resetPasswordExpires DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  cbtAttempts  CbtAttempt[]
-  examPins     ExamPin[]
-  transactions Transaction[]
-  withdrawals  Withdrawal[]
+  emailVerificationToken   String?           @unique
+  emailVerified            Boolean           @default(false)
+  cbtAttempts              CbtAttempt[]
+  examPins                 ExamPin[]
+  ninVerifications         NinVerification[]
+  transactions             Transaction[]
+  withdrawals              Withdrawal[]
 
   @@index([email])
   @@index([phone])
   @@index([status])
 }
 
-// ============================================================
-// TRANSACTION
-// ============================================================
-
 model Transaction {
-  id String @id @default(cuid())
-
-  userId String
-  type   TransactionType
-
+  id          String          @id @default(cuid())
+  userId      String
+  type        TransactionType
   amount      Float
   description String
-
-  status    String
-  reference String @unique
-
-  provider String
-
-  cost   Float @default(0)
-  profit Float @default(0)
-
-  isTest Boolean @default(false)
-
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      String
+  reference   String          @unique
+  createdAt   DateTime        @default(now())
+  provider    String
+  cost        Float           @default(0)
+  profit      Float           @default(0)
+  isTest      Boolean         @default(false)
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([type])
@@ -77,135 +56,75 @@ model Transaction {
   @@index([createdAt])
 }
 
-// ============================================================
-// USER WITHDRAWAL
-// ============================================================
-
 model Withdrawal {
-  id String @id @default(cuid())
-
-  userId String
-
-  amount Float
-
+  id            String           @id @default(cuid())
+  userId        String
+  amount        Float
   accountName   String
   accountNumber String
   bankName      String
-
-  status WithdrawalStatus @default(PENDING)
-
-  reference String @unique
-
-  adminNote String?
-
-  processedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status        WithdrawalStatus @default(PENDING)
+  reference     String           @unique
+  adminNote     String?
+  processedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
   @@index([createdAt])
 }
 
-// ============================================================
-// BUSINESS WITHDRAWAL
-// ============================================================
-
 model BusinessWithdrawal {
-  id String @id @default(cuid())
-
-  amount Float
-
+  id            String                   @id @default(cuid())
+  amount        Float
   accountName   String
   accountNumber String
   bankName      String
-
   recipientCode String?
   transferCode  String?
-
-  reference String @unique
-
-  status BusinessWithdrawalStatus @default(PENDING)
-
-  adminNote String?
-
-  processedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  method BusinessWithdrawalMethod @default(MANUAL)
+  reference     String                   @unique
+  status        BusinessWithdrawalStatus @default(PENDING)
+  adminNote     String?
+  processedAt   DateTime?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  method        BusinessWithdrawalMethod @default(MANUAL)
 
   @@index([status])
   @@index([createdAt])
   @@index([method])
 }
 
-// ============================================================
-// BUSINESS WALLET
-// ============================================================
-
 model BusinessWallet {
-  id String @id @default(cuid())
-
-  name String @unique @default("Brainfriend Tech")
-
-  // Paystack recipient code for Brainfriend Tech bank account
-  recipientCode String?
-
-  // Total amount customers have paid
-  totalRevenue Float @default(0)
-
-  // Total amount paid to providers
-  totalCost Float @default(0)
-
-  // Total profit generated
-  totalProfit Float @default(0)
-
-  // Profit already withdrawn
-  withdrawnProfit Float @default(0)
-
-  // Profit currently available for withdrawal
-  availableProfit Float @default(0)
-
-  // Current business wallet balance
-  balance Float @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  revenues BusinessRevenue[]
-
+  id              String            @id @default(cuid())
+  name            String            @unique @default("Brainfriend Tech")
+  totalRevenue    Float             @default(0)
+  totalCost       Float             @default(0)
+  totalProfit     Float             @default(0)
+  withdrawnProfit Float             @default(0)
+  availableProfit Float             @default(0)
+  balance         Float             @default(0)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  recipientCode   String?
+  revenues        BusinessRevenue[]
 }
 
-// ============================================================
-// BUSINESS REVENUE
-// ============================================================
-
 model BusinessRevenue {
-  id String @id @default(cuid())
-
-  transactionId String @unique
-
-  type     TransactionType
-  provider String
-
-  amount Float
-  cost   Float
-  profit Float
-
-  reference String @unique
-
-  description String?
-
-  createdAt DateTime @default(now())
-
+  id               String          @id @default(cuid())
+  transactionId    String          @unique
+  type             TransactionType
+  provider         String
+  amount           Float
+  cost             Float
+  profit           Float
+  reference        String          @unique
+  description      String?
+  createdAt        DateTime        @default(now())
   businessWalletId String
-
-  businessWallet BusinessWallet @relation(fields: [businessWalletId], references: [id], onDelete: Cascade)
+  businessWallet   BusinessWallet  @relation(fields: [businessWalletId], references: [id], onDelete: Cascade)
 
   @@index([type])
   @@index([provider])
@@ -213,296 +132,211 @@ model BusinessRevenue {
   @@index([businessWalletId])
 }
 
-// ============================================================
-// CHEAPDATAHUB WALLET
-// ============================================================
-
 model CheapDataHubWallet {
-  id String @id @default(cuid())
-
-  provider String @unique @default("CheapDataHub")
-
-  balance Float @default(0)
-
+  id          String    @id @default(cuid())
+  provider    String    @unique @default("CheapDataHub")
+  balance     Float     @default(0)
   lastChecked DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
-// ============================================================
-// EXAM PIN
-// ============================================================
-
 model ExamPin {
-  id String @id @default(cuid())
-
-  userId String
-
-  provider String
-  pin      String
-  serial   String
-
-  amount Float
-
-  reference String @unique
-
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String
+  pin       String
+  serial    String
+  amount    Float
+  reference String   @unique
   createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
   @@index([userId])
 }
 
-// ============================================================
-// CBT ANSWER
-// ============================================================
-
 model CbtAnswer {
-  id String @id @default(cuid())
-
-  attemptId  String
-  questionId String
-
+  id             String      @id @default(cuid())
+  attemptId      String
+  questionId     String
   selectedAnswer String?
-
-  isCorrect Boolean @default(false)
-
-  marksAwarded Int @default(0)
-
-  createdAt DateTime @default(now())
-
-  attempt  CbtAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  question CbtQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  isCorrect      Boolean     @default(false)
+  marksAwarded   Int         @default(0)
+  createdAt      DateTime    @default(now())
+  attempt        CbtAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question       CbtQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([attemptId, questionId])
   @@index([questionId])
 }
 
-// ============================================================
-// CBT ATTEMPT
-// ============================================================
-
 model CbtAttempt {
-  id String @id @default(cuid())
-
-  userId String
-  examId String
-
-  status String @default("pending")
-
-  score      Int   @default(0)
-  totalMarks Int   @default(0)
-  percentage Float @default(0)
-
-  startedAt   DateTime  @default(now())
+  id          String      @id @default(cuid())
+  userId      String
+  examId      String
+  status      String      @default("pending")
+  score       Int         @default(0)
+  totalMarks  Int         @default(0)
+  percentage  Float       @default(0)
+  startedAt   DateTime    @default(now())
   completedAt DateTime?
-
-  answers CbtAnswer[]
-
-  exam CbtExam @relation(fields: [examId], references: [id], onDelete: Cascade)
-  user User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answers     CbtAnswer[]
+  exam        CbtExam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([examId])
   @@index([status])
   @@index([userId])
 }
 
-// ============================================================
-// CBT EXAM
-// ============================================================
-
 model CbtExam {
-  id String @id @default(cuid())
-
+  id          String       @id @default(cuid())
   name        String
   description String?
-
-  duration Int
-
-  totalMarks Int @default(0)
-
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  attempts CbtAttempt[]
-  subjects CbtSubject[]
+  duration    Int
+  totalMarks  Int          @default(0)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  attempts    CbtAttempt[]
+  subjects    CbtSubject[]
 }
 
-// ============================================================
-// CBT QUESTION
-// ============================================================
-
 model CbtQuestion {
-  id String @id @default(cuid())
-
-  question String
-
-  optionA String
-  optionB String
-  optionC String
-  optionD String
-
+  id            String      @id @default(cuid())
+  question      String
+  optionA       String
+  optionB       String
+  optionC       String
+  optionD       String
   correctAnswer String
-
-  explanation String?
-
-  marks Int @default(1)
-
-  isActive Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  subjectId String
-
-  answers CbtAnswer[]
-
-  subject CbtSubject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  explanation   String?
+  marks         Int         @default(1)
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  subjectId     String
+  answers       CbtAnswer[]
+  subject       CbtSubject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
   @@index([subjectId])
 }
 
-// ============================================================
-// CBT SUBJECT
-// ============================================================
-
 model CbtSubject {
-  id String @id @default(cuid())
-
+  id          String        @id @default(cuid())
   name        String
   description String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  examId String
-
-  questions CbtQuestion[]
-
-  exam CbtExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  examId      String
+  questions   CbtQuestion[]
+  exam        CbtExam       @relation(fields: [examId], references: [id], onDelete: Cascade)
 
   @@unique([examId, name])
   @@index([examId])
 }
 
-// ============================================================
-// PASSWORD RESET TOKEN
-// ============================================================
-
 model PasswordResetToken {
-  id String @id @default(cuid())
-
-  email String
-
-  tokenHash String @unique
-
+  id        String   @id @default(cuid())
+  email     String
+  tokenHash String   @unique
   expiresAt DateTime
-
   createdAt DateTime @default(now())
 
   @@index([email])
 }
 
-// ============================================================
-// DATA PLANS
-// ============================================================
-
 model DataPlan {
-  id String @id @default(cuid())
-
-  provider String
-
-  bundleId Int @unique
-
-  name     String
-  size     String
-  duration String
-
+  id            String   @id @default(cuid())
+  provider      String
+  bundleId      Int      @unique
+  name          String
+  size          String
+  duration      String
   providerPrice Float
   sellingPrice  Float
-
-  status String @default("ACTIVE")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([provider])
   @@index([status])
   @@index([provider, status])
 }
-
-// ============================================================
-// CABLE PLANS
-// ============================================================
 
 model CablePlan {
-  id String @id @default(cuid())
-
-  planId Int @unique
-
-  provider String
-  name     String
-
+  id            String   @id @default(cuid())
+  planId        Int      @unique
+  provider      String
+  name          String
   providerPrice Float
   sellingPrice  Float
-
-  status String @default("ACTIVE")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  status        String   @default("ACTIVE")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([provider])
   @@index([status])
   @@index([provider, status])
 }
 
-// ============================================================
-// ELECTRICITY PROVIDERS
-// ============================================================
-
 model ElectricityProvider {
-  id String @id @default(cuid())
-
-  providerId Int @unique
-
-  code String?
-  name String
-
-  status String @default("ACTIVE")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  providerId Int      @unique
+  code       String?
+  name       String
+  status     String   @default("ACTIVE")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([status])
 }
 
-// ============================================================
-// SYSTEM SETTINGS
-// ============================================================
-
 model SystemSetting {
-  id String @id @default(cuid())
-
-  key   String @unique
-  value String
-
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
   description String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
-// ============================================================
-// ENUMS
-// ============================================================
+model NinVerification {
+  id            String   @id @default(cuid())
+  userId        String
+  nin           String
+  cardType      String
+  amount        Float
+  reference     String   @unique
+  transactionId String?  @unique
+  status        String   @default("SUCCESS")
+  firstName     String?
+  middleName    String?
+  surname       String?
+  gender        String?
+  birthDate     String?
+  telephone     String?
+  photo         String?
+  hasPdf        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([nin])
+  @@index([reference])
+  @@index([createdAt])
+}
 
 enum Role {
   USER
   ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
 }
 
 enum TransactionType {
@@ -513,6 +347,7 @@ enum TransactionType {
   CABLE
   EXAM_PIN
   WITHDRAWAL
+  NIN
 }
 
 enum WithdrawalStatus {
@@ -533,9 +368,4 @@ enum BusinessWithdrawalStatus {
 enum BusinessWithdrawalMethod {
   MANUAL
   PAYSTACK
-}
-
-enum UserStatus {
-  ACTIVE
-  SUSPENDED
 }

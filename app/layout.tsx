@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Brainfriend VTU",
+  title: "Brainfriend Globa Tech",
   description: "Fast and Reliable VTU Platform",
 };
 

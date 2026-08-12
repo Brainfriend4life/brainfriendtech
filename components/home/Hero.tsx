@@ -13,8 +13,8 @@ export default function Hero() {
           </h1>
 
           <p className="mb-8 text-lg text-indigo-100">
-            Buy Airtime, Data, Electricity Tokens, Cable TV, WAEC, NECO,
-            JAMB and more—all from one secure platform.
+            NIN verification, Buy Airtime, Data, Electricity Tokens, Cable TV, WAEC, NECO,
+            JAMB and more all from one secure platform.
           </p>
 
           <div className="flex flex-wrap gap-4">

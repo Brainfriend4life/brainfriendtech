@@ -6,6 +6,7 @@ import {
   Tv,
   GraduationCap,
   BookOpen,
+  Fingerprint,
 } from "lucide-react";
 
 const services = [
@@ -51,6 +52,13 @@ const services = [
     icon: BookOpen,
     href: "/dashboard/education/cbt",
   },
+  {
+    title: "NIN Verification",
+    description:
+      "Verify NIN details quickly and securely using our verification service.",
+    icon: Fingerprint,
+    href: "/dashboard/nin",
+  },
 ];
 
 export default function Services() {
@@ -60,16 +68,19 @@ export default function Services() {
       className="px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20"
     >
       <div className="mx-auto max-w-7xl">
-
         {/* SECTION HEADER */}
 
         <div className="px-2 text-center sm:px-0">
+          <p className="mb-2 text-sm font-bold uppercase tracking-wider text-indigo-600">
+            What We Offer
+          </p>
+
           <h2 className="text-2xl font-bold text-gray-900 sm:text-3xl lg:text-4xl">
             Our Services
           </h2>
 
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-gray-600 sm:text-base">
-            Everything you need in one secure VTU platform.
+            Everything you need in one secure and reliable VTU platform.
           </p>
         </div>
 
@@ -83,17 +94,17 @@ export default function Services() {
               <Link
                 key={service.title}
                 href={service.href}
-                className="group block rounded-2xl bg-white p-5 shadow-md transition-all duration-300 hover:-translate-y-2 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:p-6"
+                className="group block rounded-2xl border border-gray-100 bg-white p-5 shadow-md transition-all duration-300 hover:-translate-y-2 hover:border-indigo-100 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:p-6"
               >
                 {/* ICON */}
 
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 transition-colors duration-300 group-hover:bg-indigo-600 sm:h-14 sm:w-14">
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 transition-all duration-300 group-hover:bg-indigo-600 group-hover:shadow-lg sm:h-14 sm:w-14">
                   <Icon className="h-6 w-6 text-indigo-600 transition-colors duration-300 group-hover:text-white sm:h-7 sm:w-7" />
                 </div>
 
                 {/* TITLE */}
 
-                <h3 className="mb-2 text-lg font-semibold text-gray-900 transition-colors duration-300 group-hover:text-indigo-600 sm:text-xl">
+                <h3 className="mb-2 text-lg font-bold text-gray-900 transition-colors duration-300 group-hover:text-indigo-600 sm:text-xl">
                   {service.title}
                 </h3>
 
@@ -103,11 +114,11 @@ export default function Services() {
                   {service.description}
                 </p>
 
-                {/* LINK TEXT */}
+                {/* LINK */}
 
-                <div className="mt-4 text-sm font-semibold text-indigo-600 sm:mt-5">
-                  Get Started{" "}
-                  <span className="inline-block transition-transform duration-300 group-hover:translate-x-1">
+                <div className="mt-5 flex items-center text-sm font-bold text-indigo-600">
+                  Get Started
+                  <span className="ml-1 inline-block transition-transform duration-300 group-hover:translate-x-1">
                     →
                   </span>
                 </div>
@@ -115,7 +126,6 @@ export default function Services() {
             );
           })}
         </div>
-
       </div>
     </section>
   );

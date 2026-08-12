@@ -1,8 +1,8 @@
-
 "use client";
 
 import Link from "next/link";
 import { signOut } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Users,
@@ -16,12 +16,101 @@ import {
   Menu,
   X,
   ShieldCheck,
+  ChevronDown,
+  Settings,
+  Activity,
+  BookOpen,
 } from "lucide-react";
 import { useState } from "react";
 
+type NavItem = {
+  label: string;
+  href: string;
+  icon: React.ElementType;
+};
+
+const overviewItems: NavItem[] = [
+  {
+    label: "Overview",
+    href: "/dashboard/admin",
+    icon: LayoutDashboard,
+  },
+  {
+    label: "Users",
+    href: "/dashboard/admin/users",
+    icon: Users,
+  },
+  {
+    label: "Transactions",
+    href: "/dashboard/admin/transactions",
+    icon: ReceiptText,
+  },
+];
+
+const educationItems: NavItem[] = [
+  {
+    label: "CBT Management",
+    href: "/dashboard/admin/cbt",
+    icon: GraduationCap,
+  },
+  {
+    label: "CBT Results",
+    href: "/dashboard/admin/results",
+    icon: Trophy,
+  },
+];
+
+const financeItems: NavItem[] = [
+  {
+    label: "Provider Wallet",
+    href: "/dashboard/admin/provider-wallet",
+    icon: Wallet,
+  },
+  {
+    label: "Wallet Activity",
+    href: "/dashboard/admin/wallet",
+    icon: Activity,
+  },
+  {
+    label: "Revenue & Profit",
+    href: "/dashboard/admin/revenue",
+    icon: TrendingUp,
+  },
+  {
+    label: "Withdraw Revenue",
+    href: "/dashboard/admin/revenue/withdraw",
+    icon: ArrowDownToLine,
+  },
+];
+
 export default function AdminSidebar() {
+  const pathname = usePathname();
+
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const [financeOpen, setFinanceOpen] = useState(
+    pathname.startsWith("/dashboard/admin/revenue") ||
+      pathname.startsWith("/dashboard/admin/wallet") ||
+      pathname.startsWith("/dashboard/admin/provider-wallet")
+  );
+
+  const [educationOpen, setEducationOpen] = useState(
+    pathname.startsWith("/dashboard/admin/cbt") ||
+      pathname.startsWith("/dashboard/admin/results")
+  );
+
+  function closeSidebar() {
+    setIsOpen(false);
+  }
+
+  function isActive(href: string) {
+    if (href === "/dashboard/admin") {
+      return pathname === href;
+    }
+
+    return pathname.startsWith(href);
+  }
 
   async function handleLogout() {
     setLoading(true);
@@ -36,55 +125,93 @@ export default function AdminSidebar() {
     }
   }
 
-  const closeSidebar = () => {
-    setIsOpen(false);
-  };
+  function renderItem(item: NavItem) {
+    const active = isActive(item.href);
+    const Icon = item.icon;
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={closeSidebar}
+        className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
+          active
+            ? "bg-white text-indigo-700 shadow-sm"
+            : "text-indigo-100 hover:bg-indigo-600 hover:text-white"
+        }`}
+      >
+        <Icon
+          className={`h-5 w-5 shrink-0 ${
+            active
+              ? "text-indigo-700"
+              : "text-indigo-200 group-hover:text-white"
+          }`}
+        />
+
+        <span>{item.label}</span>
+
+        {active && (
+          <span className="ml-auto h-2 w-2 rounded-full bg-indigo-600" />
+        )}
+      </Link>
+    );
+  }
 
   return (
     <>
-      {/* MOBILE MENU BUTTON */}
+      {/* =========================================
+          MOBILE MENU BUTTON
+      ========================================= */}
 
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="fixed left-4 top-4 z-40 rounded-xl bg-indigo-700 p-3 text-white shadow-lg lg:hidden"
+        className="fixed left-4 top-4 z-40 flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-700 text-white shadow-lg transition hover:bg-indigo-800 lg:hidden"
         aria-label="Open admin menu"
       >
         <Menu className="h-6 w-6" />
       </button>
 
-      {/* MOBILE OVERLAY */}
+      {/* =========================================
+          MOBILE OVERLAY
+      ========================================= */}
 
       {isOpen && (
         <button
           type="button"
           aria-label="Close admin menu"
           onClick={closeSidebar}
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
         />
       )}
 
-      {/* SIDEBAR */}
+      {/* =========================================
+          SIDEBAR
+      ========================================= */}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-indigo-700 p-5 text-white shadow-xl transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-indigo-700 text-white shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
+          isOpen
+            ? "translate-x-0"
+            : "-translate-x-full"
         }`}
       >
-        {/* HEADER */}
+        {/* =========================================
+            HEADER
+        ========================================= */}
 
-        <div className="mb-8 flex items-center justify-between">
+        <div className="flex h-20 shrink-0 items-center justify-between border-b border-indigo-600 px-5">
           <Link
             href="/dashboard/admin"
             onClick={closeSidebar}
             className="flex items-center gap-3"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-indigo-700">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-indigo-700 shadow-sm">
               <ShieldCheck className="h-6 w-6" />
             </div>
 
             <div>
-              <h1 className="text-lg font-bold">
+              <h1 className="text-base font-bold">
                 Brainfriend Tech
               </h1>
 
@@ -94,134 +221,150 @@ export default function AdminSidebar() {
             </div>
           </Link>
 
-          {/* MOBILE CLOSE */}
-
           <button
             type="button"
             onClick={closeSidebar}
-            className="rounded-lg p-2 hover:bg-indigo-600 lg:hidden"
+            className="rounded-lg p-2 text-indigo-100 transition hover:bg-indigo-600 hover:text-white lg:hidden"
             aria-label="Close admin menu"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* NAVIGATION */}
+        {/* =========================================
+            NAVIGATION
+        ========================================= */}
 
-        <nav className="flex-1 space-y-2">
+        <div className="flex-1 overflow-y-auto px-4 py-5">
+
           {/* OVERVIEW */}
 
-          <Link
-            href="/dashboard/admin"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
-          >
-            <LayoutDashboard className="h-5 w-5" />
-            <span>Overview</span>
-          </Link>
+          <div>
+            <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-wider text-indigo-300">
+              Overview
+            </p>
 
-          {/* USERS */}
+            <nav className="space-y-1">
+              {overviewItems.map(renderItem)}
+            </nav>
+          </div>
 
-          <Link
-            href="/dashboard/admin/users"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
-          >
-            <Users className="h-5 w-5" />
-            <span>Users</span>
-          </Link>
+          {/* EDUCATION */}
 
-          {/* TRANSACTIONS */}
+          <div className="mt-7">
+            <button
+              type="button"
+              onClick={() =>
+                setEducationOpen(!educationOpen)
+              }
+              className="mb-2 flex w-full items-center justify-between px-3 text-left text-[11px] font-bold uppercase tracking-wider text-indigo-300"
+            >
+              <span>Education</span>
 
-          <Link
-            href="/dashboard/admin/transactions"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
-          >
-            <ReceiptText className="h-5 w-5" />
-            <span>Transactions</span>
-          </Link>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${
+                  educationOpen
+                    ? "rotate-180"
+                    : ""
+                }`}
+              />
+            </button>
 
-          {/* CBT */}
+            {educationOpen && (
+              <nav className="space-y-1">
+                {educationItems.map(renderItem)}
+              </nav>
+            )}
+          </div>
 
-          <Link
-            href="/dashboard/admin/cbt"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
-          >
-            <GraduationCap className="h-5 w-5" />
-            <span>CBT Management</span>
-          </Link>
+          {/* FINANCE */}
 
-          {/* RESULTS */}
+          <div className="mt-7">
+            <button
+              type="button"
+              onClick={() =>
+                setFinanceOpen(!financeOpen)
+              }
+              className="mb-2 flex w-full items-center justify-between px-3 text-left text-[11px] font-bold uppercase tracking-wider text-indigo-300"
+            >
+              <span>Finance</span>
 
-          <Link
-            href="/dashboard/admin/results"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
-          >
-            <Trophy className="h-5 w-5" />
-            <span>CBT Results</span>
-          </Link>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${
+                  financeOpen
+                    ? "rotate-180"
+                    : ""
+                }`}
+              />
+            </button>
 
-          {/* PROVIDER WALLET */}
+            {financeOpen && (
+              <nav className="space-y-1">
+                {financeItems.map(renderItem)}
+              </nav>
+            )}
+          </div>
 
-          <Link
-            href="/dashboard/admin/provider-wallet"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
-          >
-            <Wallet className="h-5 w-5" />
-            <span>Provider Wallet</span>
-          </Link>
+          {/* FUTURE SETTINGS */}
 
-          {/* WALLET ACTIVITY */}
+          <div className="mt-7">
+            <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-wider text-indigo-300">
+              System
+            </p>
 
-          <Link
-            href="/dashboard/admin/wallet"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
-          >
-            <Wallet className="h-5 w-5" />
-            <span>Wallet Activity</span>
-          </Link>
+            <Link
+              href="/dashboard/admin/settings"
+              onClick={closeSidebar}
+              className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
+                isActive(
+                  "/dashboard/admin/settings"
+                )
+                  ? "bg-white text-indigo-700"
+                  : "text-indigo-100 hover:bg-indigo-600 hover:text-white"
+              }`}
+            >
+              <Settings className="h-5 w-5" />
 
-          {/* REVENUE & PROFIT */}
+              <span>Settings</span>
+            </Link>
+          </div>
 
-          <Link
-            href="/dashboard/admin/revenue"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
-          >
-            <TrendingUp className="h-5 w-5" />
-            <span>Revenue & Profit</span>
-          </Link>
+        </div>
 
-          {/* WITHDRAW REVENUE */}
+        {/* =========================================
+            ADMIN PROFILE / LOGOUT
+        ========================================= */}
 
-          <Link
-            href="/dashboard/admin/revenue/withdraw"
-            onClick={closeSidebar}
-            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
-          >
-            <ArrowDownToLine className="h-5 w-5" />
-            <span>Withdraw Revenue</span>
-          </Link>
-        </nav>
+        <div className="shrink-0 border-t border-indigo-600 p-4">
 
-        {/* BOTTOM */}
+          <div className="mb-3 flex items-center gap-3 rounded-xl bg-indigo-600/50 p-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-indigo-700">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
 
-        <div className="border-t border-indigo-500 pt-4">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">
+                Administrator
+              </p>
+
+              <p className="text-xs text-indigo-200">
+                Full Access
+              </p>
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={handleLogout}
             disabled={loading}
-            className="flex w-full items-center gap-3 rounded-xl p-3 text-left transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-indigo-100 transition hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <LogOut className="h-5 w-5" />
 
             <span>
-              {loading ? "Logging out..." : "Logout"}
+              {loading
+                ? "Logging out..."
+                : "Logout"}
             </span>
           </button>
         </div>
@@ -229,4 +372,3 @@ export default function AdminSidebar() {
     </>
   );
 }
-

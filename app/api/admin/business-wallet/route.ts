@@ -11,24 +11,19 @@ const SERVICE_TYPES = [
   "EXAM_PIN",
 ] as const;
 
-
 export async function GET() {
-  console.log("==========================================");
-  console.log("BUSINESS WALLET API START");
-  console.log("==========================================");
-
   try {
-    // =====================================================
-    // 1. ADMIN AUTHENTICATION
-    // =====================================================
+    // ============================================================
+    // ADMIN AUTH
+    // ============================================================
 
-    console.log("CHECKING ADMIN AUTH...");
+    const session =
+      await getServerSession(authOptions);
 
-    const session = await getServerSession(authOptions);
-
-    if (!session?.user || session.user.role !== "ADMIN") {
-      console.log("AUTH FAILED");
-
+    if (
+      !session?.user ||
+      session.user.role !== "ADMIN"
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -38,119 +33,70 @@ export async function GET() {
       );
     }
 
-    console.log("AUTH CHECK COMPLETE");
+    // ============================================================
+    // GET OR CREATE BUSINESS WALLET
+    // ============================================================
 
-    // =====================================================
-    // 2. FIND OR CREATE BUSINESS WALLET
-    // =====================================================
-
-    console.log("FINDING BUSINESS WALLET...");
-
-    let businessWallet = await prisma.businessWallet.findUnique({
-      where: {
-        name: "Brainfriend Tech",
-      },
-    });
-
-    if (!businessWallet) {
-      console.log("BUSINESS WALLET NOT FOUND - CREATING...");
-
-      businessWallet = await prisma.businessWallet.create({
-        data: {
+    let businessWallet =
+      await prisma.businessWallet.findUnique({
+        where: {
           name: "Brainfriend Tech",
-          totalRevenue: 0,
-          totalCost: 0,
-          totalProfit: 0,
-          withdrawnProfit: 0,
-          availableProfit: 0,
-          balance: 0,
         },
       });
 
-      console.log(
-        "BUSINESS WALLET CREATED:",
-        businessWallet.id
-      );
-    } else {
-      console.log(
-        "BUSINESS WALLET FOUND:",
-        businessWallet.id
-      );
+    if (!businessWallet) {
+      businessWallet =
+        await prisma.businessWallet.create({
+          data: {
+            name: "Brainfriend Tech",
+            totalRevenue: 0,
+            totalCost: 0,
+            totalProfit: 0,
+            withdrawnProfit: 0,
+            availableProfit: 0,
+            balance: 0,
+          },
+        });
     }
 
-    // =====================================================
-    // 3. GET SUCCESSFUL SERVICE TRANSACTIONS
-    // =====================================================
+    // ============================================================
+    // GET LIVE SERVICE TOTALS
+    // ============================================================
 
-    console.log("STARTING TRANSACTION QUERY...");
-
-    const transactionStart = Date.now();
-
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        status: "SUCCESS",
-        isTest: false,
-        type: {
-          in: [...SERVICE_TYPES],
+    const serviceTotals =
+      await prisma.transaction.aggregate({
+        where: {
+          status: "SUCCESS",
+          isTest: false,
+          type: {
+            in: [...SERVICE_TYPES],
+          },
         },
-      },
 
-      select: {
-        id: true,
-        type: true,
-        provider: true,
-        amount: true,
-        cost: true,
-        profit: true,
-        reference: true,
-        description: true,
-        createdAt: true,
-      },
+        _sum: {
+          amount: true,
+          cost: true,
+        },
 
-      orderBy: {
-        createdAt: "desc",
-      },
+        _count: {
+          id: true,
+        },
+      });
 
-      take: 5000,
-    });
-
-    console.log(
-      "TRANSACTION QUERY COMPLETE:",
-      transactions.length,
-      "transactions"
+    const serviceRevenue = Number(
+      serviceTotals._sum.amount ?? 0
     );
 
-    console.log(
-      "TRANSACTION QUERY TIME:",
-      Date.now() - transactionStart,
-      "ms"
+    const providerCosts = Number(
+      serviceTotals._sum.cost ?? 0
     );
 
-    // =====================================================
-    // 4. CALCULATE FINANCIAL TOTALS
-    // =====================================================
+    const grossProfit =
+      serviceRevenue - providerCosts;
 
-    let totalRevenue = 0;
-    let totalCost = 0;
-    let totalProfit = 0;
-
-    for (const transaction of transactions) {
-      totalRevenue += Number(transaction.amount || 0);
-      totalCost += Number(transaction.cost || 0);
-      totalProfit += Number(transaction.profit || 0);
-    }
-
-    console.log("FINANCIAL TOTALS:", {
-      totalRevenue,
-      totalCost,
-      totalProfit,
-    });
-
-    // =====================================================
-    // 5. GET SUCCESSFUL WITHDRAWALS
-    // =====================================================
-
-    console.log("CHECKING BUSINESS WITHDRAWALS...");
+    // ============================================================
+    // BUSINESS WITHDRAWALS
+    // ============================================================
 
     const successfulWithdrawals =
       await prisma.businessWithdrawal.aggregate({
@@ -168,31 +114,48 @@ export async function GET() {
       });
 
     const withdrawnProfit = Number(
-      successfulWithdrawals._sum.amount || 0
+      successfulWithdrawals._sum.amount ?? 0
     );
 
-    console.log(
-      "WITHDRAWN PROFIT:",
-      withdrawnProfit
-    );
+    const availableProfit =
+      Math.max(
+        grossProfit -
+          withdrawnProfit,
+        0
+      );
 
-    // =====================================================
-    // 6. CALCULATE AVAILABLE PROFIT
-    // =====================================================
+    // ============================================================
+    // SERVICE BREAKDOWN
+    // ============================================================
 
-    const availableProfit = Math.max(
-      totalProfit - withdrawnProfit,
-      0
-    );
+    const transactions =
+      await prisma.transaction.findMany({
+        where: {
+          status: "SUCCESS",
+          isTest: false,
+          type: {
+            in: [...SERVICE_TYPES],
+          },
+        },
 
-    console.log(
-      "AVAILABLE PROFIT:",
-      availableProfit
-    );
+        select: {
+          id: true,
+          type: true,
+          provider: true,
+          amount: true,
+          cost: true,
+          profit: true,
+          reference: true,
+          description: true,
+          createdAt: true,
+        },
 
-    // =====================================================
-    // 7. SERVICE BREAKDOWN
-    // =====================================================
+        orderBy: {
+          createdAt: "desc",
+        },
+
+        take: 5000,
+      });
 
     const serviceMap = new Map<
       string,
@@ -214,40 +177,67 @@ export async function GET() {
     }
 
     for (const transaction of transactions) {
-      const current = serviceMap.get(transaction.type);
+      const current =
+        serviceMap.get(
+          transaction.type
+        );
 
       if (!current) continue;
 
+      const amount = Number(
+        transaction.amount ?? 0
+      );
+
+      const cost = Number(
+        transaction.cost ?? 0
+      );
+
       current.transactions += 1;
-      current.revenue += Number(transaction.amount || 0);
-      current.cost += Number(transaction.cost || 0);
-      current.profit += Number(transaction.profit || 0);
+      current.revenue += amount;
+      current.cost += cost;
+      current.profit +=
+        amount - cost;
     }
 
-    const byService = Array.from(serviceMap.entries())
-      .map(([type, data]) => ({
-        type,
+    const byService =
+      Array.from(
+        serviceMap.entries()
+      )
+        .map(
+          ([type, data]) => ({
+            type,
 
-        _count: {
-          id: data.transactions,
-        },
+            _count: {
+              id: data.transactions,
+            },
 
-        _sum: {
-          amount: data.revenue,
-          cost: data.cost,
-          profit: data.profit,
-        },
+            _sum: {
+              amount: data.revenue,
+              cost: data.cost,
+              profit: data.profit,
+            },
 
-        transactions: data.transactions,
-        revenue: data.revenue,
-        cost: data.cost,
-        profit: data.profit,
-      }))
-      .sort((a, b) => b.profit - a.profit);
+            transactions:
+              data.transactions,
 
-    // =====================================================
-    // 8. PROVIDER BREAKDOWN
-    // =====================================================
+            revenue:
+              data.revenue,
+
+            cost:
+              data.cost,
+
+            profit:
+              data.profit,
+          })
+        )
+        .sort(
+          (a, b) =>
+            b.profit - a.profit
+        );
+
+    // ============================================================
+    // PROVIDER BREAKDOWN
+    // ============================================================
 
     const providerMap = new Map<
       string,
@@ -261,9 +251,12 @@ export async function GET() {
 
     for (const transaction of transactions) {
       const provider =
-        transaction.provider || "UNKNOWN";
+        transaction.provider ||
+        "UNKNOWN";
 
-      if (!providerMap.has(provider)) {
+      if (
+        !providerMap.has(provider)
+      ) {
         providerMap.set(provider, {
           transactions: 0,
           revenue: 0,
@@ -272,77 +265,155 @@ export async function GET() {
         });
       }
 
-      const current = providerMap.get(provider)!;
+      const current =
+        providerMap.get(
+          provider
+        )!;
+
+      const amount = Number(
+        transaction.amount ?? 0
+      );
+
+      const cost = Number(
+        transaction.cost ?? 0
+      );
 
       current.transactions += 1;
-      current.revenue += Number(transaction.amount || 0);
-      current.cost += Number(transaction.cost || 0);
-      current.profit += Number(transaction.profit || 0);
+      current.revenue += amount;
+      current.cost += cost;
+      current.profit +=
+        amount - cost;
     }
 
-    const byProvider = Array.from(providerMap.entries())
-      .map(([provider, data]) => ({
-        provider,
-
-        _count: {
-          id: data.transactions,
-        },
-
-        _sum: {
-          amount: data.revenue,
-          cost: data.cost,
-          profit: data.profit,
-        },
-
-        transactions: data.transactions,
-        revenue: data.revenue,
-        cost: data.cost,
-        profit: data.profit,
-      }))
-      .sort((a, b) => b.profit - a.profit);
-
-    // =====================================================
-    // 9. PROFITABLE TRANSACTIONS
-    // =====================================================
-
-    const profitableTransactions = transactions
-      .filter(
-        (transaction) =>
-          Number(transaction.profit || 0) > 0
+    const byProvider =
+      Array.from(
+        providerMap.entries()
       )
-      .map((transaction) => ({
-        id: transaction.id,
-        type: transaction.type,
-        provider: transaction.provider,
-        amount: Number(transaction.amount || 0),
-        cost: Number(transaction.cost || 0),
-        profit: Number(transaction.profit || 0),
-        reference: transaction.reference,
-        description: transaction.description,
-        createdAt: transaction.createdAt,
-      }));
+        .map(
+          ([provider, data]) => ({
+            provider,
 
-    // =====================================================
-    // 10. RECENT TRANSACTIONS
-    // =====================================================
+            _count: {
+              id: data.transactions,
+            },
 
-    const recentTransactions = transactions
-      .slice(0, 20)
-      .map((transaction) => ({
-        id: transaction.id,
-        type: transaction.type,
-        provider: transaction.provider,
-        amount: Number(transaction.amount || 0),
-        cost: Number(transaction.cost || 0),
-        profit: Number(transaction.profit || 0),
-        reference: transaction.reference,
-        description: transaction.description,
-        createdAt: transaction.createdAt,
-      }));
+            _sum: {
+              amount: data.revenue,
+              cost: data.cost,
+              profit: data.profit,
+            },
 
-    // =====================================================
-    // 11. GET WITHDRAWAL HISTORY
-    // =====================================================
+            transactions:
+              data.transactions,
+
+            revenue:
+              data.revenue,
+
+            cost:
+              data.cost,
+
+            profit:
+              data.profit,
+          })
+        )
+        .sort(
+          (a, b) =>
+            b.profit - a.profit
+        );
+
+    // ============================================================
+    // PROFITABLE TRANSACTIONS
+    // ============================================================
+
+    const profitableTransactions =
+      transactions
+        .filter(
+          (transaction) => {
+            const amount = Number(
+              transaction.amount ?? 0
+            );
+
+            const cost = Number(
+              transaction.cost ?? 0
+            );
+
+            return (
+              amount - cost > 0
+            );
+          }
+        )
+        .map(
+          (transaction) => {
+            const amount = Number(
+              transaction.amount ?? 0
+            );
+
+            const cost = Number(
+              transaction.cost ?? 0
+            );
+
+            return {
+              id: transaction.id,
+              type: transaction.type,
+              provider:
+                transaction.provider ||
+                "UNKNOWN",
+              amount,
+              cost,
+              profit:
+                amount - cost,
+              reference:
+                transaction.reference,
+              description:
+                transaction.description ||
+                "",
+              createdAt:
+                transaction.createdAt,
+            };
+          }
+        );
+
+    // ============================================================
+    // RECENT TRANSACTIONS
+    // ============================================================
+
+    const recentTransactions =
+      transactions
+        .slice(0, 20)
+        .map(
+          (transaction) => {
+            const amount = Number(
+              transaction.amount ?? 0
+            );
+
+            const cost = Number(
+              transaction.cost ?? 0
+            );
+
+            return {
+              id: transaction.id,
+              type: transaction.type,
+              provider:
+                transaction.provider ||
+                "UNKNOWN",
+              amount,
+              cost,
+              profit:
+                amount - cost,
+              reference:
+                transaction.reference,
+              description:
+                transaction.description ||
+                "",
+              createdAt:
+                transaction.createdAt,
+            };
+          }
+        );
+
+    // ============================================================
+    // WITHDRAWAL HISTORY
+    // ============================================================
 
     const withdrawalsList =
       await prisma.businessWithdrawal.findMany({
@@ -362,9 +433,9 @@ export async function GET() {
         },
       });
 
-    // =====================================================
-    // 12. UPDATE BUSINESS WALLET
-    // =====================================================
+    // ============================================================
+    // UPDATE BUSINESS WALLET
+    // ============================================================
 
     businessWallet =
       await prisma.businessWallet.update({
@@ -373,51 +444,83 @@ export async function GET() {
         },
 
         data: {
-          totalRevenue,
-          totalCost,
-          totalProfit,
-          withdrawnProfit,
-          availableProfit,
-          balance: availableProfit,
+          totalRevenue:
+            serviceRevenue,
+
+          totalCost:
+            providerCosts,
+
+          totalProfit:
+            grossProfit,
+
+          withdrawnProfit:
+            withdrawnProfit,
+
+          availableProfit:
+            availableProfit,
+
+          balance:
+            availableProfit,
         },
       });
 
-    // =====================================================
-    // 13. FINAL RESPONSE
-    // =====================================================
-
-    console.log("BUSINESS WALLET API COMPLETE");
+    // ============================================================
+    // RESPONSE
+    // ============================================================
 
     return NextResponse.json({
       success: true,
 
       wallet: {
         id: businessWallet.id,
-        name: businessWallet.name,
 
-        totalRevenue: Number(
-          businessWallet.totalRevenue
-        ),
+        name:
+          businessWallet.name,
 
-        totalCost: Number(
-          businessWallet.totalCost
-        ),
+        serviceRevenue:
+          Number(
+            businessWallet.totalRevenue
+          ),
 
-        totalProfit: Number(
-          businessWallet.totalProfit
-        ),
+        providerCosts:
+          Number(
+            businessWallet.totalCost
+          ),
 
-        withdrawnProfit: Number(
-          businessWallet.withdrawnProfit
-        ),
+        grossProfit:
+          Number(
+            businessWallet.totalProfit
+          ),
 
-        availableProfit: Number(
-          businessWallet.availableProfit
-        ),
+        withdrawnProfit:
+          Number(
+            businessWallet.withdrawnProfit
+          ),
 
-        balance: Number(
-          businessWallet.balance
-        ),
+        availableProfit:
+          Number(
+            businessWallet.availableProfit
+          ),
+
+        balance:
+          Number(
+            businessWallet.balance
+          ),
+
+        totalRevenue:
+          Number(
+            businessWallet.totalRevenue
+          ),
+
+        totalCost:
+          Number(
+            businessWallet.totalCost
+          ),
+
+        totalProfit:
+          Number(
+            businessWallet.totalProfit
+          ),
 
         recipientCode:
           businessWallet.recipientCode,
@@ -436,54 +539,67 @@ export async function GET() {
         profitableTransactions:
           profitableTransactions.length,
 
-        totalRevenue,
-        totalCost,
-        totalProfit,
+        totalRevenue:
+          serviceRevenue,
+
+        totalCost:
+          providerCosts,
+
+        totalProfit:
+          grossProfit,
+
         withdrawnProfit,
+
         availableProfit,
       },
 
       byService,
+
       byProvider,
+
       profitableTransactions,
+
       recentTransactions,
 
       withdrawals: {
-        total: withdrawnProfit,
+        total:
+          withdrawnProfit,
+
         count:
-          successfulWithdrawals._count.id || 0,
+          successfulWithdrawals
+            ._count.id ?? 0,
       },
 
-      withdrawalsList,
+      withdrawalsList:
+        withdrawalsList.map(
+          (withdrawal) => ({
+            id: withdrawal.id,
+
+            amount: Number(
+              withdrawal.amount
+            ),
+
+            status:
+              withdrawal.status,
+
+            reference:
+              withdrawal.reference,
+
+            description:
+              withdrawal.adminNote ||
+              "",
+
+            createdAt:
+              withdrawal.createdAt,
+          })
+        ),
     });
   } catch (error) {
-    console.error(
-      "=========================================="
-    );
-
     console.error(
       "BUSINESS WALLET ERROR:",
       error
     );
 
-    console.error(
-      "=========================================="
-    );
-const withdrawalsList =
-  await prisma.businessWithdrawal.findMany({
-    orderBy: {
-      createdAt: "desc",
-    },
-    take: 10,
-    select: {
-      id: true,
-      amount: true,
-      status: true,
-      reference: true,
-      adminNote: true,
-      createdAt: true,
-    },
-  });
     return NextResponse.json(
       {
         success: false,
@@ -492,19 +608,10 @@ const withdrawalsList =
           "Unable to load Brainfriend Tech revenue wallet.",
 
         error:
-          process.env.NODE_ENV === "development"
+          process.env.NODE_ENV ===
+          "development"
             ? String(error)
             : undefined,
-            withdrawalsList: withdrawalsList.map(
-  (withdrawal) => ({
-    id: withdrawal.id,
-    amount: Number(withdrawal.amount),
-    status: withdrawal.status,
-    reference: withdrawal.reference,
-    description: withdrawal.adminNote,
-    createdAt: withdrawal.createdAt,
-  })
-),
       },
       {
         status: 500,
