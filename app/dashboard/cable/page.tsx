@@ -1,226 +1,394 @@
-
 "use client";
 
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "react-hot-toast";
 
-type Plan = {
-  variation_code: string;
+type CablePlan = {
+  id: number;
+  provider: string;
   name: string;
-  variation_amount: string;
+  price: number;
 };
 
 type Receipt = {
-  serviceID: string;
-  packageName: string;
-  smartCard: string;
+  provider: string;
+  planName: string;
+  cardnumber: string;
   customerName: string;
+  phone: string;
   amount: number;
   serviceFee: number;
   totalAmount: number;
-  transactionId: string;
-  requestId: string;
+  reference: string;
+  providerReference: string;
   status: string;
-  phone: string;
 };
 
+const PROVIDERS = [
+  "DSTV",
+  "GOTV",
+  "STARTIMES",
+];
+
 export default function CablePage() {
-  const [serviceID, setServiceID] = useState("dstv");
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [variationCode, setVariationCode] = useState("");
-  const [amount, setAmount] = useState("");
-  const [smartCard, setSmartCard] = useState("");
-  const [phone, setPhone] = useState("");
-  const [customerName, setCustomerName] = useState("");
-  const [verified, setVerified] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [plans, setPlans] = useState<CablePlan[]>([]);
+
+  const [provider, setProvider] =
+    useState("DSTV");
+
+  const [planId, setPlanId] =
+    useState("");
+
+  const [cardnumber, setCardnumber] =
+    useState("");
+
+  const [phone, setPhone] =
+    useState("");
+
+  const [customerName, setCustomerName] =
+    useState("");
+
+  const [verified, setVerified] =
+    useState(false);
+
+  const [loadingPlans, setLoadingPlans] =
+    useState(true);
+
+  const [verifying, setVerifying] =
+    useState(false);
+
+  const [buying, setBuying] =
+    useState(false);
+
+  const [receipt, setReceipt] =
+    useState<Receipt | null>(null);
+
+  // ==========================================
+  // LOAD CABLE PLANS
+  // ==========================================
 
   useEffect(() => {
-    fetchPlans();
+    async function loadPlans() {
+      try {
+        setLoadingPlans(true);
 
-    setVariationCode("");
-    setAmount("");
+        const response = await fetch(
+          `/api/cable/plans?provider=${provider}`,
+          {
+            cache: "no-store",
+          }
+        );
+
+        const result =
+          await response.json();
+
+        console.log(
+          "CABLE PLANS:",
+          result
+        );
+
+        if (
+          !response.ok ||
+          !result.success
+        ) {
+          throw new Error(
+            result.message ||
+              "Unable to load cable plans."
+          );
+        }
+
+        setPlans(
+          Array.isArray(result.data)
+            ? result.data
+            : []
+        );
+      } catch (error) {
+        console.error(
+          "LOAD CABLE PLANS ERROR:",
+          error
+        );
+
+        setPlans([]);
+
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Unable to load cable plans."
+        );
+      } finally {
+        setLoadingPlans(false);
+      }
+    }
+
+    loadPlans();
+
+    // Clear selected plan
+    setPlanId("");
+
+    // Clear verification
     setVerified(false);
     setCustomerName("");
-  }, [serviceID]);
+  }, [provider]);
 
-  async function fetchPlans() {
-    try {
-      const res = await fetch(
-        `/api/cable/plans?serviceID=${serviceID}`
-      );
+  // ==========================================
+  // FILTER PLANS
+  // ==========================================
 
-      const data = await res.json();
+  const filteredPlans = useMemo(() => {
+    return plans.filter(
+      (plan) =>
+        plan.provider.toUpperCase() ===
+        provider.toUpperCase()
+    );
+  }, [plans, provider]);
 
-      const availablePlans =
-        data.content?.variations || [];
+  // ==========================================
+  // SELECT PROVIDER
+  // ==========================================
 
-      setPlans(availablePlans);
-    } catch (error) {
-      console.log(error);
-      toast.error("Failed loading plans");
-    }
+  function handleProviderChange(
+    value: string
+  ) {
+    setProvider(value);
+
+    setPlanId("");
+
+    setVerified(false);
+
+    setCustomerName("");
   }
 
-  function selectPlan(value: string) {
-    setVariationCode(value);
+  // ==========================================
+  // SELECT PLAN
+  // ==========================================
 
-    const selected = plans.find(
+  function handlePlanChange(
+    value: string
+  ) {
+    setPlanId(value);
+  }
+
+  // ==========================================
+  // SELECTED PLAN
+  // ==========================================
+
+  const selectedPlan =
+    filteredPlans.find(
       (plan) =>
-        plan.variation_code === value
+        String(plan.id) === planId
     );
 
-    if (selected) {
-      setAmount(
-        selected.variation_amount
-      );
-    }
-  }
+  const amount =
+    selectedPlan?.price || 0;
+
+  const serviceFee =
+    amount * 0.05;
+
+  const totalAmount =
+    amount + serviceFee;
+
+  // ==========================================
+  // VERIFY SMART CARD
+  // ==========================================
 
   async function verifySmartCard() {
-    if (!smartCard.trim()) {
+    const cleanCard =
+      cardnumber.trim();
+
+    if (!cleanCard) {
       toast.error(
-        "Enter Smart Card number"
+        "Enter Smart Card / IUC number."
       );
+
+      return;
+    }
+
+    if (!provider) {
+      toast.error(
+        "Please select a cable provider."
+      );
+
       return;
     }
 
     setVerifying(true);
 
+    setVerified(false);
+
+    setCustomerName("");
+
     try {
-      const res = await fetch(
+      const response = await fetch(
         "/api/cable/verify",
         {
           method: "POST",
+
           headers: {
             "Content-Type":
               "application/json",
           },
+
           body: JSON.stringify({
-            serviceID,
+            serviceID:
+              provider.toLowerCase(),
+
             smartCard:
-              smartCard.trim(),
+              cleanCard,
+
+            cardnumber:
+              cleanCard,
           }),
         }
       );
 
-      const data = await res.json();
+      const result =
+        await response.json();
 
       console.log(
-        "VERIFY RESULT:",
-        data
+        "CABLE VERIFY RESPONSE:",
+        result
       );
 
-      if (!res.ok || !data.success) {
-        setVerified(false);
-        setCustomerName("");
-
+      if (
+        !response.ok ||
+        !result.success
+      ) {
         toast.error(
-          data.message ||
-            "Verification failed"
+          result.message ||
+            result.error ||
+            "Smart Card verification failed."
         );
 
         return;
       }
 
       const content =
-        data.data?.content || {};
+        result.data?.content ||
+        result.content ||
+        {};
 
       const name =
         content.Customer_Name ||
         content.customer_name ||
         content.customerName ||
         content.Name ||
+        result.customerName ||
         "Verified Customer";
 
       setCustomerName(name);
+
       setVerified(true);
 
       toast.success(
-        "Smart Card verified"
+        "Smart Card verified successfully."
       );
     } catch (error) {
-      console.log(error);
-
-      setVerified(false);
-      setCustomerName("");
+      console.error(
+        "SMART CARD VERIFY ERROR:",
+        error
+      );
 
       toast.error(
-        "Verification error"
+        "Unable to verify Smart Card."
       );
     } finally {
       setVerifying(false);
     }
   }
 
-  async function buyCable(
-    e: React.FormEvent
-  ) {
-    e.preventDefault();
+  // ==========================================
+  // BUY CABLE
+  // ==========================================
 
-    if (
-      !variationCode ||
-      !smartCard.trim() ||
-      !phone.trim()
-    ) {
+  async function buyCable(
+    event: React.FormEvent
+  ) {
+    event.preventDefault();
+
+    // ------------------------------
+    // PLAN
+    // ------------------------------
+
+    if (!planId) {
       toast.error(
-        "Complete all fields"
+        "Please select a subscription plan."
       );
 
       return;
     }
+
+    // ------------------------------
+    // SMART CARD
+    // ------------------------------
+
+    const cleanCard =
+      cardnumber.trim();
+
+    if (!cleanCard) {
+      toast.error(
+        "Please enter Smart Card / IUC number."
+      );
+
+      return;
+    }
+
+    // ------------------------------
+    // VERIFICATION
+    // ------------------------------
 
     if (!verified) {
       toast.error(
-        "Verify Smart Card first"
+        "Please verify your Smart Card first."
       );
 
       return;
     }
 
-    if (!amount) {
+    // ------------------------------
+    // PHONE
+    // ------------------------------
+
+    const cleanPhone =
+      phone.replace(/\s+/g, "");
+
+    if (
+      !/^0\d{10}$/.test(cleanPhone)
+    ) {
       toast.error(
-        "Select a package"
+        "Please enter a valid Nigerian phone number."
       );
 
       return;
     }
 
-    setLoading(true);
+    // ------------------------------
+    // PLAN
+    // ------------------------------
+
+    if (!selectedPlan) {
+      toast.error(
+        "Selected plan could not be found."
+      );
+
+      return;
+    }
+
+    setBuying(true);
 
     try {
-      const cableAmount =
-        Number(amount);
-
-      const serviceFee =
-        cableAmount * 0.05;
-
-      const totalAmount =
-        cableAmount + serviceFee;
-
-      const selectedPlan =
-        plans.find(
-          (plan) =>
-            plan.variation_code ===
-            variationCode
-        );
+      // ========================================
+      // EXACT CHEAPDATAHUB PAYLOAD
+      // ========================================
 
       const payload = {
-        serviceID,
+        planId:
+          Number(selectedPlan.id),
 
-        variation_code:
-          variationCode,
-
-        smartCard:
-          smartCard.trim(),
-
-        amount:
-          cableAmount,
+        cardnumber:
+          cleanCard,
 
         phone:
-          phone.trim(),
+          cleanPhone,
       };
 
       console.log(
@@ -228,7 +396,11 @@ export default function CablePage() {
         payload
       );
 
-      const res = await fetch(
+      // ========================================
+      // PURCHASE
+      // ========================================
+
+      const response = await fetch(
         "/api/cable/purchase",
         {
           method: "POST",
@@ -244,134 +416,140 @@ export default function CablePage() {
         }
       );
 
-      const data = await res.json();
+      const result =
+        await response.json();
 
       console.log(
-        "PURCHASE RESPONSE:",
-        data
+        "CABLE PURCHASE RESPONSE:",
+        result
       );
 
       if (
-        !res.ok ||
-        !data.success
+        !response.ok ||
+        !result.success
       ) {
         toast.error(
-          data.message ||
-            data.vtpass
-              ?.response_description ||
-            "Transaction failed"
+          result.message ||
+            result.error ||
+            "Cable subscription failed."
         );
 
         return;
       }
 
-      const vtpass =
-        data.vtpass || {};
+      // ========================================
+      // RECEIPT
+      // ========================================
 
-      const transaction =
-        vtpass.content
-          ?.transactions || {};
-
-      const transactionId =
-        transaction.transactionId ||
-        vtpass.transactionId ||
+      const providerReference =
+        result.providerReference ||
+        result.providerResponse
+          ?.reference ||
+        result.providerResponse
+          ?.transaction_id ||
         "N/A";
 
-      const requestId =
-        vtpass.requestId ||
+      const reference =
+        result.reference ||
         "N/A";
-
-      const packageName =
-        selectedPlan?.name ||
-        transaction.product_name ||
-        "Cable TV Subscription";
 
       const receiptData: Receipt = {
-        serviceID,
+        provider,
 
-        packageName,
+        planName:
+          selectedPlan.name,
 
-        smartCard:
-          smartCard.trim(),
+        cardnumber:
+          cleanCard,
 
         customerName:
           customerName ||
-          vtpass.customerName ||
           "Customer",
+
+        phone:
+          cleanPhone,
 
         amount:
           Number(
-            data.amount ||
-              cableAmount
+            result.amount ??
+              amount
           ),
 
         serviceFee:
           Number(
-            data.serviceFee ??
+            result.serviceFee ??
               serviceFee
           ),
 
         totalAmount:
           Number(
-            data.totalAmount ??
+            result.totalAmount ??
               totalAmount
           ),
 
-        transactionId,
+        reference,
 
-        requestId,
+        providerReference,
 
         status:
-          transaction.status ||
-          "delivered",
-
-        phone:
-          phone.trim(),
+          result.status ||
+          "SUCCESS",
       };
 
-      setReceipt(receiptData);
+      setReceipt(
+        receiptData
+      );
 
       toast.success(
-        "Cable subscription successful"
+        "Cable subscription successful!"
       );
     } catch (error) {
-      console.log(error);
+      console.error(
+        "CABLE PURCHASE ERROR:",
+        error
+      );
 
       toast.error(
-        "Something went wrong"
+        "Something went wrong. Please try again."
       );
     } finally {
-      setLoading(false);
+      setBuying(false);
     }
   }
 
+  // ==========================================
+  // CLOSE RECEIPT
+  // ==========================================
+
   function closeReceipt() {
     setReceipt(null);
-    setSmartCard("");
+
+    setPlanId("");
+
+    setCardnumber("");
+
     setPhone("");
-    setAmount("");
-    setVariationCode("");
-    setVerified(false);
+
     setCustomerName("");
+
+    setVerified(false);
   }
 
-  /*
-  ==========================================
-  SUCCESS RECEIPT
-  ==========================================
-  */
+  // ==========================================
+  // SUCCESS RECEIPT
+  // ==========================================
 
   if (receipt) {
     return (
       <div className="w-full">
-        {/* SUCCESS HEADER */}
+        {/* HEADER */}
 
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl text-green-600">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl font-bold text-green-600">
             ✓
           </div>
 
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
             Subscription Successful
           </h1>
 
@@ -383,157 +561,154 @@ export default function CablePage() {
 
         {/* RECEIPT */}
 
-        <div className="space-y-4 rounded-xl border bg-gray-50 p-4 sm:p-5">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="space-y-4 rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
             <span className="text-gray-500">
               Provider
             </span>
 
-            <span className="font-semibold uppercase sm:text-right">
-              {receipt.serviceID}
+            <span className="font-semibold uppercase">
+              {receipt.provider}
             </span>
           </div>
 
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
             <span className="text-gray-500">
               Package
             </span>
 
-            <span className="break-words font-semibold sm:text-right">
-              {receipt.packageName}
+            <span className="font-semibold sm:text-right">
+              {receipt.planName}
             </span>
           </div>
 
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
             <span className="text-gray-500">
               Customer
             </span>
 
-            <span className="break-words font-semibold sm:text-right">
+            <span className="font-semibold sm:text-right">
               {receipt.customerName}
             </span>
           </div>
 
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
             <span className="text-gray-500">
               Smart Card / IUC
             </span>
 
             <span className="break-all font-semibold sm:text-right">
-              {receipt.smartCard}
+              {receipt.cardnumber}
             </span>
           </div>
 
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
             <span className="text-gray-500">
               Phone
             </span>
 
-            <span className="break-all font-semibold sm:text-right">
+            <span className="font-semibold">
               {receipt.phone}
             </span>
           </div>
 
-          <div className="my-2 border-t" />
+          <div className="border-t pt-4" />
 
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex justify-between">
             <span className="text-gray-500">
               Subscription
             </span>
 
-            <span className="font-semibold sm:text-right">
+            <span className="font-semibold">
               ₦
               {receipt.amount.toLocaleString(
                 "en-NG",
                 {
                   minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
                 }
               )}
             </span>
           </div>
 
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex justify-between">
             <span className="text-gray-500">
               Service Fee (5%)
             </span>
 
-            <span className="font-semibold sm:text-right">
+            <span className="font-semibold">
               ₦
               {receipt.serviceFee.toLocaleString(
                 "en-NG",
                 {
                   minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
                 }
               )}
             </span>
           </div>
 
-          <div className="flex flex-col gap-1 border-t pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-            <span className="font-bold text-gray-900">
+          <div className="flex justify-between border-t pt-4">
+            <span className="font-bold">
               Total Deducted
             </span>
 
-            <span className="font-bold text-indigo-600 sm:text-right">
+            <span className="font-bold text-indigo-600">
               ₦
               {receipt.totalAmount.toLocaleString(
                 "en-NG",
                 {
                   minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
                 }
               )}
             </span>
           </div>
         </div>
 
-        {/* TRANSACTION DETAILS */}
+        {/* TRANSACTION */}
 
-        <div className="mt-5 rounded-xl border p-4 sm:p-5">
-          <h2 className="mb-3 font-semibold text-gray-900">
+        <div className="mt-5 rounded-2xl border bg-white p-5 shadow-sm">
+          <h2 className="mb-4 font-semibold">
             Transaction Details
           </h2>
 
           <div className="space-y-3 text-sm">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
               <span className="text-gray-500">
                 Status
               </span>
 
-              <span className="font-semibold uppercase text-green-600 sm:text-right">
+              <span className="font-semibold uppercase text-green-600">
                 {receipt.status}
               </span>
             </div>
 
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div className="flex flex-col gap-1">
               <span className="text-gray-500">
-                Transaction ID
+                Reference
               </span>
 
-              <span className="break-all font-medium sm:max-w-[70%] sm:text-right">
-                {receipt.transactionId}
+              <span className="break-all font-medium">
+                {receipt.reference}
               </span>
             </div>
 
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+            <div className="flex flex-col gap-1">
               <span className="text-gray-500">
-                Request ID
+                Provider Reference
               </span>
 
-              <span className="break-all font-medium sm:max-w-[70%] sm:text-right">
-                {receipt.requestId}
+              <span className="break-all font-medium">
+                {receipt.providerReference}
               </span>
             </div>
           </div>
         </div>
 
-        {/* DONE BUTTON */}
+        {/* DONE */}
 
         <button
           type="button"
           onClick={closeReceipt}
-          className="mt-6 w-full rounded-xl bg-indigo-600 p-3 font-semibold text-white transition hover:bg-indigo-700"
+          className="mt-6 w-full rounded-xl bg-indigo-600 p-3.5 font-semibold text-white transition hover:bg-indigo-700"
         >
           Done
         </button>
@@ -541,173 +716,196 @@ export default function CablePage() {
     );
   }
 
-  /*
-  ==========================================
-  MAIN PAGE
-  ==========================================
-  */
+  // ==========================================
+  // MAIN PAGE
+  // ==========================================
 
   return (
     <div className="w-full">
-      <h1 className="mb-6 text-2xl font-bold sm:text-3xl">
-        Cable TV Subscription
-      </h1>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+          Cable TV Subscription
+        </h1>
+
+        <p className="mt-1 text-sm text-gray-500">
+          Select your provider, package and
+          enter your Smart Card number.
+        </p>
+      </div>
 
       <form
         onSubmit={buyCable}
-        className="space-y-5 rounded-xl bg-white p-4 shadow sm:p-6"
+        className="w-full max-w-2xl space-y-5 rounded-2xl bg-white p-4 shadow-sm sm:p-6"
       >
         {/* PROVIDER */}
 
         <div>
-          <label className="mb-2 block font-medium">
+          <label className="mb-2 block text-sm font-medium text-gray-700">
             Cable Provider
           </label>
 
           <select
-            value={serviceID}
+            value={provider}
             onChange={(e) =>
-              setServiceID(
+              handleProviderChange(
                 e.target.value
               )
             }
-            disabled={loading}
-            className="w-full rounded border p-3"
+            disabled={
+              loadingPlans ||
+              buying
+            }
+            className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
           >
-            <option value="dstv">
-              DSTV
-            </option>
-
-            <option value="gotv">
-              GOTV
-            </option>
-
-            <option value="startimes">
-              Startimes
-            </option>
+            {PROVIDERS.map(
+              (item) => (
+                <option
+                  key={item}
+                  value={item}
+                >
+                  {item}
+                </option>
+              )
+            )}
           </select>
         </div>
 
-        {/* PACKAGE */}
+        {/* PLAN */}
 
         <div>
-          <label className="mb-2 block font-medium">
+          <label className="mb-2 block text-sm font-medium text-gray-700">
             Subscription Package
           </label>
 
           <select
-            value={variationCode}
+            value={planId}
             onChange={(e) =>
-              selectPlan(
+              handlePlanChange(
                 e.target.value
               )
             }
-            disabled={loading}
-            className="w-full rounded border p-3"
+            disabled={
+              loadingPlans ||
+              buying ||
+              filteredPlans.length === 0
+            }
+            className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
           >
             <option value="">
-              Select Package
+              {loadingPlans
+                ? "Loading plans..."
+                : filteredPlans.length ===
+                  0
+                ? "No plans available"
+                : "Select package"}
             </option>
 
-            {plans.map((plan) => (
-              <option
-                key={
-                  plan.variation_code
-                }
-                value={
-                  plan.variation_code
-                }
-              >
-                {plan.name}
-              </option>
-            ))}
+            {filteredPlans.map(
+              (plan) => (
+                <option
+                  key={plan.id}
+                  value={plan.id}
+                >
+                  {plan.name} - ₦
+                  {Number(
+                    plan.price
+                  ).toLocaleString(
+                    "en-NG"
+                  )}
+                </option>
+              )
+            )}
           </select>
         </div>
 
         {/* AMOUNT */}
 
         <div>
-          <label className="mb-2 block font-medium">
+          <label className="mb-2 block text-sm font-medium text-gray-700">
             Subscription Amount
           </label>
 
           <input
+            type="text"
             value={
               amount
-                ? `₦${Number(
-                    amount
-                  ).toLocaleString(
+                ? `₦${amount.toLocaleString(
                     "en-NG"
                   )}`
                 : ""
             }
             readOnly
             placeholder="Select a package"
-            className="w-full rounded border bg-gray-100 p-3"
+            className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3"
           />
 
-          {amount && (
-            <p className="mt-2 text-sm text-gray-500">
-              Service fee (5%): ₦
-              {(
-                Number(amount) *
-                0.05
-              ).toLocaleString(
-                "en-NG",
-                {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }
-              )}
+          {amount > 0 && (
+            <div className="mt-2 rounded-lg bg-gray-50 p-3 text-sm text-gray-500">
+              <p>
+                Service fee (5%):{" "}
+                <strong>
+                  ₦
+                  {serviceFee.toLocaleString(
+                    "en-NG",
+                    {
+                      minimumFractionDigits: 2,
+                    }
+                  )}
+                </strong>
+              </p>
 
-              <br />
-
-              Total deduction: ₦
-              {(
-                Number(amount) *
-                1.05
-              ).toLocaleString(
-                "en-NG",
-                {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }
-              )}
-            </p>
+              <p className="mt-1">
+                Total deduction:{" "}
+                <strong className="text-gray-700">
+                  ₦
+                  {totalAmount.toLocaleString(
+                    "en-NG",
+                    {
+                      minimumFractionDigits: 2,
+                    }
+                  )}
+                </strong>
+              </p>
+            </div>
           )}
         </div>
 
         {/* SMART CARD */}
 
         <div>
-          <label className="mb-2 block font-medium">
+          <label className="mb-2 block text-sm font-medium text-gray-700">
             Smart Card / IUC Number
           </label>
 
           <input
-            value={smartCard}
+            type="text"
+            inputMode="numeric"
+            value={cardnumber}
             onChange={(e) => {
-              setSmartCard(
+              setCardnumber(
                 e.target.value
               );
 
               setVerified(false);
+
               setCustomerName("");
             }}
             placeholder="Enter Smart Card / IUC number"
-            disabled={loading}
-            className="w-full rounded border p-3"
+            disabled={buying}
+            className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
           />
 
           <button
             type="button"
-            onClick={verifySmartCard}
+            onClick={
+              verifySmartCard
+            }
             disabled={
               verifying ||
-              loading ||
-              !smartCard.trim()
+              buying ||
+              !cardnumber.trim()
             }
-            className="mt-3 w-full rounded-lg bg-green-600 p-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-3 w-full rounded-xl bg-green-600 p-3 font-semibold text-white transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {verifying
               ? "Verifying..."
@@ -715,23 +913,24 @@ export default function CablePage() {
           </button>
         </div>
 
-        {/* VERIFIED CUSTOMER */}
+        {/* VERIFIED */}
 
         {verified && (
-          <div className="rounded-lg bg-green-100 p-4 text-green-700">
+          <div className="rounded-xl bg-green-50 p-4 text-green-700">
             <p className="font-semibold">
               Customer Verified ✓
             </p>
 
-            <p className="mt-1 break-words">
+            <p className="mt-1">
               Customer Name:{" "}
               <strong>
                 {customerName}
               </strong>
             </p>
 
-            <p className="mt-1 break-all text-sm">
-              Smart Card: {smartCard}
+            <p className="mt-1 text-sm">
+              Smart Card:{" "}
+              {cardnumber}
             </p>
           </div>
         )}
@@ -739,12 +938,13 @@ export default function CablePage() {
         {/* PHONE */}
 
         <div>
-          <label className="mb-2 block font-medium">
+          <label className="mb-2 block text-sm font-medium text-gray-700">
             Phone Number
           </label>
 
           <input
             type="tel"
+            inputMode="numeric"
             value={phone}
             onChange={(e) =>
               setPhone(
@@ -752,9 +952,9 @@ export default function CablePage() {
               )
             }
             placeholder="08012345678"
-            disabled={loading}
             maxLength={11}
-            className="w-full rounded border p-3"
+            disabled={buying}
+            className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
           />
         </div>
 
@@ -763,13 +963,15 @@ export default function CablePage() {
         <button
           type="submit"
           disabled={
-            loading ||
+            buying ||
+            loadingPlans ||
+            !planId ||
             !verified ||
-            !variationCode
+            !phone.trim()
           }
-          className="w-full rounded-lg bg-indigo-600 p-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-xl bg-indigo-600 p-3.5 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {loading
+          {buying
             ? "Processing..."
             : "Subscribe"}
         </button>
@@ -777,4 +979,3 @@ export default function CablePage() {
     </div>
   );
 }
-

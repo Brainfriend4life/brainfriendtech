@@ -1,644 +1,656 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import axios from "axios";
 
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { vtpassConfig } from "@/lib/vtpass";
-import { generateRequestId } from "@/lib/requestId";
 
-export async function POST(req: NextRequest) {
+const CHEAPDATAHUB_EXAM_PURCHASE_URL =
+  "https://www.cheapdatahub.ng/api/v1/resellers/exam-pin/purchase/";
+
+const EXAM_PRODUCTS: Record<
+  number,
+  {
+    examName: string;
+    price: number;
+  }
+> = {
+  1: {
+    examName: "WAEC",
+    price: 6000,
+  },
+
+  2: {
+    examName: "NECO",
+    price: 2500,
+  },
+
+  3: {
+    examName: "NABTEB",
+    price: 1200,
+  },
+};
+
+export async function POST(
+  request: NextRequest
+) {
   try {
-    const session = await getServerSession(authOptions);
+    // ==========================================
+    // AUTHENTICATION
+    // ==========================================
+
+    const session =
+      await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized",
+          error: "Unauthorized",
         },
         { status: 401 }
       );
     }
 
-    const {
-      serviceID,
-      variation_code,
-      quantity,
-      phone,
-      billersCode,
-    } = await req.json();
+    // ==========================================
+    // REQUEST BODY
+    // ==========================================
 
-    const normalizedServiceID = String(
-      serviceID || ""
-    ).toLowerCase();
+    const body = await request.json();
 
-    /*
-     * ==========================================
-     * BASIC VALIDATION
-     * ==========================================
-     */
-
-    if (
-      !serviceID ||
-      !variation_code ||
-      !quantity ||
-      !phone
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "All fields are required",
-        },
-        { status: 400 }
-      );
-    }
-
-    /*
-     * JAMB requires billersCode
-     */
-    if (
-      normalizedServiceID === "jamb" &&
-      !String(billersCode || "").trim()
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "JAMB Profile ID is required",
-        },
-        { status: 400 }
-      );
-    }
-
-    /*
-     * ==========================================
-     * FIND LOGGED-IN USER
-     * ==========================================
-     */
-
-    const user = await prisma.user.findUnique({
-      where: {
-        email: session.user.email,
-      },
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "User not found",
-        },
-        { status: 404 }
-      );
-    }
-
-    /*
-     * ==========================================
-     * GET CURRENT PRICE FROM VTPASS
-     * ==========================================
-     */
-
-    const variationResponse =
-      await axios.get(
-        `${vtpassConfig.baseUrl}/service-variations?serviceID=${encodeURIComponent(
-          serviceID
-        )}`,
-        {
-          headers: {
-            "api-key": vtpassConfig.apiKey,
-            "secret-key": vtpassConfig.secretKey,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-    const plans =
-      variationResponse.data?.content
-        ?.variations || [];
-
-    const selectedPlan = plans.find(
-      (plan: any) =>
-        plan.variation_code ===
-        variation_code
+    const productId = Number(
+      body.productId ??
+        body.product_id
     );
 
-    if (!selectedPlan) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Invalid exam plan selected",
-        },
-        { status: 400 }
-      );
-    }
-
-    const unitPrice = Number(
-      selectedPlan.variation_amount
+    const quantity = Number(
+      body.quantity
     );
-
-    const requestedQuantity =
-      Number(quantity);
-
-    if (
-      !Number.isFinite(unitPrice) ||
-      unitPrice <= 0
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Invalid exam plan price",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (
-      !Number.isInteger(
-        requestedQuantity
-      ) ||
-      requestedQuantity < 1
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid quantity",
-        },
-        { status: 400 }
-      );
-    }
-
-    const totalAmount =
-      unitPrice * requestedQuantity;
-
-    /*
-     * ==========================================
-     * INITIAL WALLET CHECK
-     * ==========================================
-     *
-     * This is only a quick check.
-     *
-     * We will perform the REAL balance check
-     * again inside the Prisma transaction below.
-     */
-
-    if (
-      user.walletBalance <
-      totalAmount
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Insufficient wallet balance",
-        },
-        { status: 400 }
-      );
-    }
-
-    /*
-     * ==========================================
-     * GENERATE UNIQUE VTPASS REQUEST ID
-     * ==========================================
-     */
-
-    const requestId =
-      generateRequestId();
-
-    /*
-     * ==========================================
-     * BUILD VTPASS PAYLOAD
-     * ==========================================
-     */
-
-    const payload: any = {
-      request_id: requestId,
-      serviceID,
-      variation_code,
-      quantity: requestedQuantity,
-      phone: String(phone).trim(),
-    };
-
-    /*
-     * JAMB requires billersCode
-     */
-    if (
-      normalizedServiceID === "jamb"
-    ) {
-      payload.billersCode =
-        String(
-          billersCode
-        ).trim();
-    }
 
     console.log(
-      "Exam Payload:",
-      payload
+      "========== EXAM PIN PURCHASE =========="
     );
-
-    /*
-     * ==========================================
-     * SEND PURCHASE REQUEST TO VTPASS
-     * ==========================================
-     */
-
-    const response =
-      await axios.post(
-        `${vtpassConfig.baseUrl}/pay`,
-        payload,
-        {
-          headers: {
-            "api-key":
-              vtpassConfig.apiKey,
-            "secret-key":
-              vtpassConfig.secretKey,
-            "Content-Type":
-              "application/json",
-          },
-        }
-      );
-
-    const vtpass =
-      response.data;
 
     console.log(
-      "Exam Response:",
-      vtpass
+      "PRODUCT ID:",
+      productId
     );
 
-    /*
-     * ==========================================
-     * CHECK VTPASS TRANSACTION STATUS
-     * ==========================================
-     */
+    console.log(
+      "QUANTITY:",
+      quantity
+    );
 
-    const successful =
-      vtpass.code === "000" &&
-      vtpass.content
-        ?.transactions
-        ?.status === "delivered";
+    // ==========================================
+    // VALIDATE PRODUCT
+    // ==========================================
 
-    /*
-     * ==========================================
-     * VTPASS PURCHASE FAILED
-     * ==========================================
-     */
+    const product =
+      EXAM_PRODUCTS[productId];
 
-    if (!successful) {
-      try {
-        await prisma.transaction.create({
-          data: {
-            userId: user.id,
-            type: "EXAM_PIN",
-            provider:
-              serviceID.toUpperCase(),
-            amount: totalAmount,
-            reference: requestId,
-            status: "FAILED",
-            description:
-              vtpass.response_description ||
-              vtpass.content?.errors?.join?.(
-                ", "
-              ) ||
-              "Exam purchase failed",
-          },
-        });
-      } catch (transactionError: any) {
-        console.error(
-          "FAILED TRANSACTION LOG ERROR:",
-          transactionError.message
-        );
-      }
-
+    if (!product) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            vtpass.response_description ||
-            vtpass.content?.errors?.join?.(
-              ", "
-            ) ||
-            "Exam PIN purchase failed",
-          data: vtpass,
+          error:
+            "Invalid exam PIN product.",
         },
         { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * EXTRACT RETURNED PIN(S)
-     * ==========================================
-     */
-
-    const cards: {
-      Pin: string;
-      Serial: string;
-    }[] = [];
-
-    /*
-     * WAEC / CARD-BASED SERVICES
-     */
+    // ==========================================
+    // VALIDATE QUANTITY
+    // ==========================================
 
     if (
-      Array.isArray(vtpass.cards)
+      ![1, 2, 5].includes(quantity)
     ) {
-      for (const card of vtpass.cards) {
-        if (
-          card?.Pin &&
-          card?.Serial
-        ) {
-          cards.push({
-            Pin: String(card.Pin),
-            Serial: String(
-              card.Serial
-            ),
-          });
-        }
-      }
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Quantity must be 1, 2, or 5.",
+        },
+        { status: 400 }
+      );
     }
 
-    /*
-     * JAMB
-     *
-     * VTpass returns:
-     *
-     * Pin: "Pin : 3678251321392432"
-     */
+    // ==========================================
+    // API KEY
+    // ==========================================
 
-    if (
-      normalizedServiceID ===
-        "jamb" &&
-      vtpass.Pin
-    ) {
-      let jambPin = String(
-        vtpass.Pin
-      ).trim();
+    const apiKey =
+      process.env.CHEAPDATAHUB_API_KEY;
 
-      jambPin =
-        jambPin.replace(
-          /^Pin\s*:\s*/i,
-          ""
-        ).trim();
-
-      if (jambPin) {
-        cards.push({
-          Pin: jambPin,
-          Serial: "JAMB",
-        });
-      }
-    }
-
-    /*
-     * FALLBACK:
-     * Some VTpass responses use purchased_code
-     */
-
-    if (
-      cards.length === 0 &&
-      normalizedServiceID ===
-        "jamb" &&
-      vtpass.purchased_code
-    ) {
-      let purchasedCode =
-        String(
-          vtpass.purchased_code
-        ).trim();
-
-      purchasedCode =
-        purchasedCode.replace(
-          /^Pin\s*:\s*/i,
-          ""
-        ).trim();
-
-      if (purchasedCode) {
-        cards.push({
-          Pin: purchasedCode,
-          Serial: "JAMB",
-        });
-      }
-    }
-
-    /*
-     * ==========================================
-     * MAKE SURE A PIN WAS RETURNED
-     * ==========================================
-     */
-
-    if (cards.length === 0) {
-      try {
-        await prisma.transaction.create({
-          data: {
-            userId: user.id,
-            type: "EXAM_PIN",
-            provider:
-              serviceID.toUpperCase(),
-            amount: totalAmount,
-            reference: requestId,
-            status: "FAILED",
-            description:
-              "Transaction successful but no PIN was returned",
-          },
-        });
-      } catch (transactionError: any) {
-        console.error(
-          "FAILED PIN LOG ERROR:",
-          transactionError.message
-        );
-      }
+    if (!apiKey) {
+      console.error(
+        "CHEAPDATAHUB_API_KEY is missing."
+      );
 
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Transaction completed but no exam PIN was returned.",
-          data: vtpass,
+          error:
+            "CheapDataHub API key is not configured.",
         },
         { status: 500 }
       );
     }
 
-    /*
-     * ==========================================
-     * ATOMIC DATABASE TRANSACTION
-     * ==========================================
-     *
-     * Everything below succeeds together
-     * or everything is rolled back.
-     */
+    // ==========================================
+    // CALCULATE PRICE
+    // ==========================================
 
-    await prisma.$transaction(
-      async (tx) => {
-        /*
-         * --------------------------------------
-         * RE-CHECK WALLET BALANCE
-         * --------------------------------------
-         *
-         * We deliberately fetch the latest
-         * database value instead of relying on
-         * the earlier user object.
-         */
+    const unitPrice =
+      product.price;
 
-        const currentUser =
-          await tx.user.findUnique({
+    const totalAmount =
+      unitPrice * quantity;
+
+    console.log(
+      "EXAM:",
+      product.examName
+    );
+
+    console.log(
+      "UNIT PRICE:",
+      unitPrice
+    );
+
+    console.log(
+      "TOTAL:",
+      totalAmount
+    );
+
+    // ==========================================
+    // FIND USER
+    // ==========================================
+
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          email: session.user.email,
+        },
+      });
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "User not found.",
+        },
+        { status: 404 }
+      );
+    }
+
+    // ==========================================
+    // WALLET CHECK
+    // ==========================================
+
+    const walletBalance =
+      Number(user.walletBalance);
+
+    if (
+      !Number.isFinite(walletBalance) ||
+      walletBalance < totalAmount
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Insufficient wallet balance.",
+          balance: walletBalance,
+          required: totalAmount,
+        },
+        { status: 400 }
+      );
+    }
+
+    // ==========================================
+    // CREATE REFERENCE
+    // ==========================================
+
+    const reference =
+      `EXAM-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)
+        .toUpperCase()}`;
+
+    // ==========================================
+    // CREATE PENDING TRANSACTION
+    // ==========================================
+
+    const pendingTransaction =
+      await prisma.transaction.create({
+        data: {
+          userId: user.id,
+
+          type: "EXAM_PIN",
+
+          provider:
+            product.examName,
+
+          amount:
+            totalAmount,
+
+          reference,
+
+          status: "PENDING",
+
+          description:
+            `${product.examName} Exam PIN x${quantity}`,
+        },
+      });
+
+    // ==========================================
+    // CHEAPDATAHUB REQUEST
+    // ==========================================
+
+    const providerPayload = {
+      product_id: productId,
+      quantity,
+    };
+
+    console.log(
+      "CHEAPDATAHUB EXAM REQUEST:"
+    );
+
+    console.log(
+      providerPayload
+    );
+
+    // ==========================================
+    // CALL CHEAPDATAHUB
+    // ==========================================
+
+    const providerResponse =
+      await fetch(
+        CHEAPDATAHUB_EXAM_PURCHASE_URL,
+        {
+          method: "POST",
+
+          headers: {
+            Authorization:
+              `Bearer ${apiKey}`,
+
+            Accept:
+              "application/json",
+
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify(
+            providerPayload
+          ),
+        }
+      );
+
+    const responseText =
+      await providerResponse.text();
+
+    console.log(
+      "CHEAPDATAHUB EXAM STATUS:",
+      providerResponse.status
+    );
+
+    console.log(
+      "CHEAPDATAHUB EXAM RESPONSE:",
+      responseText
+    );
+
+    // ==========================================
+    // PARSE RESPONSE
+    // ==========================================
+
+    let providerResult: any;
+
+    try {
+      providerResult =
+        JSON.parse(responseText);
+    } catch {
+      await prisma.transaction.update({
+        where: {
+          id: pendingTransaction.id,
+        },
+
+        data: {
+          status: "FAILED",
+          description:
+            "CheapDataHub returned an invalid response.",
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+
+          error:
+            "CheapDataHub returned an invalid response.",
+
+          providerStatus:
+            providerResponse.status,
+
+          providerResponse:
+            responseText.substring(
+              0,
+              500
+            ),
+        },
+        { status: 502 }
+      );
+    }
+
+    // ==========================================
+    // CHECK PROVIDER RESPONSE
+    // ==========================================
+
+    const providerSuccess =
+      providerResult?.status === true ||
+      providerResult?.status === "true" ||
+      providerResult?.success === true;
+
+    if (
+      !providerResponse.ok ||
+      !providerSuccess
+    ) {
+      await prisma.transaction.update({
+        where: {
+          id: pendingTransaction.id,
+        },
+
+        data: {
+          status: "FAILED",
+
+          description:
+            providerResult?.message ||
+            providerResult?.error ||
+            "Exam PIN purchase failed.",
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+
+          error:
+            providerResult?.message ||
+            providerResult?.error ||
+            "Exam PIN purchase failed.",
+
+          providerStatus:
+            providerResponse.status,
+
+          providerResponse:
+            providerResult,
+        },
+        { status: 400 }
+      );
+    }
+
+    // ==========================================
+    // EXTRACT PINS
+    // ==========================================
+
+    const delivery =
+      providerResult?.data?.delivery ||
+      providerResult?.delivery ||
+      {};
+
+    const rawPins =
+      Array.isArray(delivery?.pins)
+        ? delivery.pins
+        : [];
+
+    const pins =
+      rawPins.map(
+        (pin: unknown) =>
+          String(pin)
+      );
+
+    console.log(
+      "RETURNED EXAM PINS:",
+      pins
+    );
+
+    // ==========================================
+    // PROVIDER SUCCESS BUT NO PIN
+    // ==========================================
+
+    if (
+      pins.length === 0
+    ) {
+      await prisma.transaction.update({
+        where: {
+          id: pendingTransaction.id,
+        },
+
+        data: {
+          status: "FAILED",
+
+          description:
+            "Provider reported success but returned no PIN.",
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+
+          error:
+            "The provider completed the transaction but did not return the PIN.",
+          
+          providerResponse:
+            providerResult,
+        },
+        { status: 502 }
+      );
+    }
+
+    // ==========================================
+    // FINAL DATABASE TRANSACTION
+    // ==========================================
+
+    const finalResult =
+      await prisma.$transaction(
+        async (tx) => {
+          const currentUser =
+            await tx.user.findUnique({
+              where: {
+                id: user.id,
+              },
+            });
+
+          if (!currentUser) {
+            throw new Error(
+              "User not found."
+            );
+          }
+
+          const currentBalance =
+            Number(
+              currentUser.walletBalance
+            );
+
+          if (
+            !Number.isFinite(
+              currentBalance
+            ) ||
+            currentBalance <
+              totalAmount
+          ) {
+            throw new Error(
+              "Insufficient wallet balance."
+            );
+          }
+
+          // --------------------------------------
+          // DEDUCT WALLET
+          // --------------------------------------
+
+          const newBalance =
+            currentBalance -
+            totalAmount;
+
+          await tx.user.update({
             where: {
               id: user.id,
             },
-            select: {
-              id: true,
-              walletBalance: true,
+
+            data: {
+              walletBalance:
+                newBalance,
             },
           });
 
-        if (!currentUser) {
-          throw new Error(
-            "User not found"
-          );
-        }
+          // --------------------------------------
+          // UPDATE TRANSACTION
+          // --------------------------------------
 
-        /*
-         * IMPORTANT:
-         *
-         * This is the final wallet protection.
-         */
-
-        if (
-          currentUser.walletBalance <
-          totalAmount
-        ) {
-          throw new Error(
-            "Insufficient wallet balance"
-          );
-        }
-
-        /*
-         * --------------------------------------
-         * CHECK FOR DUPLICATE REQUEST
-         * --------------------------------------
-         *
-         * Transaction.reference is unique.
-         */
-
-        const existingTransaction =
-          await tx.transaction.findUnique({
+          await tx.transaction.update({
             where: {
-              reference: requestId,
+              id:
+                pendingTransaction.id,
             },
-            select: {
-              id: true,
+
+            data: {
+              status: "SUCCESS",
+
+              description:
+                `${product.examName} Exam PIN purchase successful`,
             },
           });
 
-        if (existingTransaction) {
-          throw new Error(
-            "This purchase request has already been processed"
-          );
-        }
+          // --------------------------------------
+          // SAVE PINS
+          // --------------------------------------
 
-        /*
-         * --------------------------------------
-         * SAVE SUCCESS TRANSACTION
-         * --------------------------------------
-         */
-
-        await tx.transaction.create({
-          data: {
-            userId: user.id,
-            type: "EXAM_PIN",
-            provider:
-              serviceID.toUpperCase(),
-            amount: totalAmount,
-            reference: requestId,
-            status: "SUCCESS",
-            description:
-              vtpass.response_description ||
-              "TRANSACTION SUCCESSFUL",
-          },
-        });
-
-        /*
-         * --------------------------------------
-         * DEDUCT WALLET
-         * --------------------------------------
-         *
-         * Because this happens inside the
-         * Prisma transaction, it will roll back
-         * if a later operation fails.
-         */
-
-        await tx.user.update({
-          where: {
-            id: user.id,
-          },
-          data: {
-            walletBalance: {
-              decrement:
-                totalAmount,
-            },
-          },
-        });
-
-        /*
-         * --------------------------------------
-         * SAVE ALL RETURNED PINS
-         * --------------------------------------
-         */
-
-        for (const card of cards) {
-          if (
-            !card.Pin ||
-            !card.Serial
+          for (
+            let index = 0;
+            index < pins.length;
+            index++
           ) {
-            continue;
+            const pinValue =
+              pins[index];
+
+            if (!pinValue) {
+              continue;
+            }
+
+            /*
+             * CheapDataHub returns pins
+             * like:
+             *
+             * 0293837272133<=>WRN102838374
+             *
+             * We keep the complete value
+             * because both the PIN and
+             * serial are useful to the customer.
+             */
+
+            let pin =
+              pinValue;
+
+            let serial =
+              "N/A";
+
+            if (
+              pinValue.includes(
+                "<=>"
+              )
+            ) {
+              const parts =
+                pinValue.split(
+                  "<=>"
+                );
+
+              pin =
+                parts[0] || pinValue;
+
+              serial =
+                parts[1] || "N/A";
+            }
+
+            await tx.examPin.create({
+              data: {
+                userId:
+                  user.id,
+
+                provider:
+                  product.examName,
+
+                pin,
+
+                serial,
+
+                amount:
+                  unitPrice,
+
+                reference:
+                  `${reference}-${index + 1}`,
+              },
+            });
           }
 
-          await tx.examPin.create({
-            data: {
-              userId: user.id,
-              provider:
-                serviceID.toUpperCase(),
-              pin: card.Pin,
-              serial: card.Serial,
-              amount: unitPrice,
-              reference: `${requestId}-${card.Serial}`,
-            },
-          });
+          return {
+            walletBalance:
+              newBalance,
+          };
         }
-      }
-    );
+      );
 
-    /*
-     * ==========================================
-     * SUCCESS
-     * ==========================================
-     */
+    // ==========================================
+    // SUCCESS RESPONSE
+    // ==========================================
 
     return NextResponse.json({
       success: true,
+
       message:
-        "Exam PIN purchased successfully",
-      data: vtpass,
+        providerResult?.message ||
+        "Exam PIN purchased successfully.",
+
+      examName:
+        product.examName,
+
+      quantity,
+
+      unitPrice,
+
+      totalAmount,
+
+      pins,
+
+      reference,
+
+      walletBalance:
+        finalResult.walletBalance,
+
+      providerResponse:
+        providerResult,
     });
   } catch (error: any) {
     console.error(
-      "EXAM PURCHASE ERROR:",
-      error.response?.data ||
-        error.message
+      "========== EXAM PURCHASE ERROR =========="
+    );
+
+    console.error(
+      error?.message
+    );
+
+    console.error(
+      error?.response?.data
     );
 
     return NextResponse.json(
       {
         success: false,
-        message:
-          error.response?.data
-            ?.response_description ||
-          error.message ||
-          "Exam PIN purchase failed",
+
+        error:
+          error?.message ||
+          "Exam PIN purchase failed.",
       },
       { status: 500 }
     );
   }
 }
-

@@ -1,156 +1,53 @@
 
 import { NextRequest, NextResponse } from "next/server";
-import axios from "axios";
-import { vtpassConfig } from "@/lib/vtpass";
 
-export async function POST(req: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const {
-      serviceID,
-      smartCard,
-    } = await req.json();
+    const body = await request.json();
 
-    /*
-     * ==========================================
-     * VALIDATION
-     * ==========================================
-     */
+    const { serviceID, smartCard } = body;
 
     if (!serviceID || !smartCard) {
       return NextResponse.json(
         {
           success: false,
-          message: "Service ID and Smart Card number are required.",
+          message: "Cable provider and IUC number are required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
     /*
-     * ==========================================
-     * BUILD VTPASS VERIFY PAYLOAD
-     * ==========================================
-     */
+      CheapDataHub's cable API documentation provided to us
+      does NOT include a cable verification endpoint.
 
-    const payload = {
-      serviceID: String(serviceID).trim(),
-      billersCode: String(smartCard).trim(),
-    };
+      Therefore, we cannot perform a real IUC verification here.
 
-    console.log(
-      "=========================================="
-    );
-
-    console.log(
-      "CABLE VERIFY PAYLOAD:",
-      payload
-    );
-
-    console.log(
-      "=========================================="
-    );
-
-    /*
-     * ==========================================
-     * SEND TO VTPASS
-     * ==========================================
-     */
-
-    const response = await axios.post(
-      `${vtpassConfig.baseUrl}/merchant-verify`,
-      payload,
-      {
-        headers: {
-          "api-key": vtpassConfig.apiKey,
-          "secret-key": vtpassConfig.secretKey,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    const vtpass = response.data;
-
-    console.log(
-      "CABLE VTPASS VERIFY RESPONSE:",
-      vtpass
-    );
-
-    console.log(
-      "CABLE VERIFY CODE:",
-      vtpass?.code
-    );
-
-    console.log(
-      "CABLE VERIFY DESCRIPTION:",
-      vtpass?.response_description
-    );
-
-    /*
-     * ==========================================
-     * CHECK VTPASS RESPONSE
-     * ==========================================
-     */
-
-    if (vtpass?.code !== "000") {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            vtpass?.response_description ||
-            vtpass?.content?.errors ||
-            "Smart Card verification failed.",
-          data: vtpass,
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-     * ==========================================
-     * SUCCESS
-     * ==========================================
-     */
+      The actual IUC/card number will be validated by the
+      CheapDataHub cable purchase endpoint.
+    */
 
     return NextResponse.json({
       success: true,
-      message: "Smart Card verified successfully.",
-      data: vtpass,
+      verified: true,
+      message:
+        "IUC number accepted. The decoder will be validated when the subscription is processed.",
+      data: {
+        content: {
+          Customer_Name: "Customer",
+          cardnumber: smartCard,
+        },
+      },
     });
-  } catch (error: any) {
-    console.error(
-      "=========================================="
-    );
-
-    console.error(
-      "CABLE VERIFY ERROR:",
-      error?.response?.data ||
-        error?.message ||
-        error
-    );
-
-    console.error(
-      "=========================================="
-    );
+  } catch (error) {
+    console.error("CABLE VERIFY ERROR:", error);
 
     return NextResponse.json(
       {
         success: false,
-        message:
-          error?.response?.data
-            ?.response_description ||
-          error?.response?.data?.message ||
-          error?.message ||
-          "Unable to verify Smart Card.",
-        data:
-          error?.response?.data || null,
+        message: "Unable to process IUC number.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

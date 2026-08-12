@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
 import {
   RefreshCw,
   TrendingUp,
@@ -15,6 +16,8 @@ import {
   Zap,
   Tv,
   Activity,
+  Building2,
+  CircleDollarSign,
 } from "lucide-react";
 
 type RevenueData = {
@@ -23,6 +26,7 @@ type RevenueData = {
     today: number;
     week: number;
     month: number;
+
     totalTransactions: number;
     todayTransactions: number;
     weekTransactions: number;
@@ -44,9 +48,11 @@ type RevenueData = {
 
   byType: {
     type: string;
+
     _sum: {
       amount: number | null;
     };
+
     _count: {
       id: number;
     };
@@ -56,11 +62,15 @@ type RevenueData = {
     id: string;
     type: string;
     amount: number;
+    cost: number;
+    profit: number;
+
     description: string;
     status: string;
     reference: string;
     createdAt: string;
     provider: string;
+
     user: {
       id: string;
       fullName: string;
@@ -68,6 +78,14 @@ type RevenueData = {
       phone: string;
     };
   }[];
+};
+
+type BusinessWallet = {
+  serviceRevenue: number;
+  providerCosts: number;
+  grossProfit: number;
+  withdrawnProfit: number;
+  availableProfit: number;
 };
 
 function formatMoney(value: number) {
@@ -79,10 +97,13 @@ function formatMoney(value: number) {
 }
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleString("en-NG", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  return new Date(date).toLocaleString(
+    "en-NG",
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }
+  );
 }
 
 function serviceName(type: string) {
@@ -113,25 +134,41 @@ function serviceName(type: string) {
   }
 }
 
-function ServiceIcon({ type }: { type: string }) {
+function ServiceIcon({
+  type,
+}: {
+  type: string;
+}) {
   switch (type) {
     case "AIRTIME":
-      return <Smartphone className="h-5 w-5" />;
+      return (
+        <Smartphone className="h-5 w-5" />
+      );
 
     case "DATA":
-      return <Activity className="h-5 w-5" />;
+      return (
+        <Activity className="h-5 w-5" />
+      );
 
     case "ELECTRICITY":
-      return <Zap className="h-5 w-5" />;
+      return (
+        <Zap className="h-5 w-5" />
+      );
 
     case "CABLE":
-      return <Tv className="h-5 w-5" />;
+      return (
+        <Tv className="h-5 w-5" />
+      );
 
     case "EXAM_PIN":
-      return <GraduationCap className="h-5 w-5" />;
+      return (
+        <GraduationCap className="h-5 w-5" />
+      );
 
     default:
-      return <CreditCard className="h-5 w-5" />;
+      return (
+        <CreditCard className="h-5 w-5" />
+      );
   }
 }
 
@@ -139,10 +176,19 @@ export default function AdminRevenuePage() {
   const [data, setData] =
     useState<RevenueData | null>(null);
 
+  const [businessWallet, setBusinessWallet] =
+    useState<BusinessWallet | null>(null);
+
   const [loading, setLoading] =
     useState(true);
 
+  const [walletLoading, setWalletLoading] =
+    useState(true);
+
   const [error, setError] =
+    useState("");
+
+  const [walletError, setWalletError] =
     useState("");
 
   async function loadRevenue() {
@@ -180,22 +226,77 @@ export default function AdminRevenuePage() {
     }
   }
 
+  async function loadBusinessWallet() {
+    try {
+      setWalletLoading(true);
+      setWalletError("");
+
+      const response = await fetch(
+        "/api/admin/business-wallet",
+        {
+          method: "GET",
+          cache: "no-store",
+        }
+      );
+
+      const result =
+        await response.json();
+
+      if (
+        !response.ok ||
+        !result.success
+      ) {
+        throw new Error(
+          result.message ||
+            "Failed to load business wallet."
+        );
+      }
+
+      setBusinessWallet(result.wallet);
+    } catch (err) {
+      setWalletError(
+        err instanceof Error
+          ? err.message
+          : "Failed to load business wallet."
+      );
+    } finally {
+      setWalletLoading(false);
+    }
+  }
+
+  async function refreshEverything() {
+    await Promise.all([
+      loadRevenue(),
+      loadBusinessWallet(),
+    ]);
+  }
+
   useEffect(() => {
-    loadRevenue();
+    refreshEverything();
+
+    const interval = setInterval(() => {
+      refreshEverything();
+    }, 30000);
+
+    return () =>
+      clearInterval(interval);
   }, []);
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <div className="flex items-center gap-3 text-gray-500">
           <RefreshCw className="h-5 w-5 animate-spin" />
-          Loading revenue...
+
+          <span>
+            Loading Brainfriend Tech revenue...
+          </span>
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="space-y-5">
         <div>
@@ -205,7 +306,7 @@ export default function AdminRevenuePage() {
 
           <p className="mt-1 text-sm text-gray-500">
             Monitor Brainfriend Tech's
-            transactions and earnings.
+            service revenue and profit.
           </p>
         </div>
 
@@ -215,7 +316,7 @@ export default function AdminRevenuePage() {
           </p>
 
           <button
-            onClick={loadRevenue}
+            onClick={refreshEverything}
             className="mt-4 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
           >
             Try Again
@@ -231,166 +332,307 @@ export default function AdminRevenuePage() {
 
   return (
     <div className="space-y-8">
-
       {/* HEADER */}
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Revenue
+          <p className="text-sm font-semibold text-indigo-600">
+            Brainfriend Tech
+          </p>
+
+          <h1 className="mt-1 text-2xl font-bold text-gray-900 sm:text-3xl">
+            Service Revenue & Profit
           </h1>
 
           <p className="mt-1 text-sm text-gray-500">
-            Monitor Brainfriend Tech's
-            transactions and earnings.
+            Track customer payments,
+            provider costs and actual
+            business profit.
           </p>
         </div>
 
         <button
-          onClick={loadRevenue}
-          disabled={loading}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+          onClick={refreshEverything}
+          disabled={
+            loading || walletLoading
+          }
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
         >
-          <RefreshCw className="h-4 w-4" />
+          <RefreshCw
+            className={`h-4 w-4 ${
+              loading || walletLoading
+                ? "animate-spin"
+                : ""
+            }`}
+          />
+
           Refresh
         </button>
-
       </div>
 
+      {/* =========================================
+          BUSINESS WALLET
+      ========================================= */}
 
-      {/* REVENUE CARDS */}
+      <section>
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-gray-900">
+            Brainfriend Tech Business Wallet
+          </h2>
 
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          <p className="mt-1 text-sm text-gray-500">
+            Your business accounting balance.
+            This is completely separate from
+            the CheapDataHub provider wallet.
+          </p>
+        </div>
 
-        {/* TOTAL */}
+        {walletError ? (
+          <div className="rounded-2xl bg-red-50 p-5 text-red-700">
+            <p className="font-semibold">
+              {walletError}
+            </p>
 
-        <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 p-6 text-white shadow-sm">
+            <button
+              onClick={loadBusinessWallet}
+              className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+            {/* SERVICE REVENUE */}
 
-          <div className="flex items-center justify-between">
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100">
+                <Building2 className="h-6 w-6 text-indigo-600" />
+              </div>
 
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
-              <TrendingUp className="h-6 w-6" />
+              <p className="mt-5 text-sm text-gray-500">
+                Service Revenue
+              </p>
+
+              <h3 className="mt-1 text-2xl font-bold text-gray-900">
+                {walletLoading
+                  ? "Loading..."
+                  : formatMoney(
+                      businessWallet?.serviceRevenue ??
+                        0
+                    )}
+              </h3>
+
+              <p className="mt-2 text-xs text-gray-500">
+                Total customer payments
+              </p>
             </div>
 
+            {/* PROVIDER COST */}
+
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-100">
+                <Wallet className="h-6 w-6 text-orange-600" />
+              </div>
+
+              <p className="mt-5 text-sm text-gray-500">
+                Provider Costs
+              </p>
+
+              <h3 className="mt-1 text-2xl font-bold text-gray-900">
+                {walletLoading
+                  ? "Loading..."
+                  : formatMoney(
+                      businessWallet?.providerCosts ??
+                        0
+                    )}
+              </h3>
+
+              <p className="mt-2 text-xs text-gray-500">
+                Amount paid to providers
+              </p>
+            </div>
+
+            {/* GROSS PROFIT */}
+
+            <div className="rounded-2xl bg-white p-6 shadow-sm">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-100">
+                <TrendingUp className="h-6 w-6 text-green-600" />
+              </div>
+
+              <p className="mt-5 text-sm text-gray-500">
+                Gross Profit
+              </p>
+
+              <h3 className="mt-1 text-2xl font-bold text-green-600">
+                {walletLoading
+                  ? "Loading..."
+                  : formatMoney(
+                      businessWallet?.grossProfit ??
+                        0
+                    )}
+              </h3>
+
+              <p className="mt-2 text-xs text-gray-500">
+                Revenue minus provider costs
+              </p>
+            </div>
+
+            {/* AVAILABLE PROFIT */}
+
+            <div className="rounded-2xl bg-gradient-to-br from-green-600 to-emerald-600 p-6 text-white shadow-sm">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
+                <CircleDollarSign className="h-6 w-6" />
+              </div>
+
+              <p className="mt-5 text-sm text-green-100">
+                Available Profit
+              </p>
+
+              <h3 className="mt-1 text-3xl font-bold">
+                {walletLoading
+                  ? "Loading..."
+                  : formatMoney(
+                      businessWallet?.availableProfit ??
+                        0
+                    )}
+              </h3>
+
+              <p className="mt-2 text-xs text-green-100">
+                Available for future withdrawal
+              </p>
+            </div>
           </div>
+        )}
+      </section>
 
-          <p className="mt-5 text-sm text-indigo-100">
-            Total Business Revenue
-          </p>
+      {/* WITHDRAWN PROFIT */}
 
-          <h2 className="mt-1 text-3xl font-bold">
-            {formatMoney(
-              data.revenue.total
-            )}
-          </h2>
+      {businessWallet && (
+        <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100">
+                <ArrowDownToLine className="h-5 w-5 text-purple-600" />
+              </div>
 
-          <p className="mt-2 text-xs text-indigo-100">
-            {data.revenue.totalTransactions}{" "}
-            successful revenue transactions
-          </p>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  Withdrawn Profit
+                </p>
 
-        </div>
+                <p className="text-xs text-gray-500">
+                  Total profit already transferred
+                  out of the business.
+                </p>
+              </div>
+            </div>
 
-
-        {/* TODAY */}
-
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-100">
-            <TrendingUp className="h-6 w-6 text-green-600" />
+            <p className="text-xl font-bold text-gray-900">
+              {formatMoney(
+                businessWallet.withdrawnProfit
+              )}
+            </p>
           </div>
-
-          <p className="mt-5 text-sm text-gray-500">
-            Today
-          </p>
-
-          <h2 className="mt-1 text-2xl font-bold text-gray-900">
-            {formatMoney(
-              data.revenue.today
-            )}
-          </h2>
-
-          <p className="mt-2 text-xs text-gray-500">
-            {data.revenue.todayTransactions}{" "}
-            transactions
-          </p>
-
         </div>
+      )}
 
-
-        {/* WEEK */}
-
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100">
-            <Activity className="h-6 w-6 text-blue-600" />
-          </div>
-
-          <p className="mt-5 text-sm text-gray-500">
-            This Week
-          </p>
-
-          <h2 className="mt-1 text-2xl font-bold text-gray-900">
-            {formatMoney(
-              data.revenue.week
-            )}
-          </h2>
-
-          <p className="mt-2 text-xs text-gray-500">
-            {data.revenue.weekTransactions}{" "}
-            transactions
-          </p>
-
-        </div>
-
-
-        {/* MONTH */}
-
-        <div className="rounded-2xl bg-white p-6 shadow-sm">
-
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-100">
-            <CreditCard className="h-6 w-6 text-purple-600" />
-          </div>
-
-          <p className="mt-5 text-sm text-gray-500">
-            This Month
-          </p>
-
-          <h2 className="mt-1 text-2xl font-bold text-gray-900">
-            {formatMoney(
-              data.revenue.month
-            )}
-          </h2>
-
-          <p className="mt-2 text-xs text-gray-500">
-            {data.revenue.monthTransactions}{" "}
-            transactions
-          </p>
-
-        </div>
-
-      </div>
-
-
-      {/* TRANSACTION OVERVIEW */}
+      {/* =========================================
+          SERVICE REVENUE PERIOD
+      ========================================= */}
 
       <div>
+        <h2 className="text-xl font-bold text-gray-900">
+          Service Revenue
+        </h2>
 
+        <p className="mt-1 text-sm text-gray-500">
+          Customer payments from successful
+          services.
+        </p>
+
+        <div className="mt-4 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl bg-indigo-600 p-6 text-white shadow-sm">
+            <p className="text-sm text-indigo-100">
+              Total
+            </p>
+
+            <h3 className="mt-1 text-3xl font-bold">
+              {formatMoney(
+                data.revenue.total
+              )}
+            </h3>
+
+            <p className="mt-2 text-xs text-indigo-100">
+              {data.revenue.totalTransactions}{" "}
+              successful transactions
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <p className="text-sm text-gray-500">
+              Today
+            </p>
+
+            <h3 className="mt-1 text-2xl font-bold text-gray-900">
+              {formatMoney(
+                data.revenue.today
+              )}
+            </h3>
+
+            <p className="mt-2 text-xs text-gray-500">
+              {data.revenue.todayTransactions}{" "}
+              transactions
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <p className="text-sm text-gray-500">
+              This Week
+            </p>
+
+            <h3 className="mt-1 text-2xl font-bold text-gray-900">
+              {formatMoney(
+                data.revenue.week
+              )}
+            </h3>
+
+            <p className="mt-2 text-xs text-gray-500">
+              {data.revenue.weekTransactions}{" "}
+              transactions
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <p className="text-sm text-gray-500">
+              This Month
+            </p>
+
+            <h3 className="mt-1 text-2xl font-bold text-gray-900">
+              {formatMoney(
+                data.revenue.month
+              )}
+            </h3>
+
+            <p className="mt-2 text-xs text-gray-500">
+              {data.revenue.monthTransactions}{" "}
+              transactions
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* =========================================
+          TRANSACTION OVERVIEW
+      ========================================= */}
+
+      <section>
         <h2 className="text-xl font-bold text-gray-900">
           Transaction Overview
         </h2>
 
-        <p className="mt-1 text-sm text-gray-500">
-          Overall transaction performance.
-        </p>
-
         <div className="mt-4 grid gap-4 sm:grid-cols-3">
-
           <div className="rounded-2xl bg-white p-5 shadow-sm">
-
             <div className="flex items-center gap-3">
-
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-100">
                 <CheckCircle2 className="h-5 w-5 text-green-600" />
               </div>
@@ -401,19 +643,17 @@ export default function AdminRevenuePage() {
                 </p>
 
                 <p className="text-2xl font-bold text-gray-900">
-                  {data.transactions.successful}
+                  {
+                    data.transactions
+                      .successful
+                  }
                 </p>
               </div>
-
             </div>
-
           </div>
 
-
           <div className="rounded-2xl bg-white p-5 shadow-sm">
-
             <div className="flex items-center gap-3">
-
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100">
                 <XCircle className="h-5 w-5 text-red-600" />
               </div>
@@ -427,16 +667,11 @@ export default function AdminRevenuePage() {
                   {data.transactions.failed}
                 </p>
               </div>
-
             </div>
-
           </div>
 
-
           <div className="rounded-2xl bg-white p-5 shadow-sm">
-
             <div className="flex items-center gap-3">
-
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-yellow-100">
                 <Clock className="h-5 w-5 text-yellow-600" />
               </div>
@@ -450,100 +685,73 @@ export default function AdminRevenuePage() {
                   {data.transactions.pending}
                 </p>
               </div>
-
             </div>
-
           </div>
-
         </div>
+      </section>
 
-      </div>
+      {/* =========================================
+          WALLET ACTIVITY
+      ========================================= */}
 
-
-      {/* WALLET ACTIVITY */}
-
-      <div>
-
+      <section>
         <h2 className="text-xl font-bold text-gray-900">
-          Wallet Activity
+          User Wallet Activity
         </h2>
 
         <p className="mt-1 text-sm text-gray-500">
-          Money entering and leaving user wallets.
+          This is separate from Brainfriend Tech
+          profit.
         </p>
 
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
-
           <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <Wallet className="h-6 w-6 text-indigo-600" />
 
-            <div className="flex items-center gap-4">
+            <p className="mt-4 text-sm text-gray-500">
+              User Wallet Funding
+            </p>
 
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100">
-                <Wallet className="h-6 w-6 text-indigo-600" />
-              </div>
+            <p className="mt-1 text-2xl font-bold text-gray-900">
+              {formatMoney(
+                data.wallet.funding
+              )}
+            </p>
 
-              <div>
-                <p className="text-sm text-gray-500">
-                  Wallet Funding
-                </p>
-
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatMoney(
-                    data.wallet.funding
-                  )}
-                </p>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  {data.wallet.fundingCount}{" "}
-                  successful funding transactions
-                </p>
-              </div>
-
-            </div>
-
+            <p className="mt-1 text-xs text-gray-500">
+              {data.wallet.fundingCount}{" "}
+              successful funding transactions
+            </p>
           </div>
 
-
           <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <ArrowDownToLine className="h-6 w-6 text-orange-600" />
 
-            <div className="flex items-center gap-4">
+            <p className="mt-4 text-sm text-gray-500">
+              User Withdrawals
+            </p>
 
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100">
-                <ArrowDownToLine className="h-6 w-6 text-orange-600" />
-              </div>
+            <p className="mt-1 text-2xl font-bold text-gray-900">
+              {formatMoney(
+                data.wallet.withdrawals
+              )}
+            </p>
 
-              <div>
-                <p className="text-sm text-gray-500">
-                  Withdrawals
-                </p>
-
-                <p className="text-2xl font-bold text-gray-900">
-                  {formatMoney(
-                    data.wallet.withdrawals
-                  )}
-                </p>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  {data.wallet.withdrawalCount}{" "}
-                  successful withdrawals
-                </p>
-              </div>
-
-            </div>
-
+            <p className="mt-1 text-xs text-gray-500">
+              {data.wallet.withdrawalCount}{" "}
+              successful withdrawals
+            </p>
           </div>
-
         </div>
+      </section>
 
-      </div>
+      {/* =========================================
+          REVENUE BREAKDOWN
+      ========================================= */}
 
-
-      {/* REVENUE BREAKDOWN */}
-
-      <div>
-
+      <section>
         <h2 className="text-xl font-bold text-gray-900">
-          Revenue Breakdown
+          Service Revenue Breakdown
         </h2>
 
         <p className="mt-1 text-sm text-gray-500">
@@ -551,49 +759,35 @@ export default function AdminRevenuePage() {
         </p>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-
           {data.byType.length === 0 ? (
-
             <div className="rounded-2xl bg-white p-8 text-center text-sm text-gray-500 shadow-sm sm:col-span-2 lg:col-span-3">
-              No revenue transactions yet.
+              No service revenue yet.
             </div>
-
           ) : (
-
             data.byType.map((item) => (
-
               <div
                 key={item.type}
                 className="rounded-2xl bg-white p-5 shadow-sm"
               >
-
-                <div className="flex items-center justify-between">
-
-                  <div className="flex items-center gap-3">
-
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-                      <ServiceIcon
-                        type={item.type}
-                      />
-                    </div>
-
-                    <div>
-
-                      <p className="font-semibold text-gray-900">
-                        {serviceName(
-                          item.type
-                        )}
-                      </p>
-
-                      <p className="text-xs text-gray-500">
-                        {item._count.id}{" "}
-                        transactions
-                      </p>
-
-                    </div>
-
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
+                    <ServiceIcon
+                      type={item.type}
+                    />
                   </div>
 
+                  <div>
+                    <p className="font-semibold text-gray-900">
+                      {serviceName(
+                        item.type
+                      )}
+                    </p>
+
+                    <p className="text-xs text-gray-500">
+                      {item._count.id}{" "}
+                      transactions
+                    </p>
+                  </div>
                 </div>
 
                 <p className="mt-4 text-xl font-bold text-gray-900">
@@ -601,55 +795,37 @@ export default function AdminRevenuePage() {
                     item._sum.amount ?? 0
                   )}
                 </p>
-
               </div>
-
             ))
-
           )}
-
         </div>
+      </section>
 
-      </div>
+      {/* =========================================
+          RECENT TRANSACTIONS
+      ========================================= */}
 
+      <section>
+        <h2 className="text-xl font-bold text-gray-900">
+          Recent Service Transactions
+        </h2>
 
-      {/* RECENT TRANSACTIONS */}
-
-      <div>
-
-        <div className="flex items-center justify-between">
-
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">
-              Recent Transactions
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Latest activity across the platform.
-            </p>
-          </div>
-
-        </div>
-
+        <p className="mt-1 text-sm text-gray-500">
+          Customer service purchases,
+          provider costs and profit.
+        </p>
 
         <div className="mt-4 overflow-hidden rounded-2xl bg-white shadow-sm">
-
-          {data.recentTransactions.length === 0 ? (
-
+          {data.recentTransactions.length ===
+          0 ? (
             <div className="p-10 text-center text-sm text-gray-500">
               No transactions found.
             </div>
-
           ) : (
-
             <div className="overflow-x-auto">
-
-              <table className="w-full min-w-[850px]">
-
+              <table className="w-full min-w-[1100px]">
                 <thead className="border-b border-gray-100 bg-gray-50">
-
                   <tr>
-
                     <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       User
                     </th>
@@ -659,7 +835,15 @@ export default function AdminRevenuePage() {
                     </th>
 
                     <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Amount
+                      Customer Paid
+                    </th>
+
+                    <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Provider Cost
+                    </th>
+
+                    <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Profit
                     </th>
 
                     <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -667,42 +851,35 @@ export default function AdminRevenuePage() {
                     </th>
 
                     <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Reference
-                    </th>
-
-                    <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       Date
                     </th>
-
                   </tr>
-
                 </thead>
 
                 <tbody className="divide-y divide-gray-100">
-
                   {data.recentTransactions.map(
                     (transaction) => (
-
                       <tr
                         key={transaction.id}
                         className="hover:bg-gray-50"
                       >
-
                         <td className="px-5 py-4">
-
                           <p className="font-semibold text-gray-900">
-                            {transaction.user.fullName}
+                            {
+                              transaction.user
+                                .fullName
+                            }
                           </p>
 
                           <p className="text-xs text-gray-500">
-                            {transaction.user.email}
+                            {
+                              transaction.user
+                                .email
+                            }
                           </p>
-
                         </td>
 
-
                         <td className="px-5 py-4">
-
                           <p className="text-sm font-medium text-gray-800">
                             {serviceName(
                               transaction.type
@@ -710,11 +887,11 @@ export default function AdminRevenuePage() {
                           </p>
 
                           <p className="text-xs text-gray-400">
-                            {transaction.provider}
+                            {
+                              transaction.provider
+                            }
                           </p>
-
                         </td>
-
 
                         <td className="px-5 py-4 text-sm font-bold text-gray-900">
                           {formatMoney(
@@ -722,9 +899,19 @@ export default function AdminRevenuePage() {
                           )}
                         </td>
 
+                        <td className="px-5 py-4 text-sm text-orange-600">
+                          {formatMoney(
+                            transaction.cost
+                          )}
+                        </td>
+
+                        <td className="px-5 py-4 text-sm font-bold text-green-600">
+                          {formatMoney(
+                            transaction.profit
+                          )}
+                        </td>
 
                         <td className="px-5 py-4">
-
                           <span
                             className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
                               transaction.status.toLowerCase() ===
@@ -736,44 +923,26 @@ export default function AdminRevenuePage() {
                                 : "bg-yellow-100 text-yellow-700"
                             }`}
                           >
-                            {transaction.status}
+                            {
+                              transaction.status
+                            }
                           </span>
-
                         </td>
-
-
-                        <td className="px-5 py-4">
-
-                          <p className="max-w-[180px] truncate text-xs font-medium text-gray-600">
-                            {transaction.reference}
-                          </p>
-
-                        </td>
-
 
                         <td className="px-5 py-4 text-xs text-gray-500">
                           {formatDate(
                             transaction.createdAt
                           )}
                         </td>
-
                       </tr>
-
                     )
                   )}
-
                 </tbody>
-
               </table>
-
             </div>
-
           )}
-
         </div>
-
-      </div>
-
+      </section>
     </div>
   );
 }

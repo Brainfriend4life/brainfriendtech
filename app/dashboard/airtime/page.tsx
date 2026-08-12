@@ -1,8 +1,34 @@
-
 "use client";
 
 import { useState } from "react";
 import toast from "react-hot-toast";
+
+const NETWORKS = [
+  {
+    id: "mtn",
+    name: "MTN",
+    providerId: 1,
+    minimum: 10,
+  },
+  {
+    id: "airtel",
+    name: "Airtel",
+    providerId: 2,
+    minimum: 50,
+  },
+  {
+    id: "glo",
+    name: "GLO",
+    providerId: 3,
+    minimum: 50,
+  },
+  {
+    id: "9mobile",
+    name: "9mobile",
+    providerId: 4,
+    minimum: 50,
+  },
+];
 
 export default function AirtimePage() {
   const [serviceID, setServiceID] = useState("mtn");
@@ -10,62 +36,157 @@ export default function AirtimePage() {
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const selectedNetwork = NETWORKS.find(
+    (network) => network.id === serviceID
+  );
+
   const buyAirtime = async () => {
-    if (!phone.trim()) {
-      toast.error("Please enter a phone number.");
+    // =====================================================
+    // VALIDATE PHONE
+    // =====================================================
+
+    const cleanPhone = phone.replace(/\s+/g, "");
+
+    if (
+      !/^(0\d{10}|\+234\d{10}|234\d{10})$/.test(
+        cleanPhone
+      )
+    ) {
+      toast.error(
+        "Please enter a valid Nigerian phone number."
+      );
       return;
     }
 
-    if (!amount || Number(amount) <= 0) {
+    // =====================================================
+    // VALIDATE AMOUNT
+    // =====================================================
+
+    const numericAmount = Number(amount);
+
+    if (
+      !Number.isFinite(numericAmount) ||
+      numericAmount <= 0
+    ) {
       toast.error("Please enter a valid amount.");
       return;
     }
 
+    const minimumAmount =
+      selectedNetwork?.minimum ?? 50;
+
+    if (numericAmount < minimumAmount) {
+      toast.error(
+        `Minimum amount is ₦${minimumAmount.toLocaleString()}.`
+      );
+      return;
+    }
+
+    if (numericAmount > 50000) {
+      toast.error(
+        "Maximum airtime amount is ₦50,000."
+      );
+      return;
+    }
+
+    // =====================================================
+    // PROVIDER ID
+    // =====================================================
+
+    const providerId =
+      selectedNetwork?.providerId;
+
+    if (!providerId) {
+      toast.error("Please select a valid network.");
+      return;
+    }
+
+    // =====================================================
+    // START PURCHASE
+    // =====================================================
+
     setLoading(true);
 
     try {
-      const res = await fetch("/api/airtime/purchase", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          serviceID,
-          phone,
-          amount: Number(amount),
-        }),
-      });
+      const res = await fetch(
+        "/api/airtime/purchase",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+  providerId:
+    serviceID === "mtn"
+      ? 1
+      : serviceID === "glo"
+      ? 2
+      : serviceID === "airtel"
+      ? 3
+      : 4,
+
+  phoneNumber: cleanPhone,
+
+  amount: Math.round(numericAmount),
+})
+        }
+      );
 
       const data = await res.json();
 
-      if (!res.ok) {
-        console.log("VTpass Error:", data);
+      console.log(
+        "CheapDataHub Airtime Response:",
+        data
+      );
 
+      // ===================================================
+      // ERROR
+      // ===================================================
+
+      if (!res.ok || !data.success) {
         toast.error(
-          data.error?.response_description ||
+          data.error ||
             data.message ||
-            "Purchase failed"
+            "Airtime purchase failed."
         );
 
         return;
       }
 
-      console.log(data);
+      // ===================================================
+      // SUCCESS
+      // ===================================================
 
-      toast.success("Request sent successfully!");
+      toast.success(
+        data.message ||
+          "Airtime purchased successfully!"
+      );
 
       setPhone("");
       setAmount("");
+
+      // Optional: refresh page data
+      window.dispatchEvent(
+        new Event("walletUpdated")
+      );
     } catch (error) {
-      console.error(error);
-      toast.error("Something went wrong.");
+      console.error(
+        "AIRTIME PURCHASE ERROR:",
+        error
+      );
+
+      toast.error(
+        "Something went wrong. Please try again."
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="w-full">
+    <div>
       {/* PAGE HEADER */}
 
       <div className="mb-6">
@@ -82,6 +203,7 @@ export default function AirtimePage() {
 
       <div className="w-full max-w-2xl rounded-2xl bg-white p-4 shadow-sm sm:p-6 lg:p-8">
         <div className="space-y-5">
+
           {/* NETWORK */}
 
           <div>
@@ -94,17 +216,21 @@ export default function AirtimePage() {
 
             <select
               id="network"
-              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
               value={serviceID}
               onChange={(e) =>
                 setServiceID(e.target.value)
               }
               disabled={loading}
+              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
             >
-              <option value="mtn">MTN</option>
-              <option value="airtel">Airtel</option>
-              <option value="glo">GLO</option>
-              <option value="etisalat">9mobile</option>
+              {NETWORKS.map((network) => (
+                <option
+                  key={network.id}
+                  value={network.id}
+                >
+                  {network.name}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -123,13 +249,13 @@ export default function AirtimePage() {
               type="tel"
               inputMode="numeric"
               placeholder="08012345678"
-              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
               value={phone}
               onChange={(e) =>
                 setPhone(e.target.value)
               }
-              maxLength={11}
+              maxLength={14}
               disabled={loading}
+              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
             />
           </div>
 
@@ -147,15 +273,24 @@ export default function AirtimePage() {
               id="amount"
               type="number"
               inputMode="decimal"
-              min="1"
+              min={selectedNetwork?.minimum ?? 50}
+              max="50000"
               placeholder="Enter amount"
-              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
               value={amount}
               onChange={(e) =>
                 setAmount(e.target.value)
               }
               disabled={loading}
+              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
             />
+
+            <p className="mt-2 text-xs text-gray-400">
+              {selectedNetwork?.name}: minimum ₦
+              {(
+                selectedNetwork?.minimum ?? 50
+              ).toLocaleString()}
+              . Maximum: ₦50,000.
+            </p>
           </div>
 
           {/* PURCHASE BUTTON */}
@@ -175,4 +310,3 @@ export default function AirtimePage() {
     </div>
   );
 }
-

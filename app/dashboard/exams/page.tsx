@@ -1,307 +1,183 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import {
-  Copy,
-  CheckCircle2,
-  GraduationCap,
-} from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
-type ExamService = {
-  serviceID: string;
-  name: string;
-  minimum_amount?: string | null;
-  maximum_amount?: string | null;
-  convenience_fee?: string;
-  product_type?: string;
-  image?: string;
+type ExamProduct = {
+  id: number;
+  exam_name: string;
+  price: number;
+  reseller_price: number;
+  api_price: number;
+  is_active: boolean;
 };
 
-type ExamPlan = {
-  variation_code: string;
-  name: string;
-  variation_amount: string;
-};
-
-type ExamPin = {
-  id: string;
-  provider: string;
-  pin: string;
-  serial: string;
-  amount: number;
+type PurchaseResult = {
+  examName: string;
+  quantity: number;
+  unitPrice: number;
+  totalAmount: number;
+  pins: string[];
   reference: string;
-  createdAt: string;
+  walletBalance: number;
 };
 
-export default function ExamsPage() {
-  const [services, setServices] = useState<ExamService[]>([]);
-  const [plans, setPlans] = useState<ExamPlan[]>([]);
+export default function ExamPinPage() {
+  const [products, setProducts] = useState<
+    ExamProduct[]
+  >([]);
 
-  const [serviceID, setServiceID] = useState("");
-  const [variationCode, setVariationCode] = useState("");
-  const [quantity, setQuantity] = useState(1);
-  const [phone, setPhone] = useState("");
+  const [productId, setProductId] =
+    useState("");
 
-  // JAMB Profile ID
-  const [billersCode, setBillersCode] = useState("");
+  const [quantity, setQuantity] =
+    useState("1");
 
-  const [loadingServices, setLoadingServices] = useState(true);
-  const [loadingPlans, setLoadingPlans] = useState(false);
-  const [loadingPins, setLoadingPins] = useState(true);
+  const [loadingProducts, setLoadingProducts] =
+    useState(true);
 
-  const [purchasing, setPurchasing] = useState(false);
+  const [purchasing, setPurchasing] =
+    useState(false);
 
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
-  const [purchasedPins, setPurchasedPins] = useState<ExamPin[]>([]);
-  const [copiedPin, setCopiedPin] = useState("");
+  const [purchaseResult, setPurchaseResult] =
+    useState<PurchaseResult | null>(null);
 
-  /*
-  ==========================================
-  LOAD PURCHASED EXAM PINS
-  ==========================================
-  */
+  // ==========================================
+  // LOAD PRODUCTS
+  // ==========================================
 
   useEffect(() => {
-    const loadPurchasedPins = async () => {
-      try {
-        setLoadingPins(true);
+    loadProducts();
+  }, []);
 
-        const response = await fetch("/api/exams/pins", {
+  async function loadProducts() {
+    try {
+      setLoadingProducts(true);
+      setError("");
+
+      const response = await fetch(
+        "/api/exams/products",
+        {
           method: "GET",
           cache: "no-store",
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-          throw new Error(
-            data.message || "Failed to load exam PINs"
-          );
         }
+      );
 
-        setPurchasedPins(
-          Array.isArray(data.pins) ? data.pins : []
+      const result =
+        await response.json();
+
+      console.log(
+        "EXAM PRODUCTS:",
+        result
+      );
+
+      if (
+        !response.ok ||
+        !result.success
+      ) {
+        throw new Error(
+          result.error ||
+            "Unable to load exam PIN products."
         );
-      } catch (err) {
-        console.error(
-          "LOAD EXAM PINS ERROR:",
-          err
-        );
-      } finally {
-        setLoadingPins(false);
       }
-    };
 
-    loadPurchasedPins();
-  }, []);
-
-  /*
-  ==========================================
-  LOAD EXAM SERVICES
-  ==========================================
-  */
-
-  useEffect(() => {
-    const loadServices = async () => {
-      try {
-        setLoadingServices(true);
-        setError("");
-
-        const response = await fetch(
-          "/api/exams/services"
+      const activeProducts =
+        (result.data || []).filter(
+          (item: ExamProduct) =>
+            item.is_active
         );
 
-        const data = await response.json();
+      setProducts(activeProducts);
 
-        if (!response.ok || !data.success) {
-          throw new Error(
-            data.message ||
-              "Failed to load exam services"
-          );
-        }
-
-        const availableServices =
-          Array.isArray(data.services)
-            ? data.services
-            : [];
-
-        setServices(availableServices);
-
-        if (availableServices.length > 0) {
-          setServiceID(
-            availableServices[0].serviceID
-          );
-        }
-      } catch (err) {
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Failed to load exam services";
-
-        setError(message);
-      } finally {
-        setLoadingServices(false);
+      if (activeProducts.length > 0) {
+        setProductId(
+          String(activeProducts[0].id)
+        );
       }
-    };
+    } catch (err) {
+      console.error(
+        "LOAD EXAM PRODUCTS ERROR:",
+        err
+      );
 
-    loadServices();
-  }, []);
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Unable to load exam PIN products.";
 
-  /*
-  ==========================================
-  LOAD PLANS WHEN SERVICE CHANGES
-  ==========================================
-  */
+      setError(message);
 
-  useEffect(() => {
-    if (!serviceID) {
-      setPlans([]);
-      setVariationCode("");
-      setBillersCode("");
-      return;
+      toast.error(message);
+    } finally {
+      setLoadingProducts(false);
     }
+  }
 
-    const loadPlans = async () => {
-      try {
-        setLoadingPlans(true);
-        setError("");
-        setVariationCode("");
+  // ==========================================
+  // SELECTED PRODUCT
+  // ==========================================
 
-        // Clear JAMB Profile ID when
-        // changing to another service.
-        if (
-          serviceID.toLowerCase() !== "jamb"
-        ) {
-          setBillersCode("");
-        }
+  const selectedProduct =
+    products.find(
+      (product) =>
+        String(product.id) === productId
+    );
 
-        const response = await fetch(
-          `/api/exams/plans?serviceID=${encodeURIComponent(
-            serviceID
-          )}`
-        );
+  const numericQuantity =
+    Number(quantity);
 
-        const data = await response.json();
-
-        if (!response.ok || !data.success) {
-          throw new Error(
-            data.message ||
-              "Failed to load exam plans"
-          );
-        }
-
-        const loadedPlans = Array.isArray(
-          data.plans
-        )
-          ? data.plans
-          : [];
-
-        setPlans(loadedPlans);
-
-        if (loadedPlans.length > 0) {
-          setVariationCode(
-            loadedPlans[0].variation_code
-          );
-        }
-      } catch (err) {
-        setPlans([]);
-        setVariationCode("");
-
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Failed to load exam plans";
-
-        setError(message);
-      } finally {
-        setLoadingPlans(false);
-      }
-    };
-
-    loadPlans();
-  }, [serviceID]);
-
-  /*
-  ==========================================
-  SELECTED PLAN
-  ==========================================
-  */
-
-  const selectedPlan = plans.find(
-    (plan) =>
-      plan.variation_code === variationCode
-  );
-
-  const unitPrice = selectedPlan
-    ? Number(selectedPlan.variation_amount)
-    : 0;
-
-  const safeQuantity =
-    Number.isFinite(quantity) && quantity >= 1
-      ? quantity
-      : 1;
+  const unitPrice =
+    Number(
+      selectedProduct?.reseller_price ||
+        selectedProduct?.price ||
+        0
+    );
 
   const totalAmount =
-    unitPrice * safeQuantity;
+    unitPrice * numericQuantity;
 
-  /*
-  ==========================================
-  PURCHASE EXAM PIN
-  ==========================================
-  */
+  // ==========================================
+  // PURCHASE
+  // ==========================================
 
-  const buyPin = async (
-    event: FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
+  async function handlePurchase(
+    e: React.FormEvent
+  ) {
+    e.preventDefault();
 
     setError("");
-    setMessage("");
 
-    if (!serviceID) {
-      setError(
-        "Please select an exam service."
+    if (!productId) {
+      toast.error(
+        "Please select an exam."
       );
       return;
     }
 
-    if (!variationCode) {
-      setError(
-        "Please select an exam plan."
-      );
-      return;
-    }
-
-    // JAMB requires Profile ID
     if (
-      serviceID.toLowerCase() === "jamb" &&
-      !billersCode.trim()
+      ![1, 2, 5].includes(
+        numericQuantity
+      )
     ) {
-      setError(
-        "Please enter your JAMB Profile ID."
+      toast.error(
+        "Quantity must be 1, 2, or 5."
       );
       return;
     }
 
-    if (!phone.trim()) {
-      setError(
-        "Please enter your phone number."
+    if (!selectedProduct) {
+      toast.error(
+        "Please select a valid exam product."
       );
       return;
     }
 
-    if (safeQuantity < 1) {
-      setError(
-        "Quantity must be at least 1."
-      );
-      return;
-    }
+    setPurchasing(true);
 
     try {
-      setPurchasing(true);
-
       const response = await fetch(
         "/api/exams/purchase",
         {
@@ -313,419 +189,329 @@ export default function ExamsPage() {
           },
 
           body: JSON.stringify({
-            serviceID,
+            productId:
+              Number(productId),
 
-            variation_code:
-              variationCode,
-
-            quantity: safeQuantity,
-
-            phone: phone.trim(),
-
-            ...(serviceID.toLowerCase() ===
-            "jamb"
-              ? {
-                  billersCode:
-                    billersCode.trim(),
-                }
-              : {}),
+            quantity:
+              numericQuantity,
           }),
         }
       );
 
-      const data = await response.json();
+      const result =
+        await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.message ||
-            "Exam purchase failed"
-        );
-      }
-
-      setMessage(
-        "Exam PIN purchased successfully."
+      console.log(
+        "EXAM PIN PURCHASE RESPONSE:",
+        result
       );
 
-      /*
-      ========================================
-      EXTRACT RETURNED PINS
-      ========================================
-      */
-
-      const returnedPins: ExamPin[] = [];
-
-      /*
-      WAEC AND OTHER CARD-BASED SERVICES
-      */
-
       if (
-        Array.isArray(
-          data.data?.cards
-        )
+        !response.ok ||
+        !result.success
       ) {
-        data.data.cards.forEach(
-          (
-            card: any,
-            index: number
-          ) => {
-            if (!card?.Pin) {
-              return;
-            }
-
-            returnedPins.push({
-              id: `${
-                data.data.requestId ||
-                Date.now()
-              }-${index}`,
-
-              provider:
-                serviceID.toUpperCase(),
-
-              pin: String(card.Pin),
-
-              serial: String(
-                card.Serial || "-"
-              ),
-
-              amount: unitPrice,
-
-              reference:
-                data.data.requestId ||
-                "",
-
-              createdAt:
-                data.data
-                  .transaction_date ||
-                new Date().toISOString(),
-            });
-          }
+        throw new Error(
+          result.error ||
+            "Exam PIN purchase failed."
         );
       }
 
-      /*
-      JAMB
+      const pins =
+        Array.isArray(result.pins)
+          ? result.pins
+          : [];
 
-      VTpass may return:
+      setPurchaseResult({
+        examName:
+          result.examName ||
+          selectedProduct.exam_name,
 
-      Pin: "Pin : 3678251321392432"
-      */
+        quantity:
+          Number(
+            result.quantity ||
+              numericQuantity
+          ),
 
-      if (
-        serviceID.toLowerCase() ===
-          "jamb" &&
-        data.data?.Pin
-      ) {
-        let jambPin = String(
-          data.data.Pin
-        ).trim();
+        unitPrice:
+          Number(
+            result.unitPrice ||
+              unitPrice
+          ),
 
-        jambPin = jambPin
-          .replace(
-            /^Pin\s*:\s*/i,
-            ""
-          )
-          .trim();
+        totalAmount:
+          Number(
+            result.totalAmount ||
+              totalAmount
+          ),
 
-        if (jambPin) {
-          returnedPins.push({
-            id: `${
-              data.data.requestId ||
-              Date.now()
-            }-jamb`,
+        pins,
 
-            provider: "JAMB",
+        reference:
+          result.reference ||
+          "N/A",
 
-            pin: jambPin,
+        walletBalance:
+          Number(
+            result.walletBalance || 0
+          ),
+      });
 
-            serial: "JAMB",
-
-            amount: unitPrice,
-
-            reference:
-              data.data.requestId ||
-              "",
-
-            createdAt:
-              data.data
-                .transaction_date ||
-              new Date().toISOString(),
-          });
-        }
-      }
-
-      /*
-      ========================================
-      SHOW NEWLY PURCHASED PINS
-      ========================================
-      */
-
-      if (returnedPins.length > 0) {
-        setPurchasedPins(
-          (currentPins) => [
-            ...returnedPins,
-            ...currentPins,
-          ]
-        );
-      }
-
-      /*
-      ========================================
-      RELOAD PINS FROM DATABASE
-      ========================================
-      */
-
-      try {
-        const pinsResponse =
-          await fetch(
-            "/api/exams/pins",
-            {
-              method: "GET",
-              cache: "no-store",
-            }
-          );
-
-        const pinsData =
-          await pinsResponse.json();
-
-        if (
-          pinsResponse.ok &&
-          pinsData.success &&
-          Array.isArray(
-            pinsData.pins
-          )
-        ) {
-          setPurchasedPins(
-            pinsData.pins
-          );
-        }
-      } catch (refreshError) {
-        console.error(
-          "REFRESH EXAM PINS ERROR:",
-          refreshError
-        );
-      }
-
-      /*
-      Clear sensitive/input fields
-      after successful purchase.
-      */
-
-      setPhone("");
-
-      if (
-        serviceID.toLowerCase() ===
-        "jamb"
-      ) {
-        setBillersCode("");
-      }
+      toast.success(
+        "Exam PIN purchase successful."
+      );
     } catch (err) {
+      console.error(
+        "EXAM PIN PURCHASE ERROR:",
+        err
+      );
+
       const message =
         err instanceof Error
           ? err.message
-          : "Exam PIN purchase failed";
+          : "Exam PIN purchase failed.";
 
       setError(message);
+
+      toast.error(message);
     } finally {
       setPurchasing(false);
     }
-  };
+  }
 
-  /*
-  ==========================================
-  COPY PIN
-  ==========================================
-  */
+  // ==========================================
+  // CLOSE RECEIPT
+  // ==========================================
 
-  const copyPin = async (
-    pin: string
-  ) => {
-    try {
-      await navigator.clipboard.writeText(
-        pin
-      );
+  function closeReceipt() {
+    setPurchaseResult(null);
+    setQuantity("1");
+  }
 
-      setCopiedPin(pin);
+  // ==========================================
+  // SUCCESS RECEIPT
+  // ==========================================
 
-      setTimeout(() => {
-        setCopiedPin("");
-      }, 2000);
-    } catch {
-      setError(
-        "Unable to copy PIN. Please copy it manually."
-      );
-    }
-  };
+  if (purchaseResult) {
+    return (
+      <div className="w-full">
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl text-green-600">
+            ✓
+          </div>
 
-  /*
-  ==========================================
-  PAGE
-  ==========================================
-  */
-
-  return (
-    <div className="space-y-6">
-      {/* PAGE HEADER */}
-
-      <div className="flex items-start gap-3 sm:items-center sm:gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 sm:h-12 sm:w-12">
-          <GraduationCap className="h-6 w-6 sm:h-7 sm:w-7" />
-        </div>
-
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">
-            Exams & Education
+          <h1 className="text-2xl font-bold text-gray-900">
+            Purchase Successful
           </h1>
 
-          <p className="text-sm text-gray-500 sm:text-base">
-            Purchase exam PINs instantly.
+          <p className="mt-1 text-sm text-gray-500">
+            Your exam PIN has been generated
+            successfully.
           </p>
         </div>
-      </div>
 
-      {/* PURCHASE FORM */}
+        {/* PURCHASE SUMMARY */}
 
-      <form
-        onSubmit={buyPin}
-        className="space-y-5 rounded-2xl bg-white p-4 shadow-sm sm:space-y-6 sm:p-6 lg:p-7"
-      >
-        {/* EXAM SERVICE */}
+        <div className="space-y-4 rounded-xl border bg-gray-50 p-5">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-gray-500">
+              Examination
+            </span>
 
-        <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">
-            Exam Service
-          </label>
+            <span className="font-semibold">
+              {purchaseResult.examName}
+            </span>
+          </div>
 
-          <select
-            value={serviceID}
-            onChange={(event) => {
-              setServiceID(
-                event.target.value
-              );
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-gray-500">
+              Quantity
+            </span>
 
-              setError("");
-              setMessage("");
-            }}
-            disabled={
-              loadingServices ||
-              purchasing
-            }
-            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
-          >
-            {loadingServices ? (
-              <option value="">
-                Loading services...
-              </option>
-            ) : (
-              <>
-                <option value="">
-                  Select exam service
-                </option>
+            <span className="font-semibold">
+              {purchaseResult.quantity}
+            </span>
+          </div>
 
-                {services.map(
-                  (service) => (
-                    <option
-                      key={
-                        service.serviceID
-                      }
-                      value={
-                        service.serviceID
-                      }
-                    >
-                      {service.name}
-                    </option>
-                  )
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-gray-500">
+              Price per PIN
+            </span>
+
+            <span className="font-semibold">
+              ₦
+              {purchaseResult.unitPrice.toLocaleString(
+                "en-NG"
+              )}
+            </span>
+          </div>
+
+          <div className="border-t pt-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <span className="font-bold text-gray-900">
+                Total Deducted
+              </span>
+
+              <span className="font-bold text-indigo-600">
+                ₦
+                {purchaseResult.totalAmount.toLocaleString(
+                  "en-NG"
                 )}
-              </>
-            )}
-          </select>
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* JAMB PROFILE ID */}
+        {/* PINS */}
 
-        {serviceID.toLowerCase() ===
-          "jamb" && (
-          <div>
-            <label className="mb-2 block text-sm font-medium text-gray-700">
-              JAMB Profile ID
-            </label>
+        <div className="mt-5 rounded-xl border p-5">
+          <h2 className="mb-4 text-lg font-bold">
+            Your Exam PIN
+            {purchaseResult.quantity > 1
+              ? "s"
+              : ""}
+          </h2>
 
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="Enter JAMB Profile ID"
-              value={billersCode}
-              onChange={(event) =>
-                setBillersCode(
-                  event.target.value
+          <div className="space-y-3">
+            {purchaseResult.pins.length >
+            0 ? (
+              purchaseResult.pins.map(
+                (pin, index) => (
+                  <div
+                    key={`${pin}-${index}`}
+                    className="rounded-lg border bg-gray-50 p-4"
+                  >
+                    <p className="mb-1 text-xs font-medium uppercase text-gray-500">
+                      PIN {index + 1}
+                    </p>
+
+                    <p className="break-all font-mono text-sm font-semibold text-gray-900">
+                      {pin}
+                    </p>
+                  </div>
                 )
-              }
-              disabled={purchasing}
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            />
-
-            <p className="mt-2 text-xs text-gray-500">
-              Enter the JAMB Profile ID
-              you want to use for this
-              purchase.
-            </p>
+              )
+            ) : (
+              <div className="rounded-lg bg-yellow-50 p-4 text-sm text-yellow-700">
+                The provider did not return the
+                PIN details. Check your transaction
+                reference.
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* EXAM PLAN */}
+        {/* TRANSACTION */}
+
+        <div className="mt-5 rounded-xl border p-5">
+          <h2 className="mb-3 font-semibold">
+            Transaction Details
+          </h2>
+
+          <div className="space-y-3 text-sm">
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <span className="text-gray-500">
+                Reference
+              </span>
+
+              <span className="break-all font-medium sm:max-w-[70%] sm:text-right">
+                {purchaseResult.reference}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
+              <span className="text-gray-500">
+                New Wallet Balance
+              </span>
+
+              <span className="font-semibold">
+                ₦
+                {purchaseResult.walletBalance.toLocaleString(
+                  "en-NG"
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={closeReceipt}
+          className="mt-6 w-full rounded-xl bg-indigo-600 p-3 font-semibold text-white transition hover:bg-indigo-700"
+        >
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // MAIN PAGE
+  // ==========================================
+
+  return (
+    <div className="w-full">
+      <h1 className="mb-2 text-2xl font-bold sm:text-3xl">
+        Exam PIN
+      </h1>
+
+      <p className="mb-6 text-sm text-gray-500">
+        Purchase WAEC, NECO and NABTEB examination
+        PINs instantly.
+      </p>
+
+      {/* ERROR */}
+
+      {error && (
+        <div className="mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+          {error}
+        </div>
+      )}
+
+      <form
+        onSubmit={handlePurchase}
+        className="space-y-5 rounded-xl bg-white p-4 shadow sm:p-6"
+      >
+        {/* EXAM */}
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">
-            Exam Plan
+          <label className="mb-2 block font-medium">
+            Examination
           </label>
 
           <select
-            value={variationCode}
-            onChange={(event) =>
-              setVariationCode(
-                event.target.value
+            value={productId}
+            onChange={(e) =>
+              setProductId(
+                e.target.value
               )
             }
             disabled={
-              !serviceID ||
-              loadingPlans ||
+              loadingProducts ||
               purchasing
             }
-            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
+            className="w-full rounded-lg border p-3 outline-none"
           >
-            {loadingPlans ? (
-              <option value="">
-                Loading plans...
-              </option>
-            ) : plans.length === 0 ? (
-              <option value="">
-                No plans available
-              </option>
-            ) : (
-              <>
-                <option value="">
-                  Select exam plan
-                </option>
+            <option value="">
+              {loadingProducts
+                ? "Loading examinations..."
+                : "Select examination"}
+            </option>
 
-                {plans.map(
-                  (plan) => (
-                    <option
-                      key={
-                        plan.variation_code
-                      }
-                      value={
-                        plan.variation_code
-                      }
-                    >
-                      {plan.name} - ₦
-                      {Number(
-                        plan.variation_amount
-                      ).toLocaleString(
-                        "en-NG"
-                      )}
-                    </option>
-                  )
-                )}
-              </>
+            {products.map(
+              (product) => (
+                <option
+                  key={product.id}
+                  value={product.id}
+                >
+                  {product.exam_name} - ₦
+                  {Number(
+                    product.reseller_price ||
+                      product.price
+                  ).toLocaleString(
+                    "en-NG"
+                  )}
+                </option>
+              )
             )}
           </select>
         </div>
@@ -733,65 +519,52 @@ export default function ExamsPage() {
         {/* QUANTITY */}
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">
+          <label className="mb-2 block font-medium">
             Quantity
           </label>
 
-          <input
-            type="number"
-            min={1}
+          <select
             value={quantity}
-            onChange={(event) => {
-              const value =
-                Number(
-                  event.target.value
-                );
-
+            onChange={(e) =>
               setQuantity(
-                Number.isFinite(
-                  value
-                ) && value >= 1
-                  ? value
-                  : 1
-              );
-            }}
-            disabled={purchasing}
-            className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
-          />
-        </div>
-
-        {/* PHONE */}
-
-        <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">
-            Phone Number
-          </label>
-
-          <input
-            type="tel"
-            inputMode="numeric"
-            placeholder="08012345678"
-            value={phone}
-            onChange={(event) =>
-              setPhone(
-                event.target.value
+                e.target.value
               )
             }
-            disabled={purchasing}
-            className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
-          />
+            disabled={
+              loadingProducts ||
+              purchasing
+            }
+            className="w-full rounded-lg border p-3 outline-none"
+          >
+            <option value="1">
+              1 PIN
+            </option>
+
+            <option value="2">
+              2 PINs
+            </option>
+
+            <option value="5">
+              5 PINs
+            </option>
+          </select>
+
+          <p className="mt-2 text-xs text-gray-500">
+            You can purchase 1, 2 or 5 PINs at a
+            time.
+          </p>
         </div>
 
-        {/* PRICE SUMMARY */}
+        {/* PRICE */}
 
-        {selectedPlan && (
-          <div className="rounded-xl bg-gray-50 p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-4 text-sm">
+        {selectedProduct && (
+          <div className="rounded-lg bg-gray-50 p-4">
+            <div className="flex justify-between text-sm">
               <span className="text-gray-500">
-                Unit price
+                Price per PIN
               </span>
 
-              <span className="font-medium text-gray-900">
+              <span className="font-medium">
                 ₦
                 {unitPrice.toLocaleString(
                   "en-NG"
@@ -799,24 +572,12 @@ export default function ExamsPage() {
               </span>
             </div>
 
-            <div className="mt-2 flex items-center justify-between gap-4 text-sm">
-              <span className="text-gray-500">
-                Quantity
-              </span>
-
-              <span className="font-medium text-gray-900">
-                {safeQuantity}
-              </span>
-            </div>
-
-            <div className="my-3 border-t border-gray-200" />
-
-            <div className="flex items-center justify-between gap-4">
-              <span className="font-semibold text-gray-900">
+            <div className="mt-2 flex justify-between border-t pt-2">
+              <span className="font-semibold">
                 Total
               </span>
 
-              <span className="text-lg font-bold text-indigo-600 sm:text-xl">
+              <span className="font-bold text-indigo-600">
                 ₦
                 {totalAmount.toLocaleString(
                   "en-NG"
@@ -826,165 +587,23 @@ export default function ExamsPage() {
           </div>
         )}
 
-        {/* ERROR */}
-
-        {error && (
-          <div className="rounded-xl bg-red-50 px-4 py-3 text-sm leading-5 text-red-600">
-            {error}
-          </div>
-        )}
-
-        {/* SUCCESS */}
-
-        {message && (
-          <div className="rounded-xl bg-green-50 px-4 py-3 text-sm leading-5 text-green-700">
-            {message}
-          </div>
-        )}
-
         {/* PURCHASE BUTTON */}
 
         <button
           type="submit"
           disabled={
+            loadingProducts ||
             purchasing ||
-            loadingServices ||
-            loadingPlans ||
-            !serviceID ||
-            !variationCode ||
-            (serviceID.toLowerCase() ===
-              "jamb" &&
-              !billersCode.trim())
+            !productId ||
+            !quantity
           }
-          className="w-full rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-indigo-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 sm:text-base"
+          className="w-full rounded-lg bg-indigo-600 p-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {purchasing
             ? "Processing..."
-            : "Purchase Exam PIN"}
+            : "Buy Exam PIN"}
         </button>
       </form>
-
-      {/* PURCHASED PINS */}
-
-      {(loadingPins ||
-        purchasedPins.length > 0) && (
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 sm:text-xl">
-              Purchased PINs
-            </h2>
-
-            <p className="text-sm text-gray-500">
-              Keep these details safe.
-            </p>
-          </div>
-
-          {loadingPins ? (
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 text-sm text-gray-500">
-              Loading your purchased
-              PINs...
-            </div>
-          ) : (
-            purchasedPins.map(
-              (item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-green-200 bg-green-50 p-4 sm:p-5"
-                >
-                  {/* PIN HEADER */}
-
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                        {item.provider}
-                      </p>
-
-                      <p className="mt-1 text-xs text-gray-600">
-                        Serial Number
-                      </p>
-
-                      <p className="break-all font-semibold text-gray-900">
-                        {item.serial}
-                      </p>
-                    </div>
-
-                    <CheckCircle2 className="h-6 w-6 shrink-0 text-green-600" />
-                  </div>
-
-                  {/* PIN */}
-
-                  <div className="mt-4 rounded-xl bg-white p-3 sm:p-4">
-                    <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                      PIN
-                    </p>
-
-                    <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="min-w-0 break-all text-base font-bold tracking-wider text-gray-900 sm:text-lg">
-                        {item.pin}
-                      </p>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          copyPin(
-                            item.pin
-                          )
-                        }
-                        className="flex w-full shrink-0 items-center justify-center gap-2 rounded-lg bg-gray-900 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 sm:w-auto"
-                      >
-                        {copiedPin ===
-                        item.pin ? (
-                          <>
-                            <CheckCircle2 className="h-4 w-4" />
-                            Copied
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-4 w-4" />
-                            Copy
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* AMOUNT */}
-
-                  <div className="mt-3 text-xs text-gray-500">
-                    Amount: ₦
-                    {Number(
-                      item.amount
-                    ).toLocaleString(
-                      "en-NG"
-                    )}
-                  </div>
-
-                  {/* REFERENCE */}
-
-                  {item.reference && (
-                    <div className="mt-1 break-all text-xs text-gray-400">
-                      Reference:{" "}
-                      {item.reference}
-                    </div>
-                  )}
-
-                  {/* DATE */}
-
-                  {item.createdAt && (
-                    <div className="mt-1 text-xs text-gray-400">
-                      {new Date(
-                        item.createdAt
-                      ).toLocaleString(
-                        "en-NG"
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            )
-          )}
-        </div>
-      )}
     </div>
   );
 }

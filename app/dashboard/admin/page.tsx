@@ -9,8 +9,12 @@ import {
   TrendingUp,
   TrendingDown,
   PiggyBank,
+  Database,
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+
+const CHEAPDATAHUB_BALANCE_URL =
+  "https://www.cheapdatahub.ng/api/v1/resellers/wallet/balance/";
 
 export default async function AdminDashboardPage() {
   const [
@@ -39,9 +43,9 @@ export default async function AdminDashboardPage() {
         amount: true,
       },
       where: {
-        type: "FUND_WALLET",
-        status: "success",
-      },
+  type: "FUND_WALLET",
+  status: "SUCCESS",
+},
     }),
 
     prisma.transaction.findMany({
@@ -61,17 +65,17 @@ export default async function AdminDashboardPage() {
 
     prisma.transaction.findMany({
       where: {
-        status: "success",
-        type: {
-          in: [
-            "AIRTIME",
-            "DATA",
-            "ELECTRICITY",
-            "CABLE",
-            "EXAM_PIN",
-          ],
-        },
-      },
+  status: "SUCCESS",
+  type: {
+    in: [
+      "AIRTIME",
+      "DATA",
+      "ELECTRICITY",
+      "CABLE",
+      "EXAM_PIN",
+    ],
+  },
+},
       orderBy: {
         createdAt: "desc",
       },
@@ -79,29 +83,70 @@ export default async function AdminDashboardPage() {
   ]);
 
   // =========================================================
+  // CHEAPDATAHUB PROVIDER BALANCE
+  // =========================================================
+
+  let cheapDataHubBalance = 0;
+  let cheapDataHubBalanceError = "";
+
+  const apiKey = process.env.CHEAPDATAHUB_API_KEY;
+
+  if (apiKey) {
+    try {
+      const response = await fetch(
+        CHEAPDATAHUB_BALANCE_URL,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            Accept: "application/json",
+          },
+          cache: "no-store",
+        }
+      );
+
+      const result = await response.json();
+
+      console.log(
+        "CHEAPDATAHUB BALANCE RESPONSE:",
+        result
+      );
+
+      if (
+        response.ok &&
+        (result?.status === true ||
+          result?.status === "true")
+      ) {
+        cheapDataHubBalance =
+          Number(result?.data?.balance) || 0;
+      } else {
+        cheapDataHubBalanceError =
+          result?.message ||
+          "Unable to fetch CheapDataHub balance.";
+      }
+    } catch (error) {
+      console.error(
+        "CHEAPDATAHUB BALANCE ERROR:",
+        error
+      );
+
+      cheapDataHubBalanceError =
+        "Unable to connect to CheapDataHub.";
+    }
+  } else {
+    cheapDataHubBalanceError =
+      "CHEAPDATAHUB_API_KEY is not configured.";
+  }
+
+  // =========================================================
   // WALLET FUNDING
   // =========================================================
 
   const totalWalletFunding =
-    walletFunding._sum.amount ?? 0;
+    Number(walletFunding._sum.amount) || 0;
 
   // =========================================================
   // REVENUE / COST / PROFIT
-  // =========================================================
-  //
-  // IMPORTANT:
-  // Your current Transaction model only has ONE amount field.
-  // Therefore, until we add a separate cost field, we cannot
-  // calculate real provider cost automatically.
-  //
-  // For now:
-  // revenue = successful service transaction amount
-  // cost = 0
-  // profit = revenue
-  //
-  // Later, when VTpass live API is connected, we can add:
-  // providerCost / costPrice to Transaction.
-  //
   // =========================================================
 
   const revenueByService: Record<string, number> = {
@@ -115,7 +160,8 @@ export default async function AdminDashboardPage() {
   let totalRevenue = 0;
 
   for (const transaction of serviceTransactions) {
-    const amount = Number(transaction.amount) || 0;
+    const amount =
+      Number(transaction.amount) || 0;
 
     totalRevenue += amount;
 
@@ -215,9 +261,7 @@ export default async function AdminDashboardPage() {
   return (
     <div className="space-y-6">
 
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+      {/* HEADER */}
 
       <div className="pl-14 lg:pl-0">
         <p className="text-sm font-medium text-indigo-600">
@@ -233,9 +277,7 @@ export default async function AdminDashboardPage() {
         </p>
       </div>
 
-      {/* =====================================================
-          STAT CARDS
-      ===================================================== */}
+      {/* STAT CARDS */}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => {
@@ -271,8 +313,85 @@ export default async function AdminDashboardPage() {
       </div>
 
       {/* =====================================================
-          REVENUE / COST / PROFIT
+          PROVIDER BALANCE
       ===================================================== */}
+
+      <div>
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-gray-900">
+            Provider Wallet
+          </h2>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Monitor the balance used to process customer service requests.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+
+          {/* CHEAPDATAHUB */}
+
+          <div className="rounded-2xl bg-indigo-700 p-6 text-white shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+
+              <div>
+                <p className="text-sm font-medium text-indigo-200">
+                  CheapDataHub Balance
+                </p>
+
+                {cheapDataHubBalanceError ? (
+                  <p className="mt-2 text-sm font-medium text-red-200">
+                    {cheapDataHubBalanceError}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-3xl font-bold">
+                    {formatMoney(cheapDataHubBalance)}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
+                <Database className="h-6 w-6" />
+              </div>
+            </div>
+
+            <p className="mt-4 text-xs text-indigo-200">
+              This is your actual CheapDataHub provider wallet balance.
+              It is separate from customer wallet balances.
+            </p>
+          </div>
+
+          {/* USER WALLET FUNDING */}
+
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+
+              <div>
+                <p className="text-sm font-medium text-gray-500">
+                  Successful User Wallet Funding
+                </p>
+
+                <p className="mt-2 text-3xl font-bold text-gray-900">
+                  {formatMoney(totalWalletFunding)}
+                </p>
+              </div>
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-100">
+                <Wallet className="h-6 w-6 text-green-600" />
+              </div>
+
+            </div>
+
+            <p className="mt-4 text-xs text-gray-500">
+              Total successful wallet funding transactions recorded
+              on the platform.
+            </p>
+          </div>
+
+        </div>
+      </div>
+
+      {/* REVENUE / COST / PROFIT */}
 
       <div>
         <div className="mb-4">
@@ -332,8 +451,8 @@ export default async function AdminDashboardPage() {
             </div>
 
             <p className="mt-4 text-xs text-gray-500">
-              Provider costs will be tracked automatically after
-              the VTpass live API integration.
+              Provider costs will be calculated from the actual
+              API cost stored with each transaction.
             </p>
           </div>
 
@@ -364,9 +483,7 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* =====================================================
-          SERVICE REVENUE BREAKDOWN
-      ===================================================== */}
+      {/* SERVICE REVENUE BREAKDOWN */}
 
       <div className="rounded-2xl bg-white shadow-sm">
 
@@ -400,151 +517,107 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* =====================================================
-          WALLET FUNDING + RECENT TRANSACTIONS
-      ===================================================== */}
+      {/* RECENT TRANSACTIONS */}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="rounded-2xl bg-white shadow-sm">
 
-        {/* WALLET FUNDING */}
+        <div className="flex items-center justify-between border-b border-gray-100 p-5 sm:p-6">
 
-        <div className="rounded-2xl bg-indigo-700 p-6 text-white shadow-sm lg:col-span-1">
+          <div>
+            <h2 className="font-bold text-gray-900">
+              Recent Transactions
+            </h2>
 
-          <div className="flex items-center gap-3">
-
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
-              <Wallet className="h-6 w-6" />
-            </div>
-
-            <div>
-
-              <p className="text-sm text-indigo-200">
-                Successful Wallet Funding
-              </p>
-
-              <p className="mt-1 text-2xl font-bold">
-                {formatMoney(totalWalletFunding)}
-              </p>
-
-            </div>
-
+            <p className="mt-1 text-sm text-gray-500">
+              Latest platform activity
+            </p>
           </div>
 
-          <p className="mt-5 text-sm leading-6 text-indigo-100">
-            Total successful wallet funding transactions
-            recorded on the platform.
-          </p>
+          <ReceiptText className="h-5 w-5 text-gray-400" />
 
         </div>
 
-        {/* RECENT TRANSACTIONS */}
+        <div className="divide-y divide-gray-100">
 
-        <div className="rounded-2xl bg-white shadow-sm lg:col-span-2">
+          {recentTransactions.length === 0 ? (
 
-          <div className="flex items-center justify-between border-b border-gray-100 p-5 sm:p-6">
-
-            <div>
-
-              <h2 className="font-bold text-gray-900">
-                Recent Transactions
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Latest platform activity
-              </p>
-
+            <div className="p-6 text-center text-sm text-gray-500">
+              No transactions yet.
             </div>
 
-            <ReceiptText className="h-5 w-5 text-gray-400" />
+          ) : (
 
-          </div>
+            recentTransactions.map((transaction) => (
 
-          <div className="divide-y divide-gray-100">
+              <div
+                key={transaction.id}
+                className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+              >
 
-            {recentTransactions.length === 0 ? (
+                <div className="min-w-0">
 
-              <div className="p-6 text-center text-sm text-gray-500">
-                No transactions yet.
-              </div>
+                  <p className="truncate font-medium text-gray-900">
+                    {transaction.user.fullName}
+                  </p>
 
-            ) : (
+                  <p className="truncate text-xs text-gray-500">
+                    {transaction.description}
+                  </p>
 
-              recentTransactions.map((transaction) => (
-
-                <div
-                  key={transaction.id}
-                  className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"
-                >
-
-                  <div className="min-w-0">
-
-                    <p className="truncate font-medium text-gray-900">
-                      {transaction.user.fullName}
-                    </p>
-
-                    <p className="truncate text-xs text-gray-500">
-                      {transaction.description}
-                    </p>
-
-                    <p className="mt-1 break-all text-xs text-gray-400">
-                      {transaction.reference}
-                    </p>
-
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4 sm:block sm:text-right">
-
-                    <div>
-
-                      <p className="font-bold text-gray-900">
-                        {formatMoney(
-                          Number(transaction.amount)
-                        )}
-                      </p>
-
-                      <p
-                        className={`mt-1 text-xs font-medium ${
-                          transaction.status.toLowerCase() ===
-                          "success"
-                            ? "text-green-600"
-                            : transaction.status.toLowerCase() ===
-                              "failed"
-                            ? "text-red-600"
-                            : "text-yellow-600"
-                        }`}
-                      >
-                        {transaction.status}
-                      </p>
-
-                    </div>
-
-                    <p className="mt-1 hidden items-center justify-end gap-1 text-xs text-gray-400 sm:flex">
-
-                      <Clock className="h-3 w-3" />
-
-                      {new Date(
-                        transaction.createdAt
-                      ).toLocaleString("en-NG")}
-
-                    </p>
-
-                  </div>
+                  <p className="mt-1 break-all text-xs text-gray-400">
+                    {transaction.reference}
+                  </p>
 
                 </div>
 
-              ))
+                <div className="flex items-center justify-between gap-4 sm:block sm:text-right">
 
-            )}
+                  <div>
 
-          </div>
+                    <p className="font-bold text-gray-900">
+                      {formatMoney(
+                        Number(transaction.amount)
+                      )}
+                    </p>
+
+                    <p
+                      className={`mt-1 text-xs font-medium ${
+                        transaction.status.toLowerCase() ===
+                        "success"
+                          ? "text-green-600"
+                          : transaction.status.toLowerCase() ===
+                            "failed"
+                          ? "text-red-600"
+                          : "text-yellow-600"
+                      }`}
+                    >
+                      {transaction.status}
+                    </p>
+
+                  </div>
+
+                  <p className="mt-1 hidden items-center justify-end gap-1 text-xs text-gray-400 sm:flex">
+
+                    <Clock className="h-3 w-3" />
+
+                    {new Date(
+                      transaction.createdAt
+                    ).toLocaleString("en-NG")}
+
+                  </p>
+
+                </div>
+
+              </div>
+
+            ))
+
+          )}
 
         </div>
-
       </div>
 
-      {/* =====================================================
-          QUICK ADMIN ACTIONS
-      ===================================================== */}
+      {/* QUICK ADMIN ACTIONS */}
 
       <div>
 
@@ -617,6 +690,22 @@ export default async function AdminDashboardPage() {
               Review students' examination results.
             </p>
           </a>
+
+<a
+  href="/dashboard/admin/business-wallet"
+  className="rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+>
+  <Wallet className="h-6 w-6 text-emerald-600" />
+
+  <h3 className="mt-4 font-semibold text-gray-900">
+    Business Wallet
+  </h3>
+
+  <p className="mt-1 text-sm text-gray-500">
+    Manage business funds, connect bank account and withdraw profit.
+  </p>
+</a>
+
 
         </div>
 

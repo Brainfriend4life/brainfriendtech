@@ -1,120 +1,570 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import axios from "axios";
-
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { vtpassConfig } from "@/lib/vtpass";
-import { generateRequestId } from "@/lib/requestId";
 
-export async function POST(req: NextRequest) {
+const CHEAPDATAHUB_DATA_URL =
+  "https://www.cheapdatahub.ng/api/v1/resellers/data/purchase/";
+
+const dataPlans: Record<
+  number,
+  {
+    provider: string;
+    size: string;
+    duration: string;
+    price: number;
+    resellerPrice: number;
+    apiPrice: number;
+  }
+> = {
+  // =========================
+  // AIRTEL
+  // =========================
+  70: {
+    provider: "airtel",
+    size: "1GB (Social Bundle)",
+    duration: "3 Days",
+    price: 350,
+    resellerPrice: 330,
+    apiPrice: 295,
+  },
+
+  13: {
+    provider: "airtel",
+    size: "500MB",
+    duration: "7 Days",
+    price: 500,
+    resellerPrice: 495,
+    apiPrice: 490,
+  },
+
+  69: {
+    provider: "airtel",
+    size: "1.5GB",
+    duration: "1 Day",
+    price: 530,
+    resellerPrice: 520,
+    apiPrice: 500,
+  },
+
+  66: {
+    provider: "airtel",
+    size: "1.5GB",
+    duration: "2 Days",
+    price: 650,
+    resellerPrice: 630,
+    apiPrice: 599,
+  },
+
+  15: {
+    provider: "airtel",
+    size: "1GB",
+    duration: "7 Days",
+    price: 1000,
+    resellerPrice: 800,
+    apiPrice: 800,
+  },
+
+  17: {
+    provider: "airtel",
+    size: "2GB",
+    duration: "30 Days",
+    price: 1550,
+    resellerPrice: 1550,
+    apiPrice: 1490,
+  },
+
+  52: {
+    provider: "airtel",
+    size: "5GB",
+    duration: "7 Days",
+    price: 1599,
+    resellerPrice: 1575,
+    apiPrice: 1570,
+  },
+
+  18: {
+    provider: "airtel",
+    size: "3GB",
+    duration: "30 Days",
+    price: 2100,
+    resellerPrice: 1999,
+    apiPrice: 1960,
+  },
+
+  22: {
+    provider: "airtel",
+    size: "6GB",
+    duration: "7 Days",
+    price: 2599,
+    resellerPrice: 2495,
+    apiPrice: 2455,
+  },
+
+  19: {
+    provider: "airtel",
+    size: "4GB",
+    duration: "30 Days",
+    price: 2650,
+    resellerPrice: 2599,
+    apiPrice: 2570,
+  },
+
+  20: {
+    provider: "airtel",
+    size: "8GB",
+    duration: "30 Days",
+    price: 3200,
+    resellerPrice: 3100,
+    apiPrice: 2999,
+  },
+
+  21: {
+    provider: "airtel",
+    size: "10GB",
+    duration: "30 Days",
+    price: 4200,
+    resellerPrice: 4099,
+    apiPrice: 4070,
+  },
+
+  // =========================
+  // GLO
+  // =========================
+  42: {
+    provider: "glo",
+    size: "200MB",
+    duration: "1 Day",
+    price: 100,
+    resellerPrice: 95,
+    apiPrice: 92,
+  },
+
+  35: {
+    provider: "glo",
+    size: "500MB",
+    duration: "30 Days",
+    price: 250,
+    resellerPrice: 230,
+    apiPrice: 225,
+  },
+
+  68: {
+    provider: "glo",
+    size: "1GB",
+    duration: "3 Days",
+    price: 350,
+    resellerPrice: 300,
+    apiPrice: 300,
+  },
+
+  36: {
+    provider: "glo",
+    size: "1GB",
+    duration: "30 Days",
+    price: 450,
+    resellerPrice: 430,
+    apiPrice: 425,
+  },
+
+  41: {
+    provider: "glo",
+    size: "1GB",
+    duration: "14 Days",
+    price: 500,
+    resellerPrice: 490,
+    apiPrice: 485,
+  },
+
+  40: {
+    provider: "glo",
+    size: "2GB",
+    duration: "30 Days",
+    price: 900,
+    resellerPrice: 850,
+    apiPrice: 850,
+  },
+
+  37: {
+    provider: "glo",
+    size: "3GB",
+    duration: "30 Days",
+    price: 1500,
+    resellerPrice: 1300,
+    apiPrice: 1300,
+  },
+
+  54: {
+    provider: "glo",
+    size: "5GB",
+    duration: "7 Days",
+    price: 1800,
+    resellerPrice: 1750,
+    apiPrice: 1699,
+  },
+
+  38: {
+    provider: "glo",
+    size: "5GB",
+    duration: "30 Days",
+    price: 2400,
+    resellerPrice: 2300,
+    apiPrice: 2250,
+  },
+
+  39: {
+    provider: "glo",
+    size: "10GB",
+    duration: "30 Days",
+    price: 4500,
+    resellerPrice: 4399,
+    apiPrice: 4390,
+  },
+
+  59: {
+    provider: "glo",
+    size: "20.5GB",
+    duration: "30 Days",
+    price: 6000,
+    resellerPrice: 5500,
+    apiPrice: 5300,
+  },
+
+  58: {
+    provider: "glo",
+    size: "107GB",
+    duration: "30 Days",
+    price: 20000,
+    resellerPrice: 19500,
+    apiPrice: 19300,
+  },
+
+  // =========================
+  // MTN
+  // =========================
+  43: {
+    provider: "mtn",
+    size: "110MB",
+    duration: "1 Day",
+    price: 100,
+    resellerPrice: 99,
+    apiPrice: 99,
+  },
+
+  74: {
+    provider: "mtn",
+    size: "230MB",
+    duration: "1 Day",
+    price: 250,
+    resellerPrice: 230,
+    apiPrice: 200,
+  },
+
+  76: {
+    provider: "mtn",
+    size: "500MB",
+    duration: "2 Days",
+    price: 270,
+    resellerPrice: 270,
+    apiPrice: 250,
+  },
+
+  78: {
+    provider: "mtn",
+    size: "1GB",
+    duration: "1 Day",
+    price: 300,
+    resellerPrice: 300,
+    apiPrice: 270,
+  },
+
+  81: {
+    provider: "mtn",
+    size: "1GB",
+    duration: "30 Days",
+    price: 350,
+    resellerPrice: 350,
+    apiPrice: 280,
+  },
+
+  44: {
+    provider: "mtn",
+    size: "500MB",
+    duration: "30 Days",
+    price: 400,
+    resellerPrice: 390,
+    apiPrice: 350,
+  },
+
+  77: {
+    provider: "mtn",
+    size: "1GB",
+    duration: "2 Days",
+    price: 450,
+    resellerPrice: 440,
+    apiPrice: 399,
+  },
+
+  45: {
+    provider: "mtn",
+    size: "1GB",
+    duration: "7 Days",
+    price: 499,
+    resellerPrice: 450,
+    apiPrice: 450,
+  },
+
+  46: {
+    provider: "mtn",
+    size: "1GB",
+    duration: "30 Days",
+    price: 600,
+    resellerPrice: 570,
+    apiPrice: 570,
+  },
+
+  79: {
+    provider: "mtn",
+    size: "2.5GB",
+    duration: "1 Day",
+    price: 650,
+    resellerPrice: 650,
+    apiPrice: 600,
+  },
+
+  47: {
+    provider: "mtn",
+    size: "2GB",
+    duration: "7 Days",
+    price: 950,
+    resellerPrice: 930,
+    apiPrice: 930,
+  },
+
+  27: {
+    provider: "mtn",
+    size: "2.5GB",
+    duration: "2 Days",
+    price: 1000,
+    resellerPrice: 950,
+    apiPrice: 900,
+  },
+
+  71: {
+    provider: "mtn",
+    size: "2GB",
+    duration: "7 Days",
+    price: 1000,
+    resellerPrice: 950,
+    apiPrice: 900,
+  },
+
+  60: {
+    provider: "mtn",
+    size: "4.5GB",
+    duration: "1 Day",
+    price: 1100,
+    resellerPrice: 1100,
+    apiPrice: 1050,
+  },
+
+  48: {
+    provider: "mtn",
+    size: "2GB",
+    duration: "30 Days",
+    price: 1250,
+    resellerPrice: 1199,
+    apiPrice: 1150,
+  },
+
+  61: {
+    provider: "mtn",
+    size: "4GB",
+    duration: "2 Days",
+    price: 1300,
+    resellerPrice: 1200,
+    apiPrice: 1175,
+  },
+
+  82: {
+    provider: "mtn",
+    size: "5GB",
+    duration: "30 Days",
+    price: 1500,
+    resellerPrice: 1400,
+    apiPrice: 1299,
+  },
+
+  80: {
+    provider: "mtn",
+    size: "5GB",
+    duration: "14 Days",
+    price: 1500,
+    resellerPrice: 1400,
+    apiPrice: 1299,
+  },
+
+  49: {
+    provider: "mtn",
+    size: "3GB",
+    duration: "30 Days",
+    price: 1500,
+    resellerPrice: 1399,
+    apiPrice: 1370,
+  },
+
+  50: {
+    provider: "mtn",
+    size: "5GB",
+    duration: "30 Days",
+    price: 2300,
+    resellerPrice: 2099,
+    apiPrice: 2050,
+  },
+
+  53: {
+    provider: "mtn",
+    size: "6GB",
+    duration: "7 Days",
+    price: 2600,
+    resellerPrice: 2500,
+    apiPrice: 2495,
+  },
+
+  55: {
+    provider: "mtn",
+    size: "11GB",
+    duration: "7 Days",
+    price: 3600,
+    resellerPrice: 3600,
+    apiPrice: 3550,
+  },
+
+  33: {
+    provider: "mtn",
+    size: "7GB",
+    duration: "30 Days",
+    price: 3800,
+    resellerPrice: 3700,
+    apiPrice: 3600,
+  },
+
+  67: {
+    provider: "mtn",
+    size: "10GB",
+    duration: "30 Days",
+    price: 5000,
+    resellerPrice: 4900,
+    apiPrice: 4800,
+  },
+
+  57: {
+    provider: "mtn",
+    size: "36GB",
+    duration: "30 Days",
+    price: 11000,
+    resellerPrice: 10900,
+    apiPrice: 10900,
+  },
+
+  51: {
+    provider: "mtn",
+    size: "75GB",
+    duration: "30 Days",
+    price: 18500,
+    resellerPrice: 17999,
+    apiPrice: 17990,
+  },
+};
+
+export async function POST(request: NextRequest) {
+  let transactionId: string | null = null;
+
   try {
-    /*
-     * ==========================================
-     * AUTHENTICATION
-     * ==========================================
-     */
+    // ==========================================
+    // AUTHENTICATION
+    // ==========================================
 
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.email) {
+    if (!session?.user?.id) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized",
+          message: "You must be logged in.",
         },
-        {
-          status: 401,
-        }
+        { status: 401 }
       );
     }
 
-    /*
-     * ==========================================
-     * GET REQUEST DATA
-     * ==========================================
-     */
+    // ==========================================
+    // REQUEST BODY
+    // ==========================================
 
-    const {
-      serviceID,
-      variation_code,
-      phone,
-      amount,
-    } = await req.json();
+    const body = await request.json();
 
-    /*
-     * ==========================================
-     * VALIDATION
-     * ==========================================
-     */
+    const rawBundleId =
+      body.bundle_id ??
+      body.bundleId ??
+      body.plan_id ??
+      body.planId ??
+      body.dataPlanId;
+
+    const phoneNumber =
+      body.phone_number ??
+      body.phoneNumber ??
+      body.phone;
+
+    const bundleId = Number(rawBundleId);
+
+    // ==========================================
+    // VALIDATE PLAN
+    // ==========================================
 
     if (
-      !serviceID ||
-      !variation_code ||
-      !phone ||
-      !amount
+      !Number.isInteger(bundleId) ||
+      !dataPlans[bundleId]
     ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid data plan.",
+          receivedBundleId: rawBundleId,
+        },
+        { status: 400 }
+      );
+    }
+
+    const plan = dataPlans[bundleId];
+
+    // ==========================================
+    // NORMALIZE PHONE NUMBER
+    // ==========================================
+
+    const cleanedPhone = String(phoneNumber || "")
+      .replace(/\s+/g, "")
+      .replace(/^\+234/, "0");
+
+    if (!/^0\d{10}$/.test(cleanedPhone)) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Network, data plan, phone number and amount are required.",
+            "Please enter a valid Nigerian phone number.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    const dataAmount = Number(amount);
+    // ==========================================
+    // GET USER
+    // ==========================================
 
-    if (
-      !Number.isFinite(dataAmount) ||
-      dataAmount <= 0
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Invalid data amount.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-     * ==========================================
-     * CALCULATE SERVICE FEE
-     * ==========================================
-     *
-     * Example:
-     *
-     * Data amount     = ₦1,000
-     * Service fee 5%  = ₦50
-     * Customer pays   = ₦1,050
-     *
-     * VTpass receives the actual data amount.
-     */
-
-    const serviceFee = dataAmount * 0.05;
-
-    const totalAmount =
-      dataAmount + serviceFee;
-
-    /*
-     * ==========================================
-     * FIND USER
-     * ==========================================
-     */
-
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          email: session.user.email,
-        },
-      });
+    const user = await prisma.user.findUnique({
+      where: {
+        id: session.user.id,
+      },
+    });
 
     if (!user) {
       return NextResponse.json(
@@ -122,535 +572,497 @@ export async function POST(req: NextRequest) {
           success: false,
           message: "User not found.",
         },
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
     }
 
-    /*
-     * ==========================================
-     * CHECK WALLET BALANCE
-     * ==========================================
-     */
+    if (user.status !== "ACTIVE") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Your account is not active.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // ==========================================
+    // API KEY
+    // ==========================================
+
+    const apiKey =
+      process.env.CHEAPDATAHUB_API_KEY;
+
+    if (!apiKey) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "CheapDataHub API key is not configured.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // ==========================================
+    // CUSTOMER PRICE
+    // ==========================================
+
+    const amount = Number(plan.resellerPrice);
+
+    // ==========================================
+    // PROVIDER COST
+    // ==========================================
+
+    const providerCost = Number(plan.apiPrice);
+
+    // ==========================================
+    // BUSINESS PROFIT
+    // ==========================================
+
+    const profit = amount - providerCost;
+
+    // ==========================================
+    // WALLET CHECK
+    // ==========================================
+
+    const walletBalance =
+      Number(user.walletBalance);
 
     if (
-      user.walletBalance <
-      totalAmount
+      !Number.isFinite(walletBalance) ||
+      walletBalance < amount
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: `Insufficient wallet balance. You need ₦${totalAmount.toLocaleString(
-            "en-NG",
-            {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            }
-          )}.`,
+          message: "Insufficient wallet balance.",
+          balance: walletBalance,
+          required: amount,
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * GENERATE REQUEST ID
-     * ==========================================
-     */
+    // ==========================================
+    // REFERENCE
+    // ==========================================
 
-    const requestId =
-      generateRequestId();
+    const reference =
+      `DATA-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)
+        .toUpperCase()}`;
 
-    console.log(
-      "=========================================="
-    );
-
-    console.log(
-      "DATA REQUEST ID:",
-      requestId
-    );
-
-    console.log(
-      "DATA SERVICE:",
-      serviceID
-    );
-
-    console.log(
-      "DATA PHONE:",
-      String(phone).trim()
-    );
-
-    console.log(
-      "DATA AMOUNT:",
-      dataAmount
-    );
-
-    console.log(
-      "DATA SERVICE FEE:",
-      serviceFee
-    );
-
-    console.log(
-      "DATA CUSTOMER CHARGE:",
-      totalAmount
-    );
-
-    /*
-     * ==========================================
-     * VTPASS PAYLOAD
-     * ==========================================
-     */
-
-    const payload = {
-      request_id: requestId,
-      serviceID,
-      billersCode: String(phone).trim(),
-      variation_code,
-      amount: dataAmount,
-      phone: String(phone).trim(),
-    };
-
-    console.log(
-      "DATA PAYLOAD:",
-      payload
-    );
-
-    /*
-     * ==========================================
-     * SEND REQUEST TO VTPASS
-     * ==========================================
-     */
-
-    const response =
-      await axios.post(
-        `${vtpassConfig.baseUrl}/pay`,
-        payload,
-        {
-          headers: {
-            "api-key":
-              vtpassConfig.apiKey,
-            "secret-key":
-              vtpassConfig.secretKey,
-            "Content-Type":
-              "application/json",
-          },
-        }
-      );
-
-    const vtpass =
-      response.data;
-
-    console.log(
-      "DATA VTPASS RESPONSE:",
-      vtpass
-    );
-
-    /*
-     * ==========================================
-     * GET VTPASS TRANSACTION DETAILS
-     * ==========================================
-     */
+    // ==========================================
+    // CREATE PENDING TRANSACTION
+    // ==========================================
 
     const transaction =
-      vtpass.content?.transactions;
+      await prisma.transaction.create({
+        data: {
+          userId: user.id,
+          type: "DATA",
+          amount,
+          reference,
+          status: "PENDING",
+          provider: "CheapDataHub",
+          cost: providerCost,
+          profit,
+          description:
+            `${plan.provider.toUpperCase()} ${plan.size} ${plan.duration} for ${cleanedPhone}`,
+        },
+      });
 
-    const transactionStatus =
-      transaction?.status ||
-      vtpass.status ||
-      "unknown";
+    transactionId = transaction.id;
 
-    /*
-     * ==========================================
-     * PROVIDER COST
-     * ==========================================
-     *
-     * VTpass returns:
-     *
-     * amount       = customer/service amount
-     * total_amount = actual amount charged by VTpass
-     *
-     * Example:
-     *
-     * amount       = 1000
-     * total_amount = 965
-     * commission   = 35
-     *
-     * Therefore provider cost = 965.
-     */
+    // ==========================================
+    // CALL CHEAPDATAHUB
+    // ==========================================
 
-    const providerCost =
-      Number(
-        transaction?.total_amount
-      );
+    const providerBody = {
+      bundle_id: bundleId,
+      phone_number: cleanedPhone,
+    };
 
-    const validProviderCost =
-      Number.isFinite(providerCost) &&
-      providerCost >= 0
-        ? providerCost
-        : dataAmount;
+    const providerResponse = await fetch(
+      CHEAPDATAHUB_DATA_URL,
+      {
+        method: "POST",
 
-    /*
-     * ==========================================
-     * CALCULATE PLATFORM PROFIT
-     * ==========================================
-     *
-     * Revenue = customer charge
-     *
-     * Profit =
-     * customer charge - provider cost
-     *
-     * Example:
-     *
-     * Revenue       = ₦1,050
-     * Provider cost = ₦965
-     * Profit        = ₦85
-     */
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
 
-    const platformProfit =
-      totalAmount -
-      validProviderCost;
+        body: JSON.stringify(providerBody),
 
-    console.log(
-      "DATA RESPONSE CODE:",
-      vtpass.code
-    );
-
-    console.log(
-      "DATA RESPONSE DESCRIPTION:",
-      vtpass.response_description
-    );
-
-    console.log(
-      "DATA TRANSACTION STATUS:",
-      transactionStatus
-    );
-
-    console.log(
-      "DATA PROVIDER COST:",
-      validProviderCost
-    );
-
-    console.log(
-      "DATA PLATFORM PROFIT:",
-      platformProfit
-    );
-
-    /*
-     * ==========================================
-     * CHECK SUCCESS
-     * ==========================================
-     */
-
-    const isSuccessful =
-      vtpass.code === "000" &&
-      transactionStatus
-        .toLowerCase() ===
-        "delivered";
-
-    /*
-     * ==========================================
-     * PURCHASE FAILED
-     * ==========================================
-     */
-
-    if (!isSuccessful) {
-      try {
-        await prisma.transaction.create({
-          data: {
-            userId: user.id,
-            type: "DATA",
-            provider:
-              serviceID.toUpperCase(),
-
-            /*
-             * The amount charged to the
-             * customer.
-             */
-            amount: totalAmount,
-
-            /*
-             * No cost/profit because
-             * purchase failed.
-             */
-            cost: 0,
-            profit: 0,
-
-            reference: requestId,
-
-            status:
-              transactionStatus.toUpperCase(),
-
-            description:
-              vtpass.response_description ||
-              "Data purchase failed",
-          },
-        });
-      } catch (
-        transactionError: any
-      ) {
-        console.error(
-          "FAILED DATA TRANSACTION LOG:",
-          transactionError.message
-        );
+        cache: "no-store",
       }
+    );
 
-      console.log(
-        "=========================================="
-      );
+    const responseText =
+      await providerResponse.text();
 
-      console.log(
-        "DATA PURCHASE FAILED"
-      );
+    // ==========================================
+    // PARSE RESPONSE
+    // ==========================================
 
-      console.log(
-        "DATA AMOUNT:",
-        dataAmount
-      );
+    let providerResult: any;
 
-      console.log(
-        "SERVICE FEE:",
-        serviceFee
-      );
+    try {
+      providerResult = responseText.trim()
+        ? JSON.parse(responseText)
+        : null;
+    } catch {
+      providerResult = null;
+    }
 
-      console.log(
-        "TOTAL CHARGE:",
-        totalAmount
-      );
+    // ==========================================
+    // INVALID PROVIDER RESPONSE
+    // ==========================================
 
-      console.log(
-        "=========================================="
-      );
+    if (!providerResult) {
+      await prisma.transaction.update({
+        where: {
+          id: transaction.id,
+        },
+
+        data: {
+          status: "FAILED",
+        },
+      });
 
       return NextResponse.json(
         {
           success: false,
           message:
-            vtpass.response_description ||
-            "Data purchase failed.",
-          code: vtpass.code,
-          status: transactionStatus,
-          data: vtpass,
+            "CheapDataHub returned an invalid response.",
+          providerStatus:
+            providerResponse.status,
         },
-        {
-          status: 400,
-        }
+        { status: 502 }
       );
     }
 
-    /*
-     * ==========================================
-     * SUCCESS
-     * ==========================================
-     *
-     * Save:
-     *
-     * amount = customer charge
-     * cost   = VTpass provider cost
-     * profit = platform profit
-     */
+    // ==========================================
+    // CHECK PROVIDER SUCCESS
+    // ==========================================
 
-    await prisma.$transaction(
-      async (tx) => {
-        /*
-         * SAVE TRANSACTION
-         */
+    const providerSuccess =
+      providerResult.success === true ||
+      providerResult.status === true ||
+      providerResult.status === "true";
 
-        await tx.transaction.create({
-          data: {
-            userId: user.id,
+    if (
+      !providerResponse.ok ||
+      !providerSuccess
+    ) {
+      await prisma.transaction.update({
+        where: {
+          id: transaction.id,
+        },
 
-            type: "DATA",
+        data: {
+          status: "FAILED",
+        },
+      });
 
-            provider:
-              serviceID.toUpperCase(),
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            providerResult.message ||
+            providerResult.error ||
+            "Data purchase failed.",
 
-            /*
-             * CUSTOMER REVENUE
-             *
-             * Example:
-             * ₦1,050
-             */
-            amount: totalAmount,
+          providerStatus:
+            providerResponse.status,
 
-            /*
-             * ACTUAL PROVIDER COST
-             *
-             * Example:
-             * ₦965
-             */
-            cost: validProviderCost,
+          providerResponse: providerResult,
+        },
+        { status: 400 }
+      );
+    }
 
-            /*
-             * PLATFORM PROFIT
-             *
-             * Example:
-             * ₦85
-             */
-            profit: platformProfit,
+    // ==========================================
+    // SUCCESS
+    //
+    // IMPORTANT:
+    // User wallet is deducted.
+    // Business wallet is credited.
+    // Business revenue is recorded.
+    //
+    // ALL IN ONE DATABASE TRANSACTION.
+    // ==========================================
 
-            reference: requestId,
+    const result =
+      await prisma.$transaction(
+        async (tx) => {
+          const currentUser =
+            await tx.user.findUnique({
+              where: {
+                id: user.id,
+              },
+            });
 
-            status: "SUCCESS",
+          if (!currentUser) {
+            throw new Error(
+              "User not found."
+            );
+          }
 
-            description: `₦${dataAmount.toLocaleString(
-              "en-NG",
+          const currentBalance =
+            Number(
+              currentUser.walletBalance
+            );
+
+          if (
+            currentBalance < amount
+          ) {
+            throw new Error(
+              "Insufficient wallet balance."
+            );
+          }
+
+          // ======================================
+          // FIND OR CREATE BUSINESS WALLET
+          // ======================================
+
+          let businessWallet =
+            await tx.businessWallet.findUnique(
               {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
+                where: {
+                  name: "Brainfriend Tech",
+                },
               }
-            )} data + 5% service fee (₦${serviceFee.toLocaleString(
-              "en-NG",
-              {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              }
-            )})`,
-          },
-        });
+            );
 
-        /*
-         * DEDUCT CUSTOMER WALLET
-         *
-         * Customer pays:
-         *
-         * data amount + service fee
-         */
+          if (!businessWallet) {
+            businessWallet =
+              await tx.businessWallet.create({
+                data: {
+                  name: "Brainfriend Tech",
+                  balance: 0,
+                  totalRevenue: 0,
+                  totalCost: 0,
+                  totalProfit: 0,
+                  withdrawnProfit: 0,
+                  availableProfit: 0,
+                },
+              });
+          }
 
-        await tx.user.update({
-          where: {
-            id: user.id,
-          },
+          // ======================================
+          // NEW USER BALANCE
+          // ======================================
 
-          data: {
-            walletBalance: {
-              decrement:
-                totalAmount,
+          const newUserBalance =
+            currentBalance - amount;
+
+          // ======================================
+          // UPDATE USER WALLET
+          // ======================================
+
+          await tx.user.update({
+            where: {
+              id: user.id,
             },
-          },
-        });
-      }
-    );
 
-    /*
-     * ==========================================
-     * SUCCESS LOG
-     * ==========================================
-     */
+            data: {
+              walletBalance:
+                newUserBalance,
+            },
+          });
 
-    console.log(
-      "=========================================="
-    );
+          // ======================================
+          // UPDATE BUSINESS WALLET
+          // ======================================
 
-    console.log(
-      "DATA PURCHASE SUCCESSFUL"
-    );
+          const newBusinessBalance =
+            Number(
+              businessWallet.balance
+            ) + amount;
 
-    console.log(
-      "DATA AMOUNT:",
-      dataAmount
-    );
+          const newTotalRevenue =
+            Number(
+              businessWallet.totalRevenue
+            ) + amount;
 
-    console.log(
-      "SERVICE FEE:",
-      serviceFee
-    );
+          const newTotalCost =
+            Number(
+              businessWallet.totalCost
+            ) + providerCost;
 
-    console.log(
-      "CUSTOMER CHARGE:",
-      totalAmount
-    );
+          const newTotalProfit =
+            Number(
+              businessWallet.totalProfit
+            ) + profit;
 
-    console.log(
-      "PROVIDER COST:",
-      validProviderCost
-    );
+          const newAvailableProfit =
+            Number(
+              businessWallet.availableProfit
+            ) + profit;
 
-    console.log(
-      "PLATFORM PROFIT:",
-      platformProfit
-    );
+          await tx.businessWallet.update({
+            where: {
+              id: businessWallet.id,
+            },
 
-    console.log(
-      "TOTAL DEDUCTED:",
-      totalAmount
-    );
+            data: {
+              balance:
+                newBusinessBalance,
 
-    console.log(
-      "=========================================="
-    );
+              totalRevenue:
+                newTotalRevenue,
 
-    /*
-     * ==========================================
-     * SUCCESS RESPONSE
-     * ==========================================
-     */
+              totalCost:
+                newTotalCost,
+
+              totalProfit:
+                newTotalProfit,
+
+              availableProfit:
+                newAvailableProfit,
+            },
+          });
+
+          // ======================================
+          // BUSINESS REVENUE RECORD
+          // ======================================
+
+          await tx.businessRevenue.create({
+            data: {
+              transactionId:
+                transaction.id,
+
+              type: "DATA",
+
+              provider:
+                "CheapDataHub",
+
+              amount,
+
+              cost: providerCost,
+
+              profit,
+
+              reference,
+
+              description:
+                `${plan.provider.toUpperCase()} ${plan.size} ${plan.duration} for ${cleanedPhone}`,
+
+              businessWalletId:
+                businessWallet.id,
+            },
+          });
+
+          // ======================================
+          // COMPLETE ORIGINAL TRANSACTION
+          // ======================================
+
+          await tx.transaction.update({
+            where: {
+              id: transaction.id,
+            },
+
+            data: {
+              status: "SUCCESS",
+
+              cost: providerCost,
+
+              profit,
+            },
+          });
+
+          return {
+            walletBalance:
+              newUserBalance,
+
+            businessBalance:
+              newBusinessBalance,
+
+            profit,
+          };
+        }
+      );
+
+    // ==========================================
+    // SUCCESS RESPONSE
+    // ==========================================
 
     return NextResponse.json({
       success: true,
 
       message:
-        "Data purchased successfully.",
+        providerResult.message ||
+        "Data purchase successful.",
 
-      amount: dataAmount,
+      reference,
 
-      serviceFee,
+      providerReference:
+        providerResult.reference ||
+        providerResult.transaction_id ||
+        providerResult.transactionId ||
+        null,
 
-      totalAmount,
+      bundle_id: bundleId,
 
-      providerCost:
-        validProviderCost,
+      phone_number: cleanedPhone,
 
-      profit:
-        platformProfit,
+      provider: plan.provider,
 
-      reference: requestId,
+      size: plan.size,
 
-      vtpass,
+      duration: plan.duration,
+
+      amount,
+
+      cost: providerCost,
+
+      profit: result.profit,
+
+      walletBalance:
+        result.walletBalance,
+
+      providerResponse:
+        providerResult,
     });
   } catch (error: any) {
     console.error(
-      "=========================================="
+      "DATA PURCHASE ERROR:",
+      error
     );
 
-    console.error(
-      "FULL VTPASS DATA ERROR:"
-    );
+    if (transactionId) {
+      try {
+        await prisma.transaction.update({
+          where: {
+            id: transactionId,
+          },
 
-    console.error(
-      "ERROR RESPONSE:",
-      error.response?.data
-    );
-
-    console.error(
-      "ERROR MESSAGE:",
-      error.message
-    );
-
-    console.error(
-      "=========================================="
-    );
+          data: {
+            status: "FAILED",
+          },
+        });
+      } catch (updateError) {
+        console.error(
+          "FAILED TO UPDATE TRANSACTION:",
+          updateError
+        );
+      }
+    }
 
     return NextResponse.json(
       {
         success: false,
 
         message:
-          error.response?.data
-            ?.response_description ||
-          error.response?.data?.message ||
+          error?.message ||
           "Data purchase failed.",
-
-        data:
-          error.response?.data ||
-          null,
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
-

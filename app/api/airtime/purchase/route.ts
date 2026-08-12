@@ -1,601 +1,697 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import axios from "axios";
-
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { vtpassConfig } from "@/lib/vtpass";
-import { generateRequestId } from "@/lib/requestId";
 
-export async function POST(req: NextRequest) {
+const CHEAPDATAHUB_API_URL =
+  "https://www.cheapdatahub.ng/api/v1/resellers/airtime/purchase/";
+
+export async function POST(request: NextRequest) {
+  let transactionId: string | null = null;
+
   try {
-    // ==========================================
-    // AUTHENTICATION
-    // ==========================================
+    // =====================================================
+    // 1. AUTHENTICATION
+    // =====================================================
 
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.email) {
+    if (!session?.user?.id) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized",
+          error: "You must be logged in to purchase airtime.",
         },
-        {
-          status: 401,
-        }
+        { status: 401 }
       );
     }
 
-    // ==========================================
-    // GET REQUEST DATA
-    // ==========================================
+    const userId = session.user.id;
+
+    // =====================================================
+    // 2. REQUEST BODY
+    // =====================================================
+
+    const body = await request.json();
 
     const {
-      serviceID,
-      phone,
+      providerId,
+      phoneNumber,
       amount,
-    } = await req.json();
+    } = body;
 
-    // ==========================================
-    // VALIDATION
-    // ==========================================
-
-    if (!serviceID || !phone || !amount) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Network, phone number and amount are required.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    const airtimeAmount = Number(amount);
+    // =====================================================
+    // 3. VALIDATION
+    // =====================================================
 
     if (
-      !Number.isFinite(airtimeAmount) ||
-      airtimeAmount <= 0
+      providerId === undefined ||
+      providerId === null ||
+      !phoneNumber ||
+      amount === undefined ||
+      amount === null
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Invalid airtime amount.",
+          error:
+            "providerId, phoneNumber and amount are required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    // ==========================================
-    // CALCULATE 5% SERVICE FEE
-    // ==========================================
-    //
-    // Example:
-    //
-    // Airtime       = ₦1,000
-    // Service fee   = ₦50
-    // Customer pays = ₦1,050
-    //
-    // VTpass receives = ₦1,000
-    // Platform profit = ₦50
-    //
+    const numericAmount = Number(amount);
 
-    const serviceFee =
-      airtimeAmount * 0.05;
-
-    const totalAmount =
-      airtimeAmount + serviceFee;
-
-    // ==========================================
-    // FIND USER
-    // ==========================================
-
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          email: session.user.email,
+    if (
+      !Number.isFinite(numericAmount) ||
+      numericAmount <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid airtime amount.",
         },
-      });
+        { status: 400 }
+      );
+    }
+
+    // =====================================================
+    // 4. NORMALIZE PHONE NUMBER
+    // =====================================================
+
+    const cleanedPhone = String(phoneNumber)
+      .replace(/\s+/g, "")
+      .replace(/^\+234/, "0");
+
+    if (!/^0\d{10}$/.test(cleanedPhone)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Please enter a valid Nigerian phone number.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // =====================================================
+    // 5. FIND USER
+    // =====================================================
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+    });
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: "User not found.",
+          error: "User account could not be found.",
         },
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
     }
 
-    // ==========================================
-    // CHECK WALLET BALANCE
-    // ==========================================
+    // =====================================================
+    // 6. CHECK USER STATUS
+    // =====================================================
+
+    if (user.status !== "ACTIVE") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Your account is not active.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // =====================================================
+    // 7. CHECK CHEAPDATAHUB API KEY
+    // =====================================================
+
+    const apiKey =
+      process.env.CHEAPDATAHUB_API_KEY;
+
+    if (!apiKey) {
+      console.error(
+        "CHEAPDATAHUB_API_KEY is missing."
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "CheapDataHub API key is not configured.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // =====================================================
+    // 8. CHECK USER WALLET
+    // =====================================================
+
+    const walletBalance = Number(
+      user.walletBalance
+    );
 
     if (
-      user.walletBalance <
-      totalAmount
+      !Number.isFinite(walletBalance) ||
+      walletBalance < numericAmount
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: `Insufficient wallet balance. You need ₦${totalAmount.toLocaleString(
-            "en-NG",
-            {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            }
-          )}.`,
+          error: "Insufficient wallet balance.",
+          walletBalance,
+          required: numericAmount,
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    // ==========================================
-    // GENERATE REQUEST ID
-    // ==========================================
+    // =====================================================
+    // 9. GENERATE REFERENCE
+    // =====================================================
 
-    const requestId =
-      generateRequestId();
+    const reference =
+      `AIRTIME-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)
+        .toUpperCase()}`;
 
-    console.log(
-      "=========================================="
-    );
+    // =====================================================
+    // 10. CREATE PENDING TRANSACTION
+    // =====================================================
 
-    console.log(
-      "AIRTIME REQUEST ID:",
-      requestId
-    );
+    const transaction =
+      await prisma.transaction.create({
+        data: {
+          userId: user.id,
 
-    console.log(
-      "AIRTIME SERVICE:",
-      serviceID
-    );
+          type: "AIRTIME",
 
-    console.log(
-      "AIRTIME PHONE:",
-      String(phone).trim()
-    );
+          amount: numericAmount,
 
-    console.log(
-      "AIRTIME AMOUNT:",
-      airtimeAmount
-    );
+          description:
+            `Airtime purchase for ${cleanedPhone}`,
 
-    console.log(
-      "AIRTIME SERVICE FEE:",
-      serviceFee
-    );
+          status: "PENDING",
 
-    console.log(
-      "AIRTIME CUSTOMER CHARGE:",
-      totalAmount
-    );
+          reference,
 
-    // ==========================================
-    // VTPASS PAYLOAD
-    // ==========================================
+          provider: "CheapDataHub",
 
-    const payload = {
-      request_id: requestId,
-      serviceID,
-      amount: airtimeAmount,
-      phone: String(phone).trim(),
-    };
+          // We don't know the actual provider
+          // cost until the provider gives us one.
+          cost: 0,
 
-    console.log(
-      "AIRTIME PAYLOAD:",
-      payload
-    );
+          profit: 0,
+        },
+      });
 
-    // ==========================================
-    // SEND REQUEST TO VTPASS
-    // ==========================================
+    transactionId = transaction.id;
 
-    const response =
-      await axios.post(
-        `${vtpassConfig.baseUrl}/pay`,
-        payload,
-        {
-          headers: {
-            "api-key":
-              vtpassConfig.apiKey,
-            "secret-key":
-              vtpassConfig.secretKey,
-            "Content-Type":
-              "application/json",
-          },
-        }
-      );
+    // =====================================================
+    // 11. CALL CHEAPDATAHUB
+    // =====================================================
 
-    const vtpass =
-      response.data;
+    const providerResponse = await fetch(
+      CHEAPDATAHUB_API_URL,
+      {
+        method: "POST",
 
-    // ==========================================
-    // FULL VTPASS RESPONSE LOG
-    // ==========================================
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
 
-    console.log(
-      "AIRTIME VTPASS RESPONSE:",
-      vtpass
-    );
+        body: JSON.stringify({
+          provider_id: Number(providerId),
 
-    console.log(
-      "AIRTIME TRANSACTION DETAILS:",
-      JSON.stringify(
-        vtpass.content?.transactions,
-        null,
-        2
-      )
-    );
+          phone_number: cleanedPhone,
 
-    console.log(
-      "AIRTIME RESPONSE DESCRIPTION:",
-      vtpass.response_description
-    );
+          amount: Math.round(numericAmount),
+        }),
 
-    console.log(
-      "AIRTIME RESPONSE CODE:",
-      vtpass.code
-    );
-
-    console.log(
-      "AIRTIME TRANSACTION STATUS:",
-      vtpass.content?.transactions
-        ?.status
-    );
-
-    console.log(
-      "AIRTIME TRANSACTION ID:",
-      vtpass.content?.transactions
-        ?.transactionId
-    );
-
-    console.log(
-      "AIRTIME VTPASS AMOUNT:",
-      vtpass.amount
-    );
-
-    console.log(
-      "AIRTIME PURCHASED CODE:",
-      vtpass.purchased_code
-    );
-
-    // ==========================================
-    // CHECK TRANSACTION STATUS
-    // ==========================================
-
-    const transactionStatus =
-      vtpass.content?.transactions
-        ?.status ?? "unknown";
-
-    const isSuccessful =
-      vtpass.code === "000" &&
-      transactionStatus
-        .toLowerCase() ===
-        "delivered";
-
-    // ==========================================
-    // PURCHASE FAILED
-    // ==========================================
-
-    if (!isSuccessful) {
-      console.error(
-        "=========================================="
-      );
-
-      console.error(
-        "AIRTIME PURCHASE FAILED"
-      );
-
-      console.error(
-        "VTpass Code:",
-        vtpass.code
-      );
-
-      console.error(
-        "VTpass Description:",
-        vtpass.response_description
-      );
-
-      console.error(
-        "Transaction Status:",
-        transactionStatus
-      );
-
-      console.error(
-        "Transaction Details:",
-        JSON.stringify(
-          vtpass.content?.transactions,
-          null,
-          2
-        )
-      );
-
-      console.error(
-        "=========================================="
-      );
-
-      // ------------------------------------------
-      // SAVE FAILED TRANSACTION
-      // ------------------------------------------
-      //
-      // Important:
-      // Failed transactions do NOT count toward
-      // revenue or profit.
-      //
-
-      try {
-        await prisma.transaction.create({
-          data: {
-            userId: user.id,
-
-            type: "AIRTIME",
-
-            provider:
-              serviceID.toUpperCase(),
-
-            amount: totalAmount,
-
-            cost: 0,
-
-            profit: 0,
-
-            reference: requestId,
-
-            status:
-              transactionStatus.toUpperCase(),
-
-            description:
-              vtpass.response_description ||
-              "Airtime purchase failed",
-          },
-        });
-      } catch (
-        transactionError: any
-      ) {
-        console.error(
-          "FAILED TRANSACTION LOG:",
-          transactionError.message
-        );
+        cache: "no-store",
       }
+    );
 
-      // ------------------------------------------
-      // WALLET IS NOT DEDUCTED
-      // ------------------------------------------
+    const responseText =
+      await providerResponse.text();
+
+    console.log(
+      "======================================"
+    );
+
+    console.log(
+      "CHEAPDATAHUB AIRTIME STATUS:",
+      providerResponse.status
+    );
+
+    console.log(
+      "CHEAPDATAHUB AIRTIME RESPONSE:",
+      responseText
+    );
+
+    console.log(
+      "======================================"
+    );
+
+    // =====================================================
+    // 12. PARSE PROVIDER RESPONSE
+    // =====================================================
+
+    let providerResult: any;
+
+    try {
+      providerResult = responseText.trim()
+        ? JSON.parse(responseText)
+        : null;
+    } catch {
+      providerResult = null;
+    }
+
+    // =====================================================
+    // 13. INVALID PROVIDER RESPONSE
+    // =====================================================
+
+    if (!providerResult) {
+      await prisma.transaction.update({
+        where: {
+          id: transaction.id,
+        },
+
+        data: {
+          status: "FAILED",
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "CheapDataHub returned an invalid response.",
+          providerStatus:
+            providerResponse.status,
+        },
+        { status: 502 }
+      );
+    }
+
+    // =====================================================
+    // 14. DETERMINE PROVIDER SUCCESS
+    // =====================================================
+
+    const providerSuccess =
+      providerResult.success === true ||
+      providerResult.status === true ||
+      providerResult.status === "true" ||
+      providerResult.status === "success";
+
+    // =====================================================
+    // 15. PROVIDER FAILED
+    // =====================================================
+
+    if (
+      !providerResponse.ok ||
+      !providerSuccess
+    ) {
+      await prisma.transaction.update({
+        where: {
+          id: transaction.id,
+        },
+
+        data: {
+          status: "FAILED",
+        },
+      });
 
       return NextResponse.json(
         {
           success: false,
 
-          message:
-            vtpass.response_description ||
+          error:
+            providerResult.message ||
+            providerResult.error ||
             "Airtime purchase failed.",
 
-          code: vtpass.code,
-
-          status:
-            transactionStatus,
-
-          data: vtpass,
+          providerResponse: providerResult,
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    // ==========================================
-    // SUCCESS
-    // ==========================================
+    // =====================================================
+    // 16. DETERMINE PROVIDER COST
+    // =====================================================
     //
-    // Customer pays:
+    // If CheapDataHub returns a cost/amount field,
+    // use it.
     //
-    // airtimeAmount + serviceFee
+    // Otherwise the cost defaults to the amount paid
+    // to CheapDataHub.
     //
-    // Example:
-    //
-    // Customer charge = ₦1,050
-    // Provider cost   = ₦1,000
-    // Platform profit = ₦50
-    //
-
-    const revenue =
-      totalAmount;
+    // Later, if you have different airtime reseller
+    // pricing, this is where we can introduce the
+    // actual provider cost and calculate profit.
+    // =====================================================
 
     const providerCost =
-      airtimeAmount;
+      Number(
+        providerResult.cost ??
+        providerResult.amount_charged ??
+        providerResult.amountCharged ??
+        numericAmount
+      );
+
+    const actualCost =
+      Number.isFinite(providerCost) &&
+      providerCost >= 0
+        ? providerCost
+        : numericAmount;
+
+    // =====================================================
+    // 17. CALCULATE BUSINESS PROFIT
+    // =====================================================
 
     const profit =
-      revenue - providerCost;
+      numericAmount - actualCost;
 
-    // ==========================================
-    // SAVE TRANSACTION + DEDUCT WALLET
-    // ==========================================
+    // =====================================================
+    // 18. COMPLETE EVERYTHING ATOMICALLY
+    // =====================================================
+    //
+    // User wallet:
+    //
+    //     - amount
+    //
+    // Business wallet:
+    //
+    //     + revenue
+    //     - provider cost
+    //
+    // Business profit:
+    //
+    //     amount - provider cost
+    //
+    // BusinessRevenue:
+    //
+    //     stores the complete breakdown.
+    // =====================================================
 
-    await prisma.$transaction(
-      async (tx) => {
-        // ----------------------------------------
-        // SAVE SUCCESSFUL TRANSACTION
-        // ----------------------------------------
+    const result =
+      await prisma.$transaction(
+        async (tx) => {
+          // -----------------------------------------------
+          // Get fresh user balance
+          // -----------------------------------------------
 
-        await tx.transaction.create({
-          data: {
-            userId: user.id,
+          const currentUser =
+            await tx.user.findUnique({
+              where: {
+                id: user.id,
+              },
+            });
 
-            type: "AIRTIME",
+          if (!currentUser) {
+            throw new Error(
+              "User account could not be found."
+            );
+          }
 
-            provider:
-              serviceID.toUpperCase(),
+          const currentBalance =
+            Number(
+              currentUser.walletBalance
+            );
 
-            // Money charged to customer
-            amount: revenue,
+          if (
+            !Number.isFinite(
+              currentBalance
+            ) ||
+            currentBalance < numericAmount
+          ) {
+            throw new Error(
+              "Insufficient wallet balance."
+            );
+          }
 
-            // Money paid to VTpass
-            cost: providerCost,
+          // -----------------------------------------------
+          // Get or create BusinessWallet
+          // -----------------------------------------------
 
-            // Platform earnings
-            profit,
+          let businessWallet =
+            await tx.businessWallet.findUnique({
+              where: {
+                name: "Brainfriend Tech",
+              },
+            });
 
-            reference: requestId,
+          if (!businessWallet) {
+            businessWallet =
+              await tx.businessWallet.create({
+                data: {
+                  name: "Brainfriend Tech",
 
-            status: "SUCCESS",
+                  balance: 0,
 
-            description:
-              `₦${airtimeAmount.toLocaleString(
-                "en-NG"
-              )} airtime + 5% service fee (₦${serviceFee.toLocaleString(
-                "en-NG",
-                {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                }
-              )})`,
-          },
-        });
+                  totalRevenue: 0,
 
-        // ----------------------------------------
-        // DEDUCT CUSTOMER WALLET
-        // ----------------------------------------
+                  totalCost: 0,
 
-        await tx.user.update({
-          where: {
-            id: user.id,
-          },
+                  totalProfit: 0,
 
-          data: {
-            walletBalance: {
-              decrement:
-                totalAmount,
+                  withdrawnProfit: 0,
+
+                  availableProfit: 0,
+                },
+              });
+          }
+
+          // -----------------------------------------------
+          // New user wallet balance
+          // -----------------------------------------------
+
+          const newUserBalance =
+            currentBalance -
+            numericAmount;
+
+          // -----------------------------------------------
+          // New business wallet values
+          // -----------------------------------------------
+
+          const newBusinessBalance =
+            Number(
+              businessWallet.balance
+            ) + profit;
+
+          const newTotalRevenue =
+            Number(
+              businessWallet.totalRevenue
+            ) + numericAmount;
+
+          const newTotalCost =
+            Number(
+              businessWallet.totalCost
+            ) + actualCost;
+
+          const newTotalProfit =
+            Number(
+              businessWallet.totalProfit
+            ) + profit;
+
+          const newAvailableProfit =
+            Number(
+              businessWallet.availableProfit
+            ) + profit;
+
+          // -----------------------------------------------
+          // Update USER wallet
+          // -----------------------------------------------
+
+          await tx.user.update({
+            where: {
+              id: user.id,
             },
-          },
-        });
-      }
-    );
 
-    // ==========================================
-    // SUCCESS LOG
-    // ==========================================
+            data: {
+              walletBalance:
+                newUserBalance,
+            },
+          });
 
-    console.log(
-      "=========================================="
-    );
+          // -----------------------------------------------
+          // Update TRANSACTION
+          // -----------------------------------------------
 
-    console.log(
-      "AIRTIME PURCHASE SUCCESSFUL"
-    );
+          await tx.transaction.update({
+            where: {
+              id: transaction.id,
+            },
 
-    console.log(
-      "AIRTIME AMOUNT:",
-      airtimeAmount
-    );
+            data: {
+              status: "SUCCESS",
 
-    console.log(
-      "SERVICE FEE:",
-      serviceFee
-    );
+              cost: actualCost,
 
-    console.log(
-      "CUSTOMER CHARGE:",
-      revenue
-    );
+              profit,
+            },
+          });
 
-    console.log(
-      "PROVIDER COST:",
-      providerCost
-    );
+          // -----------------------------------------------
+          // Update BUSINESS WALLET
+          // -----------------------------------------------
 
-    console.log(
-      "PLATFORM PROFIT:",
-      profit
-    );
+          await tx.businessWallet.update({
+            where: {
+              id: businessWallet.id,
+            },
 
-    console.log(
-      "TOTAL DEDUCTED:",
-      totalAmount
-    );
+            data: {
+              balance:
+                newBusinessBalance,
 
-    console.log(
-      "=========================================="
-    );
+              totalRevenue:
+                newTotalRevenue,
 
-    // ==========================================
-    // RESPONSE
-    // ==========================================
+              totalCost:
+                newTotalCost,
+
+              totalProfit:
+                newTotalProfit,
+
+              availableProfit:
+                newAvailableProfit,
+            },
+          });
+
+          // -----------------------------------------------
+          // Create BUSINESS REVENUE record
+          // -----------------------------------------------
+
+          await tx.businessRevenue.create({
+            data: {
+              transactionId:
+                transaction.id,
+
+              type: "AIRTIME",
+
+              provider:
+                "CheapDataHub",
+
+              amount:
+                numericAmount,
+
+              cost:
+                actualCost,
+
+              profit,
+
+              reference,
+
+              description:
+                `Airtime purchase for ${cleanedPhone}`,
+
+              businessWalletId:
+                businessWallet.id,
+            },
+          });
+
+          return {
+            walletBalance:
+              newUserBalance,
+
+            businessBalance:
+              newBusinessBalance,
+
+            profit,
+          };
+        }
+      );
+
+    // =====================================================
+    // 19. SUCCESS RESPONSE
+    // =====================================================
 
     return NextResponse.json({
       success: true,
 
       message:
-        "Airtime purchased successfully.",
+        providerResult.message ||
+        "Airtime purchase successful.",
+
+      reference,
+
+      providerReference:
+        providerResult.reference ||
+        providerResult.transaction_id ||
+        providerResult.transactionId ||
+        null,
+
+      phoneNumber:
+        cleanedPhone,
 
       amount:
-        airtimeAmount,
+        numericAmount,
 
-      serviceFee,
+      providerCost:
+        actualCost,
 
-      totalAmount,
+      profit:
+        result.profit,
 
-      revenue,
-
-      cost:
-        providerCost,
-
-      profit,
-
-      vtpass,
+      walletBalance:
+        result.walletBalance,
     });
   } catch (error: any) {
-    // ==========================================
+    // =====================================================
     // ERROR HANDLING
-    // ==========================================
+    // =====================================================
 
     console.error(
-      "=========================================="
+      "AIRTIME PURCHASE ERROR:",
+      error
     );
 
-    console.error(
-      "FULL VTPASS AIRTIME ERROR:"
-    );
+    // -----------------------------------------------------
+    // If a transaction was created but something failed
+    // afterwards, mark it as failed.
+    // -----------------------------------------------------
 
-    console.error(
-      "ERROR RESPONSE:",
-      error.response?.data
-    );
+    if (transactionId) {
+      try {
+        await prisma.transaction.update({
+          where: {
+            id: transactionId,
+          },
 
-    console.error(
-      "ERROR MESSAGE:",
-      error.message
-    );
-
-    console.error(
-      "=========================================="
-    );
+          data: {
+            status: "FAILED",
+          },
+        });
+      } catch (updateError) {
+        console.error(
+          "FAILED TO UPDATE AIRTIME TRANSACTION:",
+          updateError
+        );
+      }
+    }
 
     return NextResponse.json(
       {
         success: false,
 
-        message:
-          error.response?.data
-            ?.response_description ||
-          error.response?.data
-            ?.message ||
+        error:
+          error?.message ||
           "Airtime purchase failed.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
-

@@ -1,97 +1,271 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import axios from "axios";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { vtpassConfig } from "@/lib/vtpass";
-import { generateRequestId } from "@/lib/requestId";
+import { authOptions } from "@/lib/auth";
 
-export async function POST(req: NextRequest) {
+const CHEAPDATAHUB_CABLE_URL =
+  "https://www.cheapdatahub.ng/api/v1/resellers/cable/purchase/";
+
+const cablePlans: Record<
+  number,
+  {
+    provider: string;
+    name: string;
+    price: number;
+  }
+> = {
+  3: {
+    provider: "DSTV",
+    name: "DStv Padi",
+    price: 4400,
+  },
+  4: {
+    provider: "GOTV",
+    name: "GOtv Smallie-monthly",
+    price: 1900,
+  },
+  5: {
+    provider: "STARTIMES",
+    name: "Nova (antenna) -1 week",
+    price: 700,
+  },
+  6: {
+    provider: "DSTV",
+    name: "DStv Yanga",
+    price: 6000,
+  },
+  7: {
+    provider: "DSTV",
+    name: "DStv Confam",
+    price: 11000,
+  },
+  8: {
+    provider: "DSTV",
+    name: "DStv Compact",
+    price: 19000,
+  },
+  9: {
+    provider: "DSTV",
+    name: "DStv Compact Plus",
+    price: 30000,
+  },
+  10: {
+    provider: "DSTV",
+    name: "DStv Premium",
+    price: 44500,
+  },
+  11: {
+    provider: "GOTV",
+    name: "GOtv Jinja",
+    price: 3900,
+  },
+  12: {
+    provider: "GOTV",
+    name: "Gotv Jolli",
+    price: 5800,
+  },
+  13: {
+    provider: "GOTV",
+    name: "GOtv Max",
+    price: 8500,
+  },
+  14: {
+    provider: "GOTV",
+    name: "GOtv Supa",
+    price: 11400,
+  },
+  15: {
+    provider: "GOTV",
+    name: "GOtv Supa Plus",
+    price: 16800,
+  },
+  16: {
+    provider: "STARTIMES",
+    name: "Nova (Dish) - 1 Week",
+    price: 700,
+  },
+  17: {
+    provider: "STARTIMES",
+    name: "Nova (Antenna) - 1 Month",
+    price: 2100,
+  },
+  18: {
+    provider: "STARTIMES",
+    name: "Basic (Antenna) -1 Week",
+    price: 1400,
+  },
+  19: {
+    provider: "STARTIMES",
+    name: "Basic (Dish) - 1 week",
+    price: 1700,
+  },
+  20: {
+    provider: "STARTIMES",
+    name: "Basic (Antenna)- 1 month",
+    price: 4000,
+  },
+  21: {
+    provider: "STARTIMES",
+    name: "Basic (dish) - 1Month",
+    price: 5100,
+  },
+  22: {
+    provider: "STARTIMES",
+    name: "Classic (Dish) - 1 Week",
+    price: 2500,
+  },
+  23: {
+    provider: "STARTIMES",
+    name: "Classic (Dish) -1 Month",
+    price: 7400,
+  },
+  24: {
+    provider: "STARTIMES",
+    name: "Super (Dish) - 1 Week",
+    price: 3300,
+  },
+  25: {
+    provider: "STARTIMES",
+    name: "Super (Antenna) - 1 week",
+    price: 3200,
+  },
+  26: {
+    provider: "STARTIMES",
+    name: "Super (Antenna) -1 Month",
+    price: 9500,
+  },
+};
+
+export async function POST(request: NextRequest) {
+  let transactionId: string | null = null;
+
   try {
-    /*
-     * ==========================================
-     * AUTHENTICATION
-     * ==========================================
-     */
+    // ==========================================
+    // 1. AUTHENTICATION
+    // ==========================================
 
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.email) {
+    if (!session?.user?.id) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized",
+          message: "You must be logged in.",
         },
-        {
-          status: 401,
-        }
+        { status: 401 }
       );
     }
 
-    /*
-     * ==========================================
-     * GET REQUEST DATA
-     * ==========================================
-     */
+    const userId = session.user.id;
+
+    // ==========================================
+    // 2. REQUEST BODY
+    // ==========================================
+
+    const body = await request.json();
 
     const {
-      serviceID,
-      variation_code,
+      plan_id,
+      planId,
+      cardnumber,
       smartCard,
-      amount,
       phone,
-    } = await req.json();
+    } = body;
 
-    /*
-     * ==========================================
-     * VALIDATION
-     * ==========================================
-     */
+    const finalPlanId = plan_id ?? planId;
+    const finalCardNumber = cardnumber ?? smartCard;
 
     if (
-      !serviceID ||
-      !variation_code ||
-      !smartCard ||
-      !amount
+      finalPlanId === undefined ||
+      finalPlanId === null ||
+      !finalCardNumber ||
+      !phone
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: "All fields are required.",
+          message:
+            "plan_id, cardnumber and phone are required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    const cableAmount = Number(amount);
+    // ==========================================
+    // 3. VALIDATE PLAN ID
+    // ==========================================
+
+    const numericPlanId = Number(finalPlanId);
 
     if (
-      !Number.isFinite(cableAmount) ||
-      cableAmount <= 0
+      !Number.isInteger(numericPlanId) ||
+      numericPlanId <= 0
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Invalid subscription amount.",
+          message: "Invalid cable plan ID.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * FIND USER
-     * ==========================================
-     */
+    const plan = cablePlans[numericPlanId];
+
+    if (!plan) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Cable plan not found.",
+        },
+        { status: 404 }
+      );
+    }
+
+    // ==========================================
+    // 4. VALIDATE IUC / SMART CARD
+    // ==========================================
+
+    const cleanedCard = String(finalCardNumber)
+      .replace(/\s+/g, "");
+
+    if (!/^\d{6,20}$/.test(cleanedCard)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Please enter a valid IUC/Smart Card number.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // ==========================================
+    // 5. VALIDATE PHONE
+    // ==========================================
+
+    const cleanedPhone = String(phone)
+      .replace(/\s+/g, "")
+      .replace(/^\+234/, "0");
+
+    if (!/^0\d{10}$/.test(cleanedPhone)) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Please enter a valid Nigerian phone number.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // ==========================================
+    // 6. FIND USER
+    // ==========================================
 
     const user = await prisma.user.findUnique({
       where: {
-        email: session.user.email,
+        id: userId,
       },
     });
 
@@ -101,457 +275,648 @@ export async function POST(req: NextRequest) {
           success: false,
           message: "User not found.",
         },
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
     }
 
-    /*
-     * ==========================================
-     * 5% PLATFORM SERVICE FEE
-     * ==========================================
-     *
-     * Example:
-     *
-     * Cable subscription = ₦2,000
-     * Service fee = ₦100
-     * Total deduction = ₦2,100
-     *
-     * VTpass receives only ₦2,000.
-     */
+    if (user.status !== "ACTIVE") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Your account is not active.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // ==========================================
+    // 7. API KEY
+    // ==========================================
+
+    const apiKey =
+      process.env.CHEAPDATAHUB_API_KEY;
+
+    if (!apiKey) {
+      console.error(
+        "CHEAPDATAHUB_API_KEY is missing."
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "CheapDataHub API key is not configured.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // ==========================================
+    // 8. CUSTOMER PRICE
+    // ==========================================
+
+    const subscriptionAmount = Number(
+      plan.price
+    );
+
+    // ==========================================
+    // 9. SERVICE FEE
+    // ==========================================
 
     const serviceFee =
-      cableAmount * 0.05;
+      subscriptionAmount * 0.05;
+
+    // ==========================================
+    // 10. TOTAL CUSTOMER PAYMENT
+    // ==========================================
 
     const totalAmount =
-      cableAmount + serviceFee;
+      subscriptionAmount + serviceFee;
 
-    /*
-     * ==========================================
-     * CHECK WALLET BALANCE
-     * ==========================================
-     */
+    // ==========================================
+    // 11. PROVIDER COST
+    // ==========================================
+    //
+    // IMPORTANT:
+    // At the moment we do not have a separate
+    // CheapDataHub cable reseller cost in the
+    // plan list.
+    //
+    // Therefore:
+    //
+    // provider cost = subscription amount
+    // business profit = service fee
+    //
+    // Later, if CheapDataHub gives us a lower
+    // actual cost, we can replace this value.
+    // ==========================================
+
+    const providerCost =
+      subscriptionAmount;
+
+    const profit =
+      totalAmount - providerCost;
+
+    // ==========================================
+    // 12. CHECK USER WALLET
+    // ==========================================
+
+    const walletBalance =
+      Number(user.walletBalance);
 
     if (
-      user.walletBalance <
-      totalAmount
+      !Number.isFinite(walletBalance) ||
+      walletBalance < totalAmount
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: `Insufficient wallet balance. You need ₦${totalAmount.toLocaleString(
-            "en-NG",
-            {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            }
-          )}.`,
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    /*
-     * ==========================================
-     * GENERATE REQUEST ID
-     * ==========================================
-     */
-
-    const requestId =
-      generateRequestId();
-
-    /*
-     * ==========================================
-     * CUSTOMER PHONE
-     * ==========================================
-     */
-
-    const customerPhone =
-      String(
-        phone ||
-          user.phone ||
-          ""
-      ).trim();
-
-    if (!customerPhone) {
-      return NextResponse.json(
-        {
-          success: false,
           message:
-            "Phone number is required.",
+            "Insufficient wallet balance.",
+          balance: walletBalance,
+          required: totalAmount,
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * BUILD VTPASS PAYLOAD
-     * ==========================================
-     *
-     * IMPORTANT:
-     * VTpass receives only the actual
-     * subscription amount.
-     *
-     * The 5% service fee belongs
-     * to your platform.
-     */
+    // ==========================================
+    // 13. GENERATE REFERENCE
+    // ==========================================
 
-    const payload = {
-      request_id: requestId,
+    const reference =
+      `CABLE-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)
+        .toUpperCase()}`;
 
-      serviceID:
-        String(serviceID).trim(),
+    // ==========================================
+    // 14. CREATE PENDING TRANSACTION
+    // ==========================================
 
-      billersCode:
-        String(smartCard).trim(),
+    const transaction =
+      await prisma.transaction.create({
+        data: {
+          userId: user.id,
 
-      variation_code:
-        String(variation_code).trim(),
+          type: "CABLE",
 
-      amount:
-        cableAmount,
+          amount: totalAmount,
 
-      phone:
-        customerPhone,
+          description:
+            `${plan.provider} ${plan.name} for ${cleanedCard}`,
+
+          status: "PENDING",
+
+          reference,
+
+          provider: "CheapDataHub",
+
+          cost: providerCost,
+
+          profit,
+        },
+      });
+
+    transactionId = transaction.id;
+
+    // ==========================================
+    // 15. CALL CHEAPDATAHUB
+    // ==========================================
+
+    const requestBody = {
+      plan_id: numericPlanId,
+      cardnumber: cleanedCard,
+      phone: cleanedPhone,
     };
 
     console.log(
-      "=========================================="
+      "========== CHEAPDATAHUB CABLE REQUEST =========="
     );
 
     console.log(
-      "CABLE REQUEST ID:",
-      requestId
+      "URL:",
+      CHEAPDATAHUB_CABLE_URL
     );
 
     console.log(
-      "CABLE PAYLOAD:",
-      payload
+      "REQUEST:",
+      requestBody
     );
 
     console.log(
-      "CABLE AMOUNT:",
-      cableAmount
+      "API KEY EXISTS:",
+      !!apiKey
     );
 
     console.log(
-      "SERVICE FEE:",
-      serviceFee
+      "================================================="
     );
 
-    console.log(
-      "TOTAL DEDUCTED:",
-      totalAmount
-    );
-
-    console.log(
-      "=========================================="
-    );
-
-    /*
-     * ==========================================
-     * SEND PAYMENT TO VTPASS
-     * ==========================================
-     */
-
-    const response =
-      await axios.post(
-        `${vtpassConfig.baseUrl}/pay`,
-        payload,
+    const providerResponse =
+      await fetch(
+        CHEAPDATAHUB_CABLE_URL,
         {
-          headers: {
-            "api-key":
-              vtpassConfig.apiKey,
+          method: "POST",
 
-            "secret-key":
-              vtpassConfig.secretKey,
+          headers: {
+            Authorization:
+              `Bearer ${apiKey}`,
 
             "Content-Type":
               "application/json",
+
+            Accept:
+              "application/json",
           },
+
+          body: JSON.stringify(
+            requestBody
+          ),
+
+          cache: "no-store",
         }
       );
 
-    const vtpass =
-      response.data;
+    const responseText =
+      await providerResponse.text();
 
     console.log(
-      "CABLE VTPASS RESPONSE:",
-      vtpass
-    );
-
-    /*
-     * ==========================================
-     * TRANSACTION STATUS
-     * ==========================================
-     */
-
-    const transactionStatus =
-      vtpass.content
-        ?.transactions
-        ?.status ||
-      "unknown";
-
-    console.log(
-      "CABLE RESPONSE CODE:",
-      vtpass.code
+      "CHEAPDATAHUB CABLE STATUS:",
+      providerResponse.status
     );
 
     console.log(
-      "CABLE RESPONSE DESCRIPTION:",
-      vtpass.response_description
+      "CHEAPDATAHUB CABLE RESPONSE:",
+      responseText
     );
 
-    console.log(
-      "CABLE TRANSACTION STATUS:",
-      transactionStatus
-    );
+    // ==========================================
+    // 16. PARSE PROVIDER RESPONSE
+    // ==========================================
 
-    /*
-     * ==========================================
-     * SUCCESS CHECK
-     * ==========================================
-     */
+    let providerResult: any = null;
 
-    const isSuccessful =
-      vtpass.code === "000" &&
-      transactionStatus
-        .toLowerCase() ===
-        "delivered";
-
-    /*
-     * ==========================================
-     * PURCHASE FAILED
-     * ==========================================
-     *
-     * DO NOT deduct wallet.
-     */
-
-    if (!isSuccessful) {
+    if (responseText.trim()) {
       try {
-        await prisma.transaction.create({
-          data: {
-            userId:
-              user.id,
-
-            type:
-              "CABLE",
-
-            provider:
-              serviceID.toUpperCase(),
-
-            amount:
-              totalAmount,
-
-            reference:
-              requestId,
-
-            status:
-              transactionStatus.toUpperCase(),
-
-            description:
-              vtpass.response_description ||
-              "Cable subscription failed",
-          },
-        });
-      } catch (
-        transactionError: any
-      ) {
-        console.error(
-          "FAILED CABLE TRANSACTION LOG:",
-          transactionError.message
-        );
+        providerResult =
+          JSON.parse(responseText);
+      } catch {
+        providerResult = null;
       }
+    }
+
+    // ==========================================
+    // 17. INVALID PROVIDER RESPONSE
+    // ==========================================
+
+    if (!providerResult) {
+      await prisma.transaction.update({
+        where: {
+          id: transaction.id,
+        },
+
+        data: {
+          status: "FAILED",
+        },
+      });
 
       return NextResponse.json(
         {
           success: false,
 
           message:
-            vtpass.response_description ||
-            "Cable subscription failed.",
+            "CheapDataHub returned an invalid response.",
 
-          data: vtpass,
+          providerStatus:
+            providerResponse.status,
+
+          providerResponse:
+            responseText.substring(0, 500),
         },
-        {
-          status: 400,
-        }
+        { status: 502 }
       );
     }
 
-    /*
-     * ==========================================
-     * SUCCESS
-     *
-     * Save transaction and deduct wallet
-     * atomically.
-     * ==========================================
-     */
+    // ==========================================
+    // 18. CHECK PROVIDER SUCCESS
+    // ==========================================
 
-    await prisma.$transaction(
-      async (tx) => {
-        /*
-         * Save successful transaction
-         */
+    const providerSuccess =
+      providerResult?.status === true ||
+      providerResult?.status === "true" ||
+      providerResult?.status === "success" ||
+      providerResult?.success === true;
 
-        await tx.transaction.create({
-          data: {
-            userId:
-              user.id,
+    if (
+      !providerResponse.ok ||
+      !providerSuccess
+    ) {
+      await prisma.transaction.update({
+        where: {
+          id: transaction.id,
+        },
 
-            type:
-              "CABLE",
+        data: {
+          status: "FAILED",
+        },
+      });
 
-            provider:
-              serviceID.toUpperCase(),
+      return NextResponse.json(
+        {
+          success: false,
 
-            amount:
-              totalAmount,
+          message:
+            providerResult?.message ||
+            providerResult?.error ||
+            providerResult?.response_description ||
+            "Cable subscription failed.",
 
-            reference:
-              requestId,
+          providerStatus:
+            providerResponse.status,
 
-            status:
-              "SUCCESS",
+          providerResponse:
+            providerResult,
+        },
+        { status: 400 }
+      );
+    }
 
-            description: `₦${cableAmount.toLocaleString(
-              "en-NG"
-            )} cable subscription + 5% service fee (₦${serviceFee.toLocaleString(
-              "en-NG",
-              {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              }
-            )})`,
-          },
-        });
+    // ==========================================
+    // 19. FINAL DATABASE TRANSACTION
+    // ==========================================
+    //
+    // Everything below happens atomically:
+    //
+    // USER WALLET
+    //       ↓
+    // transaction
+    //       ↓
+    // BusinessRevenue
+    //       ↓
+    // BusinessWallet
+    //
+    // If anything fails, everything rolls back.
+    // ==========================================
 
-        /*
-         * Deduct subscription amount
-         * + platform service fee
-         */
+    const finalResult =
+      await prisma.$transaction(
+        async (tx) => {
+          // --------------------------------------
+          // GET FRESH USER BALANCE
+          // --------------------------------------
 
-        await tx.user.update({
-          where: {
-            id: user.id,
-          },
+          const freshUser =
+            await tx.user.findUnique({
+              where: {
+                id: user.id,
+              },
+              select: {
+                id: true,
+                walletBalance: true,
+              },
+            });
 
-          data: {
-            walletBalance: {
-              decrement:
-                totalAmount,
+          if (!freshUser) {
+            throw new Error(
+              "User not found."
+            );
+          }
+
+          const freshBalance =
+            Number(
+              freshUser.walletBalance
+            );
+
+          if (
+            !Number.isFinite(
+              freshBalance
+            ) ||
+            freshBalance < totalAmount
+          ) {
+            throw new Error(
+              "Insufficient wallet balance."
+            );
+          }
+
+          // --------------------------------------
+          // FIND OR CREATE BUSINESS WALLET
+          // --------------------------------------
+
+          let businessWallet =
+            await tx.businessWallet.findUnique({
+              where: {
+                name: "Brainfriend Tech",
+              },
+            });
+
+          if (!businessWallet) {
+            businessWallet =
+              await tx.businessWallet.create({
+                data: {
+                  name: "Brainfriend Tech",
+
+                  balance: 0,
+
+                  totalRevenue: 0,
+
+                  totalCost: 0,
+
+                  totalProfit: 0,
+
+                  withdrawnProfit: 0,
+
+                  availableProfit: 0,
+                },
+              });
+          }
+
+          // --------------------------------------
+          // NEW USER BALANCE
+          // --------------------------------------
+
+          const newUserBalance =
+            freshBalance -
+            totalAmount;
+
+          // --------------------------------------
+          // BUSINESS WALLET VALUES
+          // --------------------------------------
+
+          const newBusinessBalance =
+            Number(
+              businessWallet.balance
+            ) + profit;
+
+          const newTotalRevenue =
+            Number(
+              businessWallet.totalRevenue
+            ) + totalAmount;
+
+          const newTotalCost =
+            Number(
+              businessWallet.totalCost
+            ) + providerCost;
+
+          const newTotalProfit =
+            Number(
+              businessWallet.totalProfit
+            ) + profit;
+
+          const newAvailableProfit =
+            Number(
+              businessWallet.availableProfit
+            ) + profit;
+
+          // --------------------------------------
+          // UPDATE USER WALLET
+          // --------------------------------------
+
+          await tx.user.update({
+            where: {
+              id: user.id,
             },
-          },
-        });
-      }
-    );
 
-    /*
-     * ==========================================
-     * SUCCESS LOG
-     * ==========================================
-     */
+            data: {
+              walletBalance:
+                newUserBalance,
+            },
+          });
 
-    console.log(
-      "=========================================="
-    );
+          // --------------------------------------
+          // UPDATE ORIGINAL TRANSACTION
+          // --------------------------------------
 
-    console.log(
-      "CABLE PURCHASE SUCCESSFUL"
-    );
+          await tx.transaction.update({
+            where: {
+              id: transaction.id,
+            },
 
-    console.log(
-      "CABLE AMOUNT:",
-      cableAmount
-    );
+            data: {
+              status: "SUCCESS",
 
-    console.log(
-      "SERVICE FEE:",
-      serviceFee
-    );
+              amount: totalAmount,
 
-    console.log(
-      "TOTAL DEDUCTED:",
-      totalAmount
-    );
+              cost: providerCost,
 
-    console.log(
-      "CABLE SMART CARD:",
-      smartCard
-    );
+              profit,
+            },
+          });
 
-    console.log(
-      "=========================================="
-    );
+          // --------------------------------------
+          // UPDATE BUSINESS WALLET
+          // --------------------------------------
 
-    /*
-     * ==========================================
-     * SUCCESS RESPONSE
-     * ==========================================
-     */
+          await tx.businessWallet.update({
+            where: {
+              id: businessWallet.id,
+            },
+
+            data: {
+              balance:
+                newBusinessBalance,
+
+              totalRevenue:
+                newTotalRevenue,
+
+              totalCost:
+                newTotalCost,
+
+              totalProfit:
+                newTotalProfit,
+
+              availableProfit:
+                newAvailableProfit,
+            },
+          });
+
+          // --------------------------------------
+          // CREATE BUSINESS REVENUE RECORD
+          // --------------------------------------
+
+          await tx.businessRevenue.create({
+            data: {
+              transactionId:
+                transaction.id,
+
+              type: "CABLE",
+
+              provider:
+                "CheapDataHub",
+
+              amount:
+                totalAmount,
+
+              cost:
+                providerCost,
+
+              profit,
+
+              reference,
+
+              description:
+                `${plan.provider} ${plan.name} for ${cleanedCard}`,
+
+              businessWalletId:
+                businessWallet.id,
+            },
+          });
+
+          return {
+            walletBalance:
+              newUserBalance,
+
+            businessBalance:
+              newBusinessBalance,
+
+            totalRevenue:
+              newTotalRevenue,
+
+            totalCost:
+              newTotalCost,
+
+            totalProfit:
+              newTotalProfit,
+
+            availableProfit:
+              newAvailableProfit,
+
+            profit,
+          };
+        }
+      );
+
+    // ==========================================
+    // 20. SUCCESS RESPONSE
+    // ==========================================
 
     return NextResponse.json({
       success: true,
 
       message:
+        providerResult?.message ||
         "Cable subscription successful.",
 
+      reference,
+
+      providerReference:
+        providerResult?.reference ||
+        providerResult?.transaction_id ||
+        providerResult?.transactionId ||
+        null,
+
       amount:
-        cableAmount,
+        subscriptionAmount,
 
       serviceFee,
 
       totalAmount,
 
-      vtpass,
+      providerCost,
+
+      profit:
+        finalResult.profit,
+
+      walletBalance:
+        finalResult.walletBalance,
+
+      plan: {
+        id: numericPlanId,
+
+        provider:
+          plan.provider,
+
+        name:
+          plan.name,
+      },
+
+      cardnumber:
+        cleanedCard,
+
+      phone:
+        cleanedPhone,
+
+      providerResponse:
+        providerResult,
     });
   } catch (error: any) {
-    /*
-     * ==========================================
-     * ERROR HANDLING
-     * ==========================================
-     */
-
     console.error(
-      "=========================================="
+      "CABLE PURCHASE ERROR:",
+      error
     );
 
-    console.error(
-      "FULL CABLE VTPASS ERROR:"
-    );
+    // ==========================================
+    // MARK TRANSACTION FAILED
+    // ==========================================
 
-    console.error(
-      error?.response?.data ||
-        error?.message ||
-        error
-    );
+    if (transactionId) {
+      try {
+        await prisma.transaction.update({
+          where: {
+            id: transactionId,
+          },
 
-    console.error(
-      "=========================================="
-    );
+          data: {
+            status: "FAILED",
+          },
+        });
+      } catch (updateError) {
+        console.error(
+          "FAILED TO UPDATE CABLE TRANSACTION:",
+          updateError
+        );
+      }
+    }
 
     return NextResponse.json(
       {
         success: false,
 
         message:
-          error?.response?.data
-            ?.response_description ||
-          error?.response?.data
-            ?.message ||
           error?.message ||
-          "Cable subscription failed.",
+          "Cable purchase failed.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
-

@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -67,9 +68,7 @@ export default function AdminSidebar() {
 
       <aside
         className={`fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-indigo-700 p-5 text-white shadow-xl transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
-          isOpen
-            ? "translate-x-0"
-            : "-translate-x-full"
+          isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         {/* HEADER */}
@@ -118,7 +117,6 @@ export default function AdminSidebar() {
             className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
           >
             <LayoutDashboard className="h-5 w-5" />
-
             <span>Overview</span>
           </Link>
 
@@ -130,7 +128,6 @@ export default function AdminSidebar() {
             className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
           >
             <Users className="h-5 w-5" />
-
             <span>Users</span>
           </Link>
 
@@ -142,7 +139,6 @@ export default function AdminSidebar() {
             className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
           >
             <ReceiptText className="h-5 w-5" />
-
             <span>Transactions</span>
           </Link>
 
@@ -154,7 +150,6 @@ export default function AdminSidebar() {
             className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
           >
             <GraduationCap className="h-5 w-5" />
-
             <span>CBT Management</span>
           </Link>
 
@@ -166,11 +161,21 @@ export default function AdminSidebar() {
             className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
           >
             <Trophy className="h-5 w-5" />
-
             <span>CBT Results</span>
           </Link>
 
-          {/* WALLET */}
+          {/* PROVIDER WALLET */}
+
+          <Link
+            href="/dashboard/admin/provider-wallet"
+            onClick={closeSidebar}
+            className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
+          >
+            <Wallet className="h-5 w-5" />
+            <span>Provider Wallet</span>
+          </Link>
+
+          {/* WALLET ACTIVITY */}
 
           <Link
             href="/dashboard/admin/wallet"
@@ -178,7 +183,6 @@ export default function AdminSidebar() {
             className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
           >
             <Wallet className="h-5 w-5" />
-
             <span>Wallet Activity</span>
           </Link>
 
@@ -190,7 +194,6 @@ export default function AdminSidebar() {
             className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
           >
             <TrendingUp className="h-5 w-5" />
-
             <span>Revenue & Profit</span>
           </Link>
 
@@ -202,7 +205,6 @@ export default function AdminSidebar() {
             className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-indigo-600"
           >
             <ArrowDownToLine className="h-5 w-5" />
-
             <span>Withdraw Revenue</span>
           </Link>
         </nav>
@@ -219,9 +221,7 @@ export default function AdminSidebar() {
             <LogOut className="h-5 w-5" />
 
             <span>
-              {loading
-                ? "Logging out..."
-                : "Logout"}
+              {loading ? "Logging out..." : "Logout"}
             </span>
           </button>
         </div>
@@ -229,3 +229,4 @@ export default function AdminSidebar() {
     </>
   );
 }
+

@@ -1,108 +1,141 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import axios from "axios";
-
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { vtpassConfig } from "@/lib/vtpass";
-import { generateRequestId } from "@/lib/requestId";
+import { authOptions } from "@/lib/auth";
 
-export async function POST(req: NextRequest) {
+const CHEAPDATAHUB_ELECTRICITY_URL =
+  "https://www.cheapdatahub.ng/api/v1/resellers/electricity/purchase/";
+
+export async function POST(request: NextRequest) {
+  let transactionId: string | null = null;
+
   try {
-    /*
-     * ==========================================
-     * AUTHENTICATION
-     * ==========================================
-     */
+    // ==========================================
+    // 1. AUTHENTICATION
+    // ==========================================
 
     const session = await getServerSession(authOptions);
 
-    if (!session?.user?.email) {
+    if (!session?.user?.id) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized",
+          error: "You must be logged in.",
         },
-        {
-          status: 401,
-        }
+        { status: 401 }
       );
     }
 
-    /*
-     * ==========================================
-     * GET REQUEST DATA
-     * ==========================================
-     */
+    const userId = session.user.id;
+
+    // ==========================================
+    // 2. REQUEST BODY
+    // ==========================================
+
+    const body = await request.json();
 
     const {
-      serviceID,
-      meterType,
+      discoId,
       meterNumber,
       amount,
+      meterType,
       phone,
-    } = await req.json();
+    } = body;
 
-    /*
-     * ==========================================
-     * VALIDATION
-     * ==========================================
-     */
+    // ==========================================
+    // 3. VALIDATION
+    // ==========================================
 
     if (
-      !serviceID ||
-      !meterType ||
+      discoId === undefined ||
+      discoId === null ||
       !meterNumber ||
-      !amount
+      amount === undefined ||
+      amount === null ||
+      !meterType ||
+      !phone
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: "All fields are required.",
+          error:
+            "discoId, meterNumber, amount, meterType and phone are required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    const electricityAmount = Number(amount);
+    // ==========================================
+    // 4. AMOUNT
+    // ==========================================
+
+    const numericAmount = Number(amount);
 
     if (
-      !Number.isFinite(electricityAmount) ||
-      electricityAmount <= 0
+      !Number.isFinite(numericAmount) ||
+      numericAmount <= 0
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: "Invalid electricity amount.",
+          error: "Invalid electricity amount.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * NORMALIZE METER TYPE
-     * ==========================================
-     *
-     * VTpass expects:
-     *
-     * prepaid
-     * postpaid
-     *
-     * NOT:
-     *
-     * 01
-     * 02
-     */
+    if (numericAmount < 100) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Minimum electricity amount is ₦100.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // ==========================================
+    // 5. METER NUMBER
+    // ==========================================
+
+    const cleanedMeter = String(meterNumber)
+      .replace(/\s+/g, "");
+
+    if (!/^\d{6,20}$/.test(cleanedMeter)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Please enter a valid meter number.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // ==========================================
+    // 6. PHONE NUMBER
+    // ==========================================
+
+    const cleanedPhone = String(phone)
+      .replace(/\s+/g, "")
+      .replace(/^\+234/, "0");
+
+    if (!/^0\d{10}$/.test(cleanedPhone)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Please enter a valid Nigerian phone number.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // ==========================================
+    // 7. METER TYPE
+    // ==========================================
 
     const normalizedMeterType =
-      String(meterType)
-        .toLowerCase()
-        .trim();
+      String(meterType).toLowerCase();
 
     if (
       normalizedMeterType !== "prepaid" &&
@@ -111,529 +144,702 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Invalid meter type. Use prepaid or postpaid.",
+          error:
+            "Meter type must be prepaid or postpaid.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * NORMALIZE SERVICE ID
-     * ==========================================
-     */
+    // ==========================================
+    // 8. FIND USER
+    // ==========================================
 
-    const normalizedServiceID =
-      String(serviceID)
-        .toLowerCase()
-        .trim();
-
-    /*
-     * ==========================================
-     * FIND USER
-     * ==========================================
-     */
-
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          email: session.user.email,
-        },
-      });
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+    });
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          message: "User not found.",
+          error: "User not found.",
         },
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
     }
 
-    /*
-     * ==========================================
-     * 5% PLATFORM SERVICE FEE
-     * ==========================================
-     */
+    // ==========================================
+    // 9. ACCOUNT STATUS
+    // ==========================================
 
-    const serviceFee =
-      electricityAmount * 0.05;
+    if (user.status !== "ACTIVE") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Your account is not active.",
+        },
+        { status: 403 }
+      );
+    }
 
-    const totalAmount =
-      electricityAmount + serviceFee;
+    // ==========================================
+    // 10. API KEY
+    // ==========================================
 
-    /*
-     * ==========================================
-     * CHECK WALLET BALANCE
-     * ==========================================
-     */
+    const apiKey =
+      process.env.CHEAPDATAHUB_API_KEY;
+
+    if (!apiKey) {
+      console.error(
+        "CHEAPDATAHUB_API_KEY is missing."
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "CheapDataHub API key is not configured.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // ==========================================
+    // 11. WALLET CHECK
+    // ==========================================
+
+    const walletBalance =
+      Number(user.walletBalance);
 
     if (
-      user.walletBalance <
-      totalAmount
+      !Number.isFinite(walletBalance) ||
+      walletBalance < numericAmount
     ) {
       return NextResponse.json(
         {
           success: false,
-          message: `Insufficient wallet balance. You need ₦${totalAmount.toLocaleString(
-            "en-NG",
-            {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            }
-          )}.`,
+          error: "Insufficient wallet balance.",
+          balance: walletBalance,
+          required: numericAmount,
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * GENERATE REQUEST ID
-     * ==========================================
-     */
+    // ==========================================
+    // 12. BUSINESS ACCOUNTING
+    // ==========================================
+    //
+    // Electricity currently has no separate
+    // service fee.
+    //
+    // Customer payment = provider cost
+    // Profit = ₦0
+    //
+    // ==========================================
 
-    const requestId =
-      generateRequestId();
+    const revenue = numericAmount;
+    const providerCost = numericAmount;
+    const profit = 0;
 
-    /*
-     * ==========================================
-     * PHONE NUMBER
-     * ==========================================
-     */
+    // ==========================================
+    // 13. GENERATE REFERENCE
+    // ==========================================
 
-    const customerPhone =
-      String(
-        phone ||
-          user.phone ||
-          ""
-      ).trim();
+    const reference =
+      `ELECTRICITY-${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)
+        .toUpperCase()}`;
 
-    if (!customerPhone) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Phone number is required.",
+    // ==========================================
+    // 14. CREATE PENDING TRANSACTION
+    // ==========================================
+
+    const transaction =
+      await prisma.transaction.create({
+        data: {
+          userId: user.id,
+
+          type: "ELECTRICITY",
+
+          amount: revenue,
+
+          description:
+            `Electricity payment for meter ${cleanedMeter}`,
+
+          status: "PENDING",
+
+          reference,
+
+          provider: "CheapDataHub",
+
+          cost: providerCost,
+
+          profit,
         },
-        {
-          status: 400,
-        }
-      );
-    }
+      });
 
-    /*
-     * ==========================================
-     * BUILD VTPASS PAYLOAD
-     * ==========================================
-     *
-     * IMPORTANT:
-     *
-     * variation_code must be:
-     *
-     * prepaid
-     *
-     * OR
-     *
-     * postpaid
-     *
-     * NOT 01 / 02.
-     */
+    transactionId = transaction.id;
 
-    const payload = {
-      request_id: requestId,
+    // ==========================================
+    // 15. CHEAPDATAHUB REQUEST
+    // ==========================================
 
-      serviceID:
-        normalizedServiceID,
+    const providerBody = {
+      disco_id: Number(discoId),
 
-      billersCode:
-        String(meterNumber).trim(),
+      meter_number: cleanedMeter,
 
-      variation_code:
-        normalizedMeterType,
+      amount: numericAmount,
 
-      amount:
-        electricityAmount,
+      meter_type: normalizedMeterType,
 
-      phone:
-        customerPhone,
+      phone: cleanedPhone,
     };
 
-    /*
-     * ==========================================
-     * LOG REQUEST
-     * ==========================================
-     */
-
     console.log(
       "=========================================="
     );
 
     console.log(
-      "ELECTRICITY REQUEST ID:",
-      requestId
+      "CHEAPDATAHUB ELECTRICITY PURCHASE"
     );
 
     console.log(
-      "ELECTRICITY SERVICE ID:",
-      normalizedServiceID
+      "URL:",
+      CHEAPDATAHUB_ELECTRICITY_URL
     );
 
     console.log(
-      "ELECTRICITY METER TYPE:",
-      normalizedMeterType
+      "BODY:",
+      providerBody
     );
 
     console.log(
-      "ELECTRICITY METER NUMBER:",
-      meterNumber
-    );
-
-    console.log(
-      "ELECTRICITY PAYLOAD:",
-      payload
-    );
-
-    console.log(
-      "ELECTRICITY AMOUNT:",
-      electricityAmount
-    );
-
-    console.log(
-      "SERVICE FEE:",
-      serviceFee
-    );
-
-    console.log(
-      "TOTAL DEDUCTED:",
-      totalAmount
+      "API KEY EXISTS:",
+      !!apiKey
     );
 
     console.log(
       "=========================================="
     );
 
-    /*
-     * ==========================================
-     * SEND PAYMENT TO VTPASS
-     * ==========================================
-     */
-
-    const response =
-      await axios.post(
-        `${vtpassConfig.baseUrl}/pay`,
-        payload,
+    const providerResponse =
+      await fetch(
+        CHEAPDATAHUB_ELECTRICITY_URL,
         {
-          headers: {
-            "api-key":
-              vtpassConfig.apiKey,
+          method: "POST",
 
-            "secret-key":
-              vtpassConfig.secretKey,
+          headers: {
+            Authorization:
+              `Bearer ${apiKey}`,
 
             "Content-Type":
               "application/json",
+
+            Accept:
+              "application/json",
           },
+
+          body: JSON.stringify(
+            providerBody
+          ),
+
+          cache: "no-store",
         }
       );
 
-    const vtpass =
-      response.data;
+    // ==========================================
+    // 16. READ PROVIDER RESPONSE
+    // ==========================================
 
-    /*
-     * ==========================================
-     * LOG VTPASS RESPONSE
-     * ==========================================
-     */
+    const responseText =
+      await providerResponse.text();
 
     console.log(
-      "ELECTRICITY VTPASS RESPONSE:",
-      vtpass
-    );
-
-    const transactionStatus =
-      vtpass.content?.transactions
-        ?.status ||
-      "unknown";
-
-    console.log(
-      "ELECTRICITY RESPONSE CODE:",
-      vtpass.code
+      "CHEAPDATAHUB ELECTRICITY STATUS:",
+      providerResponse.status
     );
 
     console.log(
-      "ELECTRICITY RESPONSE DESCRIPTION:",
-      vtpass.response_description
+      "CHEAPDATAHUB ELECTRICITY RESPONSE:",
+      responseText
     );
 
-    console.log(
-      "ELECTRICITY TRANSACTION STATUS:",
-      transactionStatus
-    );
+    // ==========================================
+    // 17. PARSE PROVIDER RESPONSE
+    // ==========================================
 
-    /*
-     * ==========================================
-     * SUCCESS CHECK
-     * ==========================================
-     */
+    let providerResult: any = null;
 
-    const isSuccessful =
-      vtpass.code === "000" &&
-      transactionStatus
-        .toLowerCase() ===
-        "delivered";
+    try {
+      providerResult =
+        responseText.trim()
+          ? JSON.parse(responseText)
+          : null;
+    } catch {
+      providerResult = null;
+    }
 
-    /*
-     * ==========================================
-     * PURCHASE FAILED
-     * ==========================================
-     */
+    // ==========================================
+    // 18. INVALID PROVIDER RESPONSE
+    // ==========================================
 
-    if (!isSuccessful) {
-      try {
-        await prisma.transaction.create({
-          data: {
-            userId: user.id,
+    if (!providerResult) {
+      await prisma.transaction.update({
+        where: {
+          id: transaction.id,
+        },
 
-            type: "ELECTRICITY",
-
-            provider:
-              normalizedServiceID.toUpperCase(),
-
-            amount:
-              totalAmount,
-
-            reference:
-              requestId,
-
-            status:
-              transactionStatus.toUpperCase(),
-
-            description:
-              vtpass.response_description ||
-              "Electricity payment failed",
-          },
-        });
-      } catch (
-        transactionError: any
-      ) {
-        console.error(
-          "FAILED ELECTRICITY TRANSACTION LOG:",
-          transactionError.message
-        );
-      }
+        data: {
+          status: "FAILED",
+        },
+      });
 
       return NextResponse.json(
         {
           success: false,
 
-          message:
-            vtpass.response_description ||
-            "Electricity payment failed.",
+          error:
+            providerResponse.status >= 500
+              ? "CheapDataHub electricity service returned a server error. Please try again."
+              : "CheapDataHub returned an invalid response.",
 
-          data: vtpass,
+          providerStatus:
+            providerResponse.status,
+
+          providerResponse:
+            responseText.substring(
+              0,
+              500
+            ),
         },
-        {
-          status: 400,
-        }
+        { status: 502 }
       );
     }
 
-    /*
-     * ==========================================
-     * GET ELECTRICITY TOKEN
-     * ==========================================
-     *
-     * Prepaid electricity normally
-     * returns a token after successful
-     * purchase.
-     */
+    // ==========================================
+    // 19. PROVIDER SUCCESS CHECK
+    // ==========================================
+
+    const providerSuccess =
+      providerResult?.status === true ||
+      providerResult?.status === "true" ||
+      providerResult?.success === true ||
+      providerResult?.status === "success";
+
+    // ==========================================
+    // 20. PROVIDER FAILED
+    // ==========================================
+
+    if (
+      !providerResponse.ok ||
+      !providerSuccess
+    ) {
+      await prisma.transaction.update({
+        where: {
+          id: transaction.id,
+        },
+
+        data: {
+          status: "FAILED",
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+
+          error:
+            providerResult?.message ||
+            providerResult?.error ||
+            providerResult?.response_description ||
+            "Electricity purchase failed.",
+
+          providerStatus:
+            providerResponse.status,
+
+          providerResponse:
+            providerResult,
+        },
+        { status: 400 }
+      );
+    }
+
+    // ==========================================
+    // 21. EXTRACT PROVIDER DATA
+    // ==========================================
+
+    const providerData =
+      providerResult?.data || {};
+
+    const providerReference =
+      providerResult?.reference ||
+      providerResult?.transaction_id ||
+      providerResult?.transactionId ||
+      providerData?.reference ||
+      providerData?.transaction_id ||
+      providerData?.transactionId ||
+      null;
 
     const token =
-      vtpass.content
-        ?.transactions
-        ?.purchased_code ||
-      vtpass.purchased_code ||
-      vtpass.content
-        ?.transactions
-        ?.token ||
-      "";
+      providerResult?.token ||
+      providerResult?.meter_token ||
+      providerData?.token ||
+      providerData?.meter_token ||
+      null;
 
-    /*
-     * ==========================================
-     * SAVE TRANSACTION + DEDUCT WALLET
-     * ==========================================
-     */
+    const units =
+      providerResult?.units ||
+      providerData?.units ||
+      null;
 
-    await prisma.$transaction(
-      async (tx) => {
-        /*
-         * Save transaction
-         */
+    // ==========================================
+    // 22. COMPLETE EVERYTHING ATOMICALLY
+    // ==========================================
+    //
+    // After CheapDataHub succeeds:
+    //
+    // USER
+    //   - amount
+    //
+    // BUSINESS
+    //   + revenue
+    //   + cost
+    //   + profit
+    //
+    // Since electricity currently has no markup:
+    //
+    // revenue = cost
+    // profit = 0
+    //
+    // ==========================================
 
-        await tx.transaction.create({
-          data: {
-            userId: user.id,
+    const result =
+      await prisma.$transaction(
+        async (tx) => {
+          // ======================================
+          // GET FRESH USER BALANCE
+          // ======================================
 
-            type: "ELECTRICITY",
+          const freshUser =
+            await tx.user.findUnique({
+              where: {
+                id: user.id,
+              },
+            });
 
-            provider:
-              normalizedServiceID.toUpperCase(),
+          if (!freshUser) {
+            throw new Error(
+              "User account could not be found."
+            );
+          }
 
-            amount:
-              totalAmount,
+          const freshBalance =
+            Number(
+              freshUser.walletBalance
+            );
 
-            reference:
-              requestId,
+          if (
+            !Number.isFinite(
+              freshBalance
+            ) ||
+            freshBalance < revenue
+          ) {
+            throw new Error(
+              "Insufficient wallet balance."
+            );
+          }
 
-            status:
-              "SUCCESS",
+          // ======================================
+          // GET OR CREATE BUSINESS WALLET
+          // ======================================
 
-            description: `₦${electricityAmount.toLocaleString(
-              "en-NG"
-            )} electricity + 5% service fee (₦${serviceFee.toLocaleString(
-              "en-NG",
-              {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              }
-            )}`,
-          },
-        });
+          let businessWallet =
+            await tx.businessWallet.findUnique({
+              where: {
+                name: "Brainfriend Tech",
+              },
+            });
 
-        /*
-         * Deduct wallet
-         */
+          if (!businessWallet) {
+            businessWallet =
+              await tx.businessWallet.create({
+                data: {
+                  name:
+                    "Brainfriend Tech",
 
-        await tx.user.update({
-          where: {
-            id: user.id,
-          },
+                  balance: 0,
 
-          data: {
-            walletBalance: {
-              decrement:
-                totalAmount,
+                  totalRevenue: 0,
+
+                  totalCost: 0,
+
+                  totalProfit: 0,
+
+                  withdrawnProfit: 0,
+
+                  availableProfit: 0,
+                },
+              });
+          }
+
+          // ======================================
+          // NEW USER BALANCE
+          // ======================================
+
+          const newUserBalance =
+            freshBalance - revenue;
+
+          // ======================================
+          // BUSINESS WALLET VALUES
+          // ======================================
+
+          const newBusinessBalance =
+            Number(
+              businessWallet.balance
+            ) + revenue;
+
+          const newTotalRevenue =
+            Number(
+              businessWallet.totalRevenue
+            ) + revenue;
+
+          const newTotalCost =
+            Number(
+              businessWallet.totalCost
+            ) + providerCost;
+
+          const newTotalProfit =
+            Number(
+              businessWallet.totalProfit
+            ) + profit;
+
+          const newAvailableProfit =
+            Number(
+              businessWallet.availableProfit
+            ) + profit;
+
+          // ======================================
+          // UPDATE USER WALLET
+          // ======================================
+
+          await tx.user.update({
+            where: {
+              id: user.id,
             },
-          },
-        });
-      }
-    );
 
-    /*
-     * ==========================================
-     * SUCCESS LOG
-     * ==========================================
-     */
+            data: {
+              walletBalance:
+                newUserBalance,
+            },
+          });
 
-    console.log(
-      "=========================================="
-    );
+          // ======================================
+          // UPDATE TRANSACTION
+          // ======================================
 
-    console.log(
-      "ELECTRICITY PURCHASE SUCCESSFUL"
-    );
+          await tx.transaction.update({
+            where: {
+              id: transaction.id,
+            },
 
-    console.log(
-      "ELECTRICITY AMOUNT:",
-      electricityAmount
-    );
+            data: {
+              status: "SUCCESS",
 
-    console.log(
-      "SERVICE FEE:",
-      serviceFee
-    );
+              cost: providerCost,
 
-    console.log(
-      "TOTAL DEDUCTED:",
-      totalAmount
-    );
+              profit,
+            },
+          });
 
-    console.log(
-      "ELECTRICITY TOKEN:",
-      token
-    );
+          // ======================================
+          // UPDATE BUSINESS WALLET
+          // ======================================
 
-    console.log(
-      "=========================================="
-    );
+          await tx.businessWallet.update({
+            where: {
+              id: businessWallet.id,
+            },
 
-    /*
-     * ==========================================
-     * SUCCESS RESPONSE
-     * ==========================================
-     */
+            data: {
+              balance:
+                newBusinessBalance,
+
+              totalRevenue:
+                newTotalRevenue,
+
+              totalCost:
+                newTotalCost,
+
+              totalProfit:
+                newTotalProfit,
+
+              availableProfit:
+                newAvailableProfit,
+            },
+          });
+
+          // ======================================
+          // CREATE BUSINESS REVENUE
+          // ======================================
+
+          await tx.businessRevenue.create({
+            data: {
+              transactionId:
+                transaction.id,
+
+              type:
+                "ELECTRICITY",
+
+              provider:
+                "CheapDataHub",
+
+              amount:
+                revenue,
+
+              cost:
+                providerCost,
+
+              profit,
+
+              reference,
+
+              description:
+                `Electricity payment for meter ${cleanedMeter}`,
+
+              businessWalletId:
+                businessWallet.id,
+            },
+          });
+
+          // ======================================
+          // RETURN RESULT
+          // ======================================
+
+          return {
+            walletBalance:
+              newUserBalance,
+
+            businessBalance:
+              newBusinessBalance,
+
+            totalRevenue:
+              newTotalRevenue,
+
+            totalCost:
+              newTotalCost,
+
+            totalProfit:
+              newTotalProfit,
+
+            availableProfit:
+              newAvailableProfit,
+
+            profit,
+          };
+        }
+      );
+
+    // ==========================================
+    // 23. SUCCESS RESPONSE
+    // ==========================================
 
     return NextResponse.json({
       success: true,
 
       message:
+        providerResult?.message ||
         "Electricity payment successful.",
 
-      amount:
-        electricityAmount,
+      reference,
 
-      serviceFee,
+      providerReference,
 
-      totalAmount,
+      discoId:
+        Number(discoId),
 
-      token,
+      meterNumber:
+        cleanedMeter,
 
       meterType:
         normalizedMeterType,
 
-      meterNumber:
-        String(meterNumber).trim(),
+      phone:
+        cleanedPhone,
 
-      vtpass,
+      amount:
+        revenue,
+
+      providerCost,
+
+      profit,
+
+      token,
+
+      units,
+
+      walletBalance:
+        result.walletBalance,
+
+      businessRevenue:
+        revenue,
+
+      businessCost:
+        providerCost,
+
+      businessProfit:
+        profit,
+
+      providerResponse:
+        providerResult,
     });
-
   } catch (error: any) {
-    console.error(
-      "=========================================="
-    );
+    // ==========================================
+    // ERROR HANDLING
+    // ==========================================
 
     console.error(
-      "FULL ELECTRICITY VTPASS ERROR:"
+      "ELECTRICITY PURCHASE ERROR:",
+      error
     );
 
-    console.error(
-      error?.response?.data ||
-        error?.message ||
-        error
-    );
+    // ==========================================
+    // MARK PENDING TRANSACTION FAILED
+    // ==========================================
 
-    console.error(
-      "=========================================="
-    );
+    if (transactionId) {
+      try {
+        await prisma.transaction.update({
+          where: {
+            id: transactionId,
+          },
+
+          data: {
+            status: "FAILED",
+          },
+        });
+      } catch (updateError) {
+        console.error(
+          "FAILED TO UPDATE ELECTRICITY TRANSACTION:",
+          updateError
+        );
+      }
+    }
 
     return NextResponse.json(
       {
         success: false,
 
-        message:
-          error?.response?.data
-            ?.response_description ||
-          error?.response?.data
-            ?.message ||
+        error:
           error?.message ||
-          "Electricity payment failed.",
-
-        data:
-          error?.response?.data ||
-          null,
+          "Electricity purchase failed.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

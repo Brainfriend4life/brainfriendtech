@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import axios from "axios";
@@ -8,11 +7,9 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
-    /*
-     * ==========================================
-     * AUTHENTICATION
-     * ==========================================
-     */
+    // ==========================================
+    // AUTHENTICATION
+    // ==========================================
 
     const session =
       await getServerSession(authOptions);
@@ -21,21 +18,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Unauthorized",
+          message: "Unauthorized.",
         },
-        {
-          status: 401,
-        }
+        { status: 401 }
       );
     }
 
-    /*
-     * ==========================================
-     * GET REFERENCE
-     * ==========================================
-     */
+    // ==========================================
+    // GET REFERENCE
+    // ==========================================
 
-    const { reference } = await req.json();
+    const body = await req.json();
+
+    const reference =
+      typeof body?.reference === "string"
+        ? body.reference.trim()
+        : "";
 
     if (!reference) {
       return NextResponse.json(
@@ -44,44 +42,33 @@ export async function POST(req: NextRequest) {
           message:
             "Payment reference is required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    const cleanReference =
-      String(reference).trim();
-
-    /*
-     * ==========================================
-     * CHECK IF ALREADY CREDITED
-     * ==========================================
-     */
+    // ==========================================
+    // CHECK LOCAL DATABASE FIRST
+    // ==========================================
 
     const existing =
       await prisma.transaction.findUnique({
         where: {
-          reference: cleanReference,
+          reference,
         },
       });
 
     if (existing) {
-      /*
-       * Only treat an existing successful
-       * wallet transaction as already credited.
-       */
-
       if (
-        existing.type ===
-          "FUND_WALLET" &&
+        existing.type === "FUND_WALLET" &&
         existing.status === "SUCCESS"
       ) {
         return NextResponse.json({
           success: true,
           alreadyCredited: true,
+          amount: existing.amount,
+          reference,
           message:
-            "Payment has already been credited.",
+            "Payment has already been credited to your wallet.",
         });
       }
 
@@ -91,71 +78,82 @@ export async function POST(req: NextRequest) {
           message:
             "This payment reference has already been used.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * VERIFY WITH PAYSTACK
-     * ==========================================
-     */
+    // ==========================================
+    // VERIFY DIRECTLY WITH PAYSTACK
+    // ==========================================
 
-    const verify =
+    const secretKey =
+      process.env.PAYSTACK_SECRET_KEY;
+
+    if (!secretKey) {
+      console.error(
+        "PAYSTACK_SECRET_KEY is missing."
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Paystack configuration is missing.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const verifyResponse =
       await axios.get(
         `https://api.paystack.co/transaction/verify/${encodeURIComponent(
-          cleanReference
+          reference
         )}`,
         {
           headers: {
-            Authorization:
-              `Bearer ${process.env.PAYSTACK_SECRET_KEY}`,
+            Authorization: `Bearer ${secretKey}`,
+            "Content-Type":
+              "application/json",
           },
         }
       );
 
     const payment =
-      verify.data?.data;
+      verifyResponse.data?.data;
+
+    // ==========================================
+    // PAYSTACK RESPONSE
+    // ==========================================
 
     if (!payment) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Invalid Paystack response.",
+            "Paystack did not return transaction details.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * PAYMENT STATUS
-     * ==========================================
-     */
+    // ==========================================
+    // PAYMENT STATUS
+    // ==========================================
 
     if (payment.status !== "success") {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Payment was not successful.",
+            `Payment status is ${payment.status || "unknown"}.`,
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * VERIFY CURRENCY
-     * ==========================================
-     */
+    // ==========================================
+    // VERIFY CURRENCY
+    // ==========================================
 
     if (
       String(payment.currency).toUpperCase() !==
@@ -167,17 +165,13 @@ export async function POST(req: NextRequest) {
           message:
             "Invalid payment currency.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * FIND USER
-     * ==========================================
-     */
+    // ==========================================
+    // FIND LOGGED-IN USER
+    // ==========================================
 
     const user =
       await prisma.user.findUnique({
@@ -190,19 +184,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "User not found.",
+          message: "User account not found.",
         },
-        {
-          status: 404,
-        }
+        { status: 404 }
       );
     }
 
-    /*
-     * ==========================================
-     * VERIFY PAYSTACK CUSTOMER
-     * ==========================================
-     */
+    // ==========================================
+    // VERIFY PAYSTACK CUSTOMER EMAIL
+    // ==========================================
 
     const paymentEmail =
       String(
@@ -224,19 +214,15 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           message:
-            "Payment does not belong to this account.",
+            "This payment does not belong to the currently logged-in account.",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
-    /*
-     * ==========================================
-     * PAYMENT AMOUNT
-     * ==========================================
-     */
+    // ==========================================
+    // GET AMOUNT FROM PAYSTACK
+    // ==========================================
 
     const amount =
       Number(payment.amount) / 100;
@@ -251,25 +237,20 @@ export async function POST(req: NextRequest) {
           message:
             "Invalid payment amount.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * VERIFY METADATA
-     * ==========================================
-     */
+    // ==========================================
+    // VERIFY METADATA
+    // ==========================================
 
     const metadata =
       payment.metadata || {};
 
     if (
       metadata.purpose &&
-      metadata.purpose !==
-        "wallet_funding"
+      metadata.purpose !== "wallet_funding"
     ) {
       return NextResponse.json(
         {
@@ -277,118 +258,152 @@ export async function POST(req: NextRequest) {
           message:
             "Invalid payment purpose.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    /*
-     * ==========================================
-     * CREDIT WALLET ATOMICALLY
-     * ==========================================
-     *
-     * If the transaction creation fails,
-     * the wallet update is rolled back.
-     *
-     * If another request already used the
-     * reference, the unique constraint prevents
-     * duplicate crediting.
-     */
+    // ==========================================
+    // CREDIT WALLET ATOMICALLY
+    // ==========================================
 
     try {
-      await prisma.$transaction(
-        async (tx) => {
-          /*
-           * Create transaction first.
-           */
+      const result =
+        await prisma.$transaction(
+          async (tx) => {
+            // Check again inside transaction
+            // to prevent duplicate crediting.
 
-          await tx.transaction.create({
-            data: {
-              userId: user.id,
+            const alreadyExists =
+              await tx.transaction.findUnique({
+                where: {
+                  reference,
+                },
+              });
 
-              type:
-                "FUND_WALLET",
+            if (alreadyExists) {
+              if (
+                alreadyExists.type ===
+                  "FUND_WALLET" &&
+                alreadyExists.status ===
+                  "SUCCESS"
+              ) {
+                return {
+                  alreadyCredited: true,
+                  transaction:
+                    alreadyExists,
+                };
+              }
 
-              provider:
-                "PAYSTACK",
+              throw new Error(
+                "Payment reference has already been used."
+              );
+            }
 
-              amount,
+            // Create transaction record.
 
-              description:
-                `Wallet funding of ₦${amount.toLocaleString(
-                  "en-NG",
-                  {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  }
-                )}`,
+            const transaction =
+              await tx.transaction.create({
+                data: {
+                  userId: user.id,
 
-              status:
-                "SUCCESS",
+                  type: "FUND_WALLET",
 
-              reference:
-                cleanReference,
-            },
-          });
+                  amount,
 
-          /*
-           * Credit wallet.
-           */
+                  description:
+                    `Wallet funding of ₦${amount.toLocaleString(
+                      "en-NG",
+                      {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }
+                    )}`,
 
-          await tx.user.update({
-            where: {
-              id: user.id,
-            },
+                  status: "SUCCESS",
 
-            data: {
-              walletBalance: {
-                increment: amount,
-              },
-            },
-          });
-        }
-      );
+                  reference,
+
+                  provider: "PAYSTACK",
+                },
+              });
+
+            // Credit wallet.
+
+            const updatedUser =
+              await tx.user.update({
+                where: {
+                  id: user.id,
+                },
+
+                data: {
+                  walletBalance: {
+                    increment: amount,
+                  },
+                },
+
+                select: {
+                  id: true,
+                  walletBalance: true,
+                },
+              });
+
+            return {
+              alreadyCredited: false,
+              transaction,
+              updatedUser,
+            };
+          }
+        );
+
+      // ==========================================
+      // ALREADY CREDITED
+      // ==========================================
+
+      if (result.alreadyCredited) {
+        return NextResponse.json({
+          success: true,
+          alreadyCredited: true,
+          amount,
+          reference,
+          message:
+            "Payment has already been credited to your wallet.",
+        });
+      }
+
+      // ==========================================
+      // SUCCESS
+      // ==========================================
+
+      return NextResponse.json({
+        success: true,
+        alreadyCredited: false,
+        amount,
+        reference,
+
+        message:
+          "Payment verified and wallet funded successfully.",
+
+        walletBalance:
+          result.updatedUser?.walletBalance ??
+          undefined,
+      });
     } catch (transactionError: any) {
-      /*
-       * Prisma P2002 means the unique
-       * transaction reference already exists.
-       */
+      // Prisma unique constraint
 
       if (
-        transactionError?.code ===
-        "P2002"
+        transactionError?.code === "P2002"
       ) {
         return NextResponse.json({
           success: true,
           alreadyCredited: true,
+          reference,
           message:
-            "Payment has already been credited.",
+            "Payment has already been credited to your wallet.",
         });
       }
 
       throw transactionError;
     }
-
-    /*
-     * ==========================================
-     * SUCCESS
-     * ==========================================
-     */
-
-    return NextResponse.json({
-      success: true,
-
-      alreadyCredited: false,
-
-      message:
-        "Wallet funded successfully.",
-
-      amount,
-
-      reference:
-        cleanReference,
-    });
   } catch (error: any) {
     console.error(
       "=========================================="
@@ -408,19 +423,18 @@ export async function POST(req: NextRequest) {
       "=========================================="
     );
 
+    const paystackMessage =
+      error?.response?.data?.message;
+
     return NextResponse.json(
       {
         success: false,
 
         message:
-          error?.response?.data
-            ?.message ||
+          paystackMessage ||
           "Payment verification failed.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
-

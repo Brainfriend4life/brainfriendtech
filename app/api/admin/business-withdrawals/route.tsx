@@ -1,371 +1,318 @@
-
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import axios from "axios";
+import crypto from "crypto";
+
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-function generateReference() {
-  return `BIZ-WD-${Date.now()}-${Math.random()
-    .toString(36)
-    .substring(2, 8)
-    .toUpperCase()}`;
-}
-
-// =========================================================
-// GET BUSINESS BALANCE + WITHDRAWAL HISTORY
-// =========================================================
-
-export async function GET() {
+export async function POST(req: NextRequest) {
   try {
-    // -------------------------------------------------------
+    // ==========================================
     // ADMIN AUTHENTICATION
-    // -------------------------------------------------------
+    // ==========================================
 
     const session = await getServerSession(authOptions);
 
-    if (
-      !session?.user ||
-      session.user.role !== "ADMIN"
-    ) {
+    if (!session?.user?.email) {
       return NextResponse.json(
         {
-          error: "Unauthorized.",
+          success: false,
+          message: "Unauthorized.",
         },
-        {
-          status: 403,
-        }
+        { status: 401 }
       );
     }
 
-    // -------------------------------------------------------
-    // CALCULATE TOTAL PROFIT
-    // -------------------------------------------------------
-
-    const profitResult =
-      await prisma.transaction.aggregate({
-        _sum: {
-          profit: true,
-        },
-        where: {
-          status: "success",
-        },
-      });
-
-    const totalProfit =
-      profitResult._sum.profit ?? 0;
-
-    // -------------------------------------------------------
-    // CALCULATE BUSINESS MONEY ALREADY WITHDRAWN
-    // -------------------------------------------------------
-
-    const withdrawnResult =
-      await prisma.businessWithdrawal.aggregate({
-        _sum: {
-          amount: true,
-        },
-        where: {
-          status: {
-            in: [
-              "PROCESSING",
-              "SUCCESS",
-            ],
-          },
-        },
-      });
-
-    const totalWithdrawn =
-      withdrawnResult._sum.amount ?? 0;
-
-    // -------------------------------------------------------
-    // CALCULATE PENDING REQUESTS
-    // -------------------------------------------------------
-
-    const pendingResult =
-      await prisma.businessWithdrawal.aggregate({
-        _sum: {
-          amount: true,
-        },
-        where: {
-          status: "PENDING",
-        },
-      });
-
-    const pendingWithdrawals =
-      pendingResult._sum.amount ?? 0;
-
-    // -------------------------------------------------------
-    // AVAILABLE BUSINESS BALANCE
-    // -------------------------------------------------------
-
-    const availableBalance =
-      Math.max(
-        totalProfit -
-          totalWithdrawn -
-          pendingWithdrawals,
-        0
-      );
-
-    // -------------------------------------------------------
-    // RECENT WITHDRAWALS
-    // -------------------------------------------------------
-
-    const withdrawals =
-      await prisma.businessWithdrawal.findMany({
-        take: 20,
-        orderBy: {
-          createdAt: "desc",
-        },
-      });
-
-    return NextResponse.json({
-      success: true,
-
-      balance: {
-        totalProfit,
-        totalWithdrawn,
-        pendingWithdrawals,
-        availableBalance,
+    const admin = await prisma.user.findUnique({
+      where: {
+        email: session.user.email,
       },
-
-      withdrawals,
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+      },
     });
-  } catch (error) {
-    console.error(
-      "BUSINESS WITHDRAWAL GET ERROR:",
-      error
-    );
 
-    return NextResponse.json(
-      {
-        error:
-          "Failed to load business withdrawal information.",
-      },
-      {
-        status: 500,
-      }
-    );
-  }
-}
-
-// =========================================================
-// CREATE BUSINESS WITHDRAWAL REQUEST
-// =========================================================
-
-export async function POST(
-  request: Request
-) {
-  try {
-    // -------------------------------------------------------
-    // ADMIN AUTHENTICATION
-    // -------------------------------------------------------
-
-    const session = await getServerSession(
-      authOptions
-    );
-
-    if (
-      !session?.user ||
-      session.user.role !== "ADMIN"
-    ) {
+    if (!admin || admin.role !== "ADMIN") {
       return NextResponse.json(
         {
-          error: "Unauthorized.",
+          success: false,
+          message: "Admin access required.",
         },
-        {
-          status: 403,
-        }
+        { status: 403 }
       );
     }
 
-    // -------------------------------------------------------
-    // READ BODY
-    // -------------------------------------------------------
-
-    let body: {
-      amount?: number;
-      accountName?: string;
-      accountNumber?: string;
-      bankName?: string;
-    };
-
-    try {
-      body = await request.json();
-    } catch {
+    if (admin.status !== "ACTIVE") {
       return NextResponse.json(
         {
-          error: "Invalid request body.",
+          success: false,
+          message: "Admin account is not active.",
         },
-        {
-          status: 400,
-        }
+        { status: 403 }
       );
     }
 
-    const amount = Number(
-      body?.amount
-    );
+    // ==========================================
+    // GET REQUEST BODY
+    // ==========================================
+
+    const body = await req.json();
+
+    const amount = Number(body?.amount);
 
     const accountName =
-      typeof body?.accountName ===
-      "string"
+      typeof body?.accountName === "string"
         ? body.accountName.trim()
         : "";
 
     const accountNumber =
-      typeof body?.accountNumber ===
-      "string"
+      typeof body?.accountNumber === "string"
         ? body.accountNumber.trim()
         : "";
 
     const bankName =
-      typeof body?.bankName ===
-      "string"
+      typeof body?.bankName === "string"
         ? body.bankName.trim()
         : "";
 
-    // -------------------------------------------------------
-    // VALIDATION
-    // -------------------------------------------------------
+    const bankCode =
+      typeof body?.bankCode === "string"
+        ? body.bankCode.trim()
+        : "";
 
-    if (
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
+    // ==========================================
+    // VALIDATION
+    // ==========================================
+
+    if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json(
         {
-          error:
-            "Enter a valid withdrawal amount.",
+          success: false,
+          message: "Enter a valid withdrawal amount.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
     if (!accountName) {
       return NextResponse.json(
         {
-          error:
-            "Account name is required.",
+          success: false,
+          message: "Account name is required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
     if (!accountNumber) {
       return NextResponse.json(
         {
-          error:
-            "Account number is required.",
+          success: false,
+          message: "Account number is required.",
         },
+        { status: 400 }
+      );
+    }
+
+    if (!/^\d{10}$/.test(accountNumber)) {
+      return NextResponse.json(
         {
-          status: 400,
-        }
+          success: false,
+          message: "Account number must contain 10 digits.",
+        },
+        { status: 400 }
       );
     }
 
     if (!bankName) {
       return NextResponse.json(
         {
-          error:
-            "Bank name is required.",
+          success: false,
+          message: "Bank name is required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    // -------------------------------------------------------
-    // CALCULATE TOTAL PROFIT
-    // -------------------------------------------------------
-
-    const profitResult =
-      await prisma.transaction.aggregate({
-        _sum: {
-          profit: true,
-        },
-        where: {
-          status: "success",
-        },
-      });
-
-    const totalProfit =
-      profitResult._sum.profit ?? 0;
-
-    // -------------------------------------------------------
-    // CALCULATE MONEY ALREADY WITHDRAWN
-    // -------------------------------------------------------
-
-    const withdrawnResult =
-      await prisma.businessWithdrawal.aggregate({
-        _sum: {
-          amount: true,
-        },
-        where: {
-          status: {
-            in: [
-              "PROCESSING",
-              "SUCCESS",
-            ],
-          },
-        },
-      });
-
-    const totalWithdrawn =
-      withdrawnResult._sum.amount ?? 0;
-
-    // -------------------------------------------------------
-    // CALCULATE PENDING WITHDRAWALS
-    // -------------------------------------------------------
-
-    const pendingResult =
-      await prisma.businessWithdrawal.aggregate({
-        _sum: {
-          amount: true,
-        },
-        where: {
-          status: "PENDING",
-        },
-      });
-
-    const pendingWithdrawals =
-      pendingResult._sum.amount ?? 0;
-
-    // -------------------------------------------------------
-    // AVAILABLE BALANCE
-    // -------------------------------------------------------
-
-    const availableBalance =
-      Math.max(
-        totalProfit -
-          totalWithdrawn -
-          pendingWithdrawals,
-        0
-      );
-
-    // -------------------------------------------------------
-    // CHECK BALANCE
-    // -------------------------------------------------------
-
-    if (amount > availableBalance) {
+    if (!bankCode) {
       return NextResponse.json(
         {
-          error:
-            "Insufficient available business balance.",
-          availableBalance,
+          success: false,
+          message: "Bank code is required.",
         },
-        {
-          status: 400,
-        }
+        { status: 400 }
       );
     }
 
-    // -------------------------------------------------------
-    // CREATE WITHDRAWAL REQUEST
-    // -------------------------------------------------------
+    // ==========================================
+    // PAYSTACK SECRET
+    // ==========================================
+
+    const secretKey =
+      process.env.PAYSTACK_SECRET_KEY;
+
+    if (!secretKey) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Paystack configuration is missing.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // ==========================================
+    // GET BUSINESS WALLET
+    // ==========================================
+
+    const businessWallet =
+      await prisma.businessWallet.findUnique({
+        where: {
+          name: "Brainfriend Tech",
+        },
+      });
+
+    if (!businessWallet) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Business wallet not found.",
+        },
+        { status: 404 }
+      );
+    }
+
+    // ==========================================
+    // CHECK AVAILABLE PROFIT
+    // ==========================================
+
+    if (
+      amount >
+      businessWallet.availableProfit
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            `Insufficient available profit. ` +
+            `Available: ₦${businessWallet.availableProfit.toLocaleString(
+              "en-NG"
+            )}.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // ==========================================
+    // PREVENT MULTIPLE PROCESSING WITH SAME
+    // AMOUNT WHILE A TRANSFER IS PROCESSING
+    // ==========================================
+
+    const existingProcessing =
+      await prisma.businessWithdrawal.findFirst({
+        where: {
+          status: "PROCESSING",
+        },
+      });
+
+    if (existingProcessing) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "There is already a business withdrawal being processed.",
+          withdrawal: {
+            id: existingProcessing.id,
+            amount: existingProcessing.amount,
+            reference:
+              existingProcessing.reference,
+            status:
+              existingProcessing.status,
+          },
+        },
+        { status: 409 }
+      );
+    }
+
+    // ==========================================
+    // GENERATE UNIQUE REFERENCE
+    // ==========================================
+
+    const reference =
+      `BF-BW-${Date.now()}-${crypto
+        .randomBytes(4)
+        .toString("hex")
+        .toUpperCase()}`;
+
+    // ==========================================
+    // CREATE PAYSTACK TRANSFER RECIPIENT
+    // ==========================================
+
+    let recipientCode: string;
+
+    try {
+      const recipientResponse =
+        await axios.post(
+          "https://api.paystack.co/transferrecipient",
+          {
+            type: "nuban",
+            name: accountName,
+            account_number: accountNumber,
+            bank_code: bankCode,
+            currency: "NGN",
+          },
+          {
+            headers: {
+              Authorization:
+                `Bearer ${secretKey}`,
+              "Content-Type":
+                "application/json",
+            },
+          }
+        );
+
+      recipientCode =
+        recipientResponse.data?.data?.recipient_code;
+
+      if (!recipientCode) {
+        throw new Error(
+          "Paystack did not return a recipient code."
+        );
+      }
+    } catch (error: any) {
+      console.error(
+        "PAYSTACK RECIPIENT ERROR:",
+        error?.response?.data ||
+          error?.message ||
+          error
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            error?.response?.data?.message ||
+            "Failed to create Paystack recipient.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // ==========================================
+    // CREATE WITHDRAWAL RECORD
+    // ==========================================
+    //
+    // IMPORTANT:
+    //
+    // WE DO NOT DEDUCT BUSINESS WALLET HERE.
+    //
+    // The actual accounting happens only after
+    // Paystack sends transfer.success.
+    //
 
     const withdrawal =
       await prisma.businessWithdrawal.create({
@@ -378,44 +325,186 @@ export async function POST(
 
           bankName,
 
-          reference:
-            generateReference(),
+          recipientCode,
 
-          status: "PENDING",
+          reference,
+
+          status: "PROCESSING",
+
+          method: "PAYSTACK",
+
+          adminNote:
+            "Paystack transfer initiated. Waiting for transfer confirmation.",
         },
       });
 
-    return NextResponse.json(
-      {
+    // ==========================================
+    // INITIATE PAYSTACK TRANSFER
+    // ==========================================
+
+    try {
+      const transferResponse =
+        await axios.post(
+          "https://api.paystack.co/transfer",
+          {
+            source: "balance",
+
+            amount: Math.round(amount * 100),
+
+            recipient: recipientCode,
+
+            reason:
+              `Brainfriend Tech profit withdrawal - ${reference}`,
+          },
+          {
+            headers: {
+              Authorization:
+                `Bearer ${secretKey}`,
+              "Content-Type":
+                "application/json",
+            },
+          }
+        );
+
+      const transfer =
+        transferResponse.data?.data;
+
+      const transferCode =
+        transfer?.transfer_code || null;
+
+      // ==========================================
+      // UPDATE WITH TRANSFER CODE
+      // ==========================================
+
+      const updatedWithdrawal =
+        await prisma.businessWithdrawal.update({
+          where: {
+            id: withdrawal.id,
+          },
+
+          data: {
+            transferCode,
+
+            adminNote:
+              transfer?.status
+                ? `Paystack transfer initiated. Paystack status: ${transfer.status}.`
+                : "Paystack transfer initiated. Waiting for confirmation.",
+          },
+        });
+
+      // ==========================================
+      // IMPORTANT
+      // ==========================================
+      //
+      // NO BUSINESS WALLET ACCOUNTING HERE.
+      //
+      // The webhook will do:
+      //
+      // availableProfit -= amount
+      // withdrawnProfit += amount
+      // balance -= amount
+      //
+      // only when transfer.success arrives.
+      //
+
+      return NextResponse.json({
         success: true,
 
         message:
-          "Business withdrawal request created successfully.",
+          "Business withdrawal initiated successfully. Waiting for Paystack confirmation.",
 
-        withdrawal,
+        withdrawal: {
+          id: updatedWithdrawal.id,
 
-        availableBalance:
-          availableBalance - amount,
-      },
-      {
-        status: 201,
-      }
-    );
-  } catch (error) {
+          amount:
+            updatedWithdrawal.amount,
+
+          accountName:
+            updatedWithdrawal.accountName,
+
+          accountNumber:
+            updatedWithdrawal.accountNumber,
+
+          bankName:
+            updatedWithdrawal.bankName,
+
+          reference:
+            updatedWithdrawal.reference,
+
+          transferCode:
+            updatedWithdrawal.transferCode,
+
+          status:
+            updatedWithdrawal.status,
+        },
+
+        businessWallet: {
+          availableProfit:
+            businessWallet.availableProfit,
+
+          withdrawnProfit:
+            businessWallet.withdrawnProfit,
+
+          balance:
+            businessWallet.balance,
+        },
+      });
+    } catch (error: any) {
+      console.error(
+        "PAYSTACK TRANSFER ERROR:",
+        error?.response?.data ||
+          error?.message ||
+          error
+      );
+
+      // ==========================================
+      // MARK WITHDRAWAL FAILED
+      // ==========================================
+
+      await prisma.businessWithdrawal.update({
+        where: {
+          id: withdrawal.id,
+        },
+
+        data: {
+          status: "FAILED",
+
+          processedAt: new Date(),
+
+          adminNote:
+            error?.response?.data?.message ||
+            error?.message ||
+            "Paystack transfer failed.",
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            error?.response?.data?.message ||
+            "Paystack transfer failed.",
+        },
+        { status: 500 }
+      );
+    }
+  } catch (error: any) {
     console.error(
-      "BUSINESS WITHDRAWAL POST ERROR:",
-      error
+      "BUSINESS WITHDRAWAL ERROR:",
+      error?.response?.data ||
+        error?.message ||
+        error
     );
 
     return NextResponse.json(
       {
-        error:
-          "Failed to create business withdrawal request.",
+        success: false,
+        message:
+          error?.response?.data?.message ||
+          error?.message ||
+          "Failed to process business withdrawal.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }
-

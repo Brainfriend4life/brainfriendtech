@@ -1,212 +1,253 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { useEffect, useMemo, useState } from "react";
 
-type Plan = {
-  variation_code: string;
+type DataPlan = {
+  id: string;
+  provider: string;
+  bundleId: number;
   name: string;
-  variation_amount: string;
+  size: string;
+  duration: string;
+  providerPrice: number;
+  sellingPrice: number;
+  status: string;
 };
 
-export default function DataPage() {
-  const [network, setNetwork] = useState("mtn-data");
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [plan, setPlan] = useState("");
-  const [amount, setAmount] = useState("");
+const NETWORKS = ["MTN", "AIRTEL", "GLO", "9MOBILE"];
+
+export default function BuyDataPage() {
+  const [plans, setPlans] = useState<DataPlan[]>([]);
+  const [network, setNetwork] = useState("");
+  const [planId, setPlanId] = useState("");
   const [phone, setPhone] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [plansLoading, setPlansLoading] = useState(false);
 
-  /*
-  ==========================================
-  CALCULATE 5% SERVICE FEE
-  ==========================================
-  */
+  const [loadingPlans, setLoadingPlans] = useState(true);
+  const [buying, setBuying] = useState(false);
 
-  const dataAmount = Number(amount) || 0;
-  const serviceFee = dataAmount * 0.05;
-  const totalAmount = dataAmount + serviceFee;
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
-  /*
-  ==========================================
-  LOAD DATA PLANS
-  ==========================================
-  */
+  // ============================================
+  // LOAD DATA PLANS
+  // ============================================
 
   useEffect(() => {
-    fetchPlans();
-  }, [network]);
+    async function loadPlans() {
+      try {
+        setLoadingPlans(true);
+        setError("");
 
-  async function fetchPlans() {
-    setPlansLoading(true);
-    setPlans([]);
-    setPlan("");
-    setAmount("");
+        const response = await fetch("/api/data-plans", {
+          method: "GET",
+          cache: "no-store",
+        });
 
-    try {
-      const res = await fetch(
-        `/api/data/plans?serviceID=${encodeURIComponent(
-          network
-        )}`
-      );
+        const result = await response.json();
 
-      const data = await res.json();
+        console.log("DATA PLANS RESPONSE:", result);
 
-      console.log("DATA PLANS RESPONSE:", data);
+        if (!response.ok || !result.success) {
+          throw new Error(
+            result.message ||
+              result.error ||
+              "Unable to load data plans."
+          );
+        }
 
-      if (!res.ok) {
-        toast.error(
-          data.message || "Failed to load data plans"
+        setPlans(result.data || []);
+      } catch (err) {
+        console.error("LOAD DATA PLANS ERROR:", err);
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load data plans."
         );
-        return;
+      } finally {
+        setLoadingPlans(false);
       }
-
-      const variations = data.content?.variations || [];
-
-      const uniquePlans = variations.filter(
-        (
-          current: Plan,
-          index: number,
-          self: Plan[]
-        ) =>
-          index ===
-          self.findIndex(
-            (p) =>
-              p.variation_code ===
-              current.variation_code
-          )
-      );
-
-      setPlans(uniquePlans);
-    } catch (error) {
-      console.error("DATA PLANS ERROR:", error);
-
-      toast.error("Failed to load data plans");
-    } finally {
-      setPlansLoading(false);
     }
-  }
 
-  /*
-  ==========================================
-  SELECT DATA PLAN
-  ==========================================
-  */
+    loadPlans();
+  }, []);
 
-  function handlePlan(value: string) {
-    setPlan(value);
+  // ============================================
+  // FILTER PLANS BY NETWORK
+  // ============================================
 
-    const selected = plans.find(
-      (p) => p.variation_code === value
+  const filteredPlans = useMemo(() => {
+    if (!network) {
+      return [];
+    }
+
+    return plans.filter(
+      (plan) =>
+        String(plan.provider).toUpperCase() ===
+        network.toUpperCase()
     );
+  }, [plans, network]);
 
-    if (selected) {
-      setAmount(selected.variation_amount);
-    } else {
-      setAmount("");
-    }
+  // ============================================
+  // SELECTED PLAN
+  // ============================================
+
+  const selectedPlan = useMemo(() => {
+    return plans.find(
+      (plan) => String(plan.id) === String(planId)
+    );
+  }, [plans, planId]);
+
+  // ============================================
+  // NETWORK CHANGE
+  // ============================================
+
+  function handleNetworkChange(
+    e: React.ChangeEvent<HTMLSelectElement>
+  ) {
+    const value = e.target.value;
+
+    setNetwork(value);
+    setPlanId("");
+    setMessage("");
+    setError("");
   }
 
-  /*
-  ==========================================
-  BUY DATA
-  ==========================================
-  */
+  // ============================================
+  // BUY DATA
+  // ============================================
 
-  async function buyData(e: React.FormEvent) {
+  async function handleBuyData(
+    e: React.FormEvent<HTMLFormElement>
+  ) {
     e.preventDefault();
 
-    if (!phone.trim()) {
-      toast.error("Enter the phone number");
+    setError("");
+    setMessage("");
+
+    if (!network) {
+      setError("Please select a network.");
       return;
     }
 
-    if (!plan) {
-      toast.error("Select a data plan");
+    if (!planId) {
+      setError("Please select a data plan.");
       return;
     }
 
-    if (dataAmount <= 0) {
-      toast.error("Invalid data plan amount");
+    if (!selectedPlan) {
+      setError("Please select a valid data plan.");
       return;
     }
 
-    const payload = {
-      serviceID: network,
-      variation_code: plan,
-      phone: phone.trim(),
-      amount: dataAmount,
-    };
+    if (!selectedPlan.bundleId) {
+      setError(
+        "This data plan does not have a valid provider bundle ID."
+      );
+      return;
+    }
 
-    console.log("==========================================");
-    console.log("FRONTEND DATA PAYLOAD:", payload);
-    console.log("DATA AMOUNT:", dataAmount);
-    console.log("SERVICE FEE:", serviceFee);
-    console.log(
-      "TOTAL CUSTOMER CHARGE:",
-      totalAmount
-    );
-    console.log("==========================================");
+    if (!phone) {
+      setError(
+        "Please enter the recipient phone number."
+      );
+      return;
+    }
 
-    setLoading(true);
+    const cleanedPhone = phone.replace(/\s+/g, "");
+
+    if (!/^0\d{10}$/.test(cleanedPhone)) {
+      setError(
+        "Please enter a valid Nigerian phone number."
+      );
+      return;
+    }
+
+    setBuying(true);
 
     try {
-      const res = await fetch(
+      // ==========================================
+      // IMPORTANT:
+      // SEND PROVIDER BUNDLE ID
+      // NOT OUR DATABASE ID
+      // ==========================================
+
+      const requestBody = {
+        bundle_id: Number(selectedPlan.bundleId),
+        phone_number: cleanedPhone,
+      };
+
+      console.log(
+        "DATA PURCHASE REQUEST:",
+        requestBody
+      );
+
+      console.log(
+        "SELECTED PLAN:",
+        selectedPlan
+      );
+
+      const response = await fetch(
         "/api/data/purchase",
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(requestBody),
         }
       );
 
-      const data = await res.json();
+      const result = await response.json();
 
-      console.log("SERVER DATA RESPONSE:", data);
+      console.log(
+        "DATA PURCHASE RESPONSE:",
+        result
+      );
 
-      if (!res.ok) {
-        toast.error(
-          data.message || "Data purchase failed"
-        );
-        return;
-      }
-
-      if (data.success) {
-        toast.success(
-          "Data purchased successfully!"
-        );
-
-        setPhone("");
-        setPlan("");
-        setAmount("");
-      } else {
-        toast.error(
-          data.message ||
-            data.vtpass?.response_description ||
-            "Transaction failed"
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.message ||
+            result.error ||
+            "Data purchase failed."
         );
       }
-    } catch (error) {
+
+      // ==========================================
+      // SUCCESS
+      // ==========================================
+
+      setMessage(
+        result.message ||
+          "Data purchase successful."
+      );
+
+      setPhone("");
+      setPlanId("");
+    } catch (err) {
       console.error(
         "DATA PURCHASE ERROR:",
-        error
+        err
       );
 
-      toast.error(
-        "Something went wrong. Please try again."
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Data purchase failed."
       );
     } finally {
-      setLoading(false);
+      setBuying(false);
     }
   }
 
+  // ============================================
+  // UI
+  // ============================================
+
   return (
     <div className="w-full">
-      {/* PAGE HEADER */}
+      {/* HEADER */}
 
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
@@ -214,180 +255,165 @@ export default function DataPage() {
         </h1>
 
         <p className="mt-1 text-sm text-gray-500 sm:text-base">
-          Purchase mobile data quickly and securely.
+          Select your network, data plan and enter
+          the recipient number.
         </p>
       </div>
 
-      {/* FORM CARD */}
+      {/* CARD */}
 
       <div className="w-full max-w-2xl rounded-2xl bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-        <form
-          onSubmit={buyData}
-          className="space-y-5"
-        >
+        {/* ERROR */}
+
+        {error && (
+          <div className="mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+            {error}
+          </div>
+        )}
+
+        {/* SUCCESS */}
+
+        {message && (
+          <div className="mb-5 rounded-lg bg-green-50 p-3 text-sm text-green-600">
+            {message}
+          </div>
+        )}
+
+        <form onSubmit={handleBuyData}>
           {/* NETWORK */}
 
-          <div>
-            <label
-              htmlFor="network"
-              className="mb-2 block text-sm font-medium text-gray-700"
-            >
-              Network
-            </label>
+          <label className="mb-2 block text-sm font-medium text-gray-700">
+            Network
+          </label>
 
-            <select
-              id="network"
-              value={network}
-              onChange={(e) =>
-                setNetwork(e.target.value)
-              }
-              disabled={loading}
-              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
-            >
-              <option value="mtn-data">
-                MTN
-              </option>
+          <select
+            value={network}
+            onChange={handleNetworkChange}
+            className="mb-5 w-full rounded-lg border p-3 outline-none"
+            disabled={
+              loadingPlans || buying
+            }
+          >
+            <option value="">
+              {loadingPlans
+                ? "Loading networks..."
+                : "Select network"}
+            </option>
 
-              <option value="airtel-data">
-                Airtel
-              </option>
-
-              <option value="glo-data">
-                Glo
-              </option>
-
-              <option value="etisalat-data">
-                9mobile
-              </option>
-            </select>
-          </div>
+            {!loadingPlans &&
+              NETWORKS.map((item) => (
+                <option
+                  key={item}
+                  value={item}
+                >
+                  {item}
+                </option>
+              ))}
+          </select>
 
           {/* DATA PLAN */}
 
-          <div>
-            <label
-              htmlFor="data-plan"
-              className="mb-2 block text-sm font-medium text-gray-700"
-            >
-              Data Plan
-            </label>
+          <label className="mb-2 block text-sm font-medium text-gray-700">
+            Data Plan
+          </label>
 
-            <select
-              id="data-plan"
-              value={plan}
-              onChange={(e) =>
-                handlePlan(e.target.value)
-              }
-              disabled={
-                plansLoading || loading
-              }
-              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
-            >
-              <option value="">
-                {plansLoading
-                  ? "Loading plans..."
-                  : "Select Plan"}
+          <select
+            value={planId}
+            onChange={(e) => {
+              const value =
+                e.target.value;
+
+              console.log(
+                "SELECTED DATABASE PLAN ID:",
+                value
+              );
+
+              const selected = plans.find(
+                (plan) =>
+                  String(plan.id) ===
+                  String(value)
+              );
+
+              console.log(
+                "SELECTED PLAN:",
+                selected
+              );
+
+              console.log(
+                "PROVIDER BUNDLE ID:",
+                selected?.bundleId
+              );
+
+              setPlanId(value);
+              setError("");
+              setMessage("");
+            }}
+            className="mb-5 w-full rounded-lg border p-3 outline-none"
+            disabled={
+              loadingPlans ||
+              buying ||
+              !network ||
+              filteredPlans.length === 0
+            }
+          >
+            <option value="">
+              {loadingPlans
+                ? "Loading data plans..."
+                : !network
+                ? "Select network first"
+                : filteredPlans.length === 0
+                ? "No data plans available"
+                : "Please select a data plan"}
+            </option>
+
+            {filteredPlans.map((plan) => (
+              <option
+                key={plan.id}
+                value={plan.id}
+              >
+                {plan.name} - ₦
+                {Number(
+                  plan.sellingPrice
+                ).toLocaleString("en-NG")}{" "}
+                - {plan.duration}
               </option>
+            ))}
+          </select>
 
-              {plans.map((p, index) => (
-                <option
-                  key={`${p.variation_code}-${index}`}
-                  value={p.variation_code}
-                >
-                  {p.name} — ₦
+          {/* SELECTED PLAN INFORMATION */}
+
+          {selectedPlan && (
+            <div className="mb-5 rounded-lg bg-gray-50 p-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">
+                  Data
+                </span>
+
+                <span className="font-medium">
+                  {selectedPlan.name}
+                </span>
+              </div>
+
+              <div className="mt-2 flex justify-between text-sm">
+                <span className="text-gray-500">
+                  Duration
+                </span>
+
+                <span className="font-medium">
+                  {selectedPlan.duration}
+                </span>
+              </div>
+
+              <div className="mt-2 flex justify-between text-sm">
+                <span className="text-gray-500">
+                  Price
+                </span>
+
+                <span className="font-semibold">
+                  ₦
                   {Number(
-                    p.variation_amount
+                    selectedPlan.sellingPrice
                   ).toLocaleString("en-NG")}
-                </option>
-              ))}
-            </select>
-
-            {!plansLoading &&
-              plans.length === 0 && (
-                <p className="mt-2 text-sm text-red-500">
-                  No data plans available
-                  for this network.
-                </p>
-              )}
-          </div>
-
-          {/* DATA AMOUNT */}
-
-          <div>
-            <label
-              htmlFor="data-amount"
-              className="mb-2 block text-sm font-medium text-gray-700"
-            >
-              Data Amount
-            </label>
-
-            <input
-              id="data-amount"
-              value={
-                dataAmount
-                  ? `₦${dataAmount.toLocaleString(
-                      "en-NG"
-                    )}`
-                  : ""
-              }
-              readOnly
-              placeholder="Select a plan"
-              className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3 text-sm outline-none sm:text-base"
-            />
-          </div>
-
-          {/* SERVICE FEE */}
-
-          {dataAmount > 0 && (
-            <div className="rounded-xl bg-gray-50 p-4">
-              <div className="flex items-center justify-between gap-4 text-sm">
-                <span className="text-gray-600">
-                  Data price
-                </span>
-
-                <span className="font-medium text-gray-900">
-                  ₦
-                  {dataAmount.toLocaleString(
-                    "en-NG",
-                    {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }
-                  )}
-                </span>
-              </div>
-
-              <div className="mt-2 flex items-center justify-between gap-4 text-sm">
-                <span className="text-gray-600">
-                  Service fee (5%)
-                </span>
-
-                <span className="font-medium text-gray-900">
-                  ₦
-                  {serviceFee.toLocaleString(
-                    "en-NG",
-                    {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }
-                  )}
-                </span>
-              </div>
-
-              <div className="my-3 border-t" />
-
-              <div className="flex items-center justify-between gap-4 font-bold">
-                <span>Total</span>
-
-                <span className="text-indigo-600">
-                  ₦
-                  {totalAmount.toLocaleString(
-                    "en-NG",
-                    {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }
-                  )}
                 </span>
               </div>
             </div>
@@ -395,52 +421,39 @@ export default function DataPage() {
 
           {/* PHONE */}
 
-          <div>
-            <label
-              htmlFor="phone"
-              className="mb-2 block text-sm font-medium text-gray-700"
-            >
-              Phone Number
-            </label>
+          <label className="mb-2 block text-sm font-medium text-gray-700">
+            Phone Number
+          </label>
 
-            <input
-              id="phone"
-              type="tel"
-              inputMode="numeric"
-              value={phone}
-              onChange={(e) =>
-                setPhone(e.target.value)
-              }
-              disabled={loading}
-              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
-              placeholder="08012345678"
-              maxLength={11}
-            />
-          </div>
+          <input
+            type="tel"
+            inputMode="numeric"
+            value={phone}
+            onChange={(e) =>
+              setPhone(e.target.value)
+            }
+            placeholder="08012345678"
+            className="mb-5 w-full rounded-lg border p-3 outline-none"
+            maxLength={11}
+            disabled={buying}
+          />
 
-          {/* PURCHASE BUTTON */}
+          {/* BUY BUTTON */}
 
           <button
             type="submit"
             disabled={
-              loading ||
-              plansLoading ||
-              !plan ||
+              buying ||
+              loadingPlans ||
+              !network ||
+              !planId ||
               !phone ||
-              !amount
+              !selectedPlan
             }
-            className="w-full rounded-xl bg-indigo-600 p-3.5 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-black p-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading
+            {buying
               ? "Processing..."
-              : dataAmount > 0
-              ? `Buy Data — ₦${totalAmount.toLocaleString(
-                  "en-NG",
-                  {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  }
-                )}`
               : "Buy Data"}
           </button>
         </form>
