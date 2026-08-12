@@ -1,14 +1,20 @@
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { TransactionType } from "@prisma/client";
 
 export async function GET() {
   try {
-    const serviceTypes = [
-      "AIRTIME",
-      "DATA",
-      "ELECTRICITY",
-      "CABLE",
-      "EXAM_PIN",
+    // ==========================================
+    // SERVICE TYPES
+    // ==========================================
+
+    const serviceTypes: TransactionType[] = [
+      TransactionType.AIRTIME,
+      TransactionType.DATA,
+      TransactionType.ELECTRICITY,
+      TransactionType.CABLE,
+      TransactionType.EXAM_PIN,
     ];
 
     // ==========================================
@@ -51,8 +57,9 @@ export async function GET() {
     // TOTAL REVENUE
     // ==========================================
 
-    const totalRevenue =
-      Number(revenue._sum.amount ?? 0);
+    const totalRevenue = Number(
+      revenue._sum?.amount ?? 0
+    );
 
     // ==========================================
     // BREAKDOWN
@@ -66,6 +73,10 @@ export async function GET() {
       EXAM_PIN: 0,
     };
 
+    // ==========================================
+    // BUILD BREAKDOWN
+    // ==========================================
+
     for (const item of revenueByService) {
       if (
         Object.prototype.hasOwnProperty.call(
@@ -75,7 +86,7 @@ export async function GET() {
       ) {
         breakdown[
           item.type as keyof typeof breakdown
-        ] = Number(item._sum.amount ?? 0);
+        ] = Number(item._sum?.amount ?? 0);
       }
     }
 
@@ -110,3 +121,4 @@ export async function GET() {
     );
   }
 }
+
