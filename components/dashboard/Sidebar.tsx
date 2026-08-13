@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { signOut, useSession } from "next-auth/react";
+import {
+  signOut,
+  useSession,
+} from "next-auth/react";
 import {
   LayoutDashboard,
   Smartphone,
@@ -22,6 +25,7 @@ import {
   ReceiptText,
   Settings,
   CreditCard,
+  ShoppingBag,
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -237,6 +241,7 @@ export default function Sidebar({
         {/* ================================================== */}
 
         <nav className="flex-1 overflow-y-auto px-3 py-5">
+
           {/* ================================================== */}
           {/* OVERVIEW */}
           {/* ================================================== */}
@@ -405,6 +410,20 @@ export default function Sidebar({
 
             {openGroups.account && (
               <div className="mt-1 space-y-1 pl-1">
+
+                {/* PURCHASES HISTORY */}
+
+                {navItem(
+                  "/dashboard/purchases",
+                  "Purchases History",
+                  <ShoppingBag
+                    size={17}
+                    strokeWidth={2.5}
+                  />
+                )}
+
+                {/* TRANSACTIONS */}
+
                 {navItem(
                   "/dashboard/transactions",
                   "Transactions",
@@ -414,6 +433,8 @@ export default function Sidebar({
                   />
                 )}
 
+                {/* PROFILE */}
+
                 {navItem(
                   "/dashboard/profile",
                   "Profile",
@@ -422,6 +443,8 @@ export default function Sidebar({
                     strokeWidth={2.5}
                   />
                 )}
+
+                {/* CHANGE PASSWORD */}
 
                 {navItem(
                   "/dashboard/profile/change-password",
@@ -464,6 +487,7 @@ export default function Sidebar({
         {/* ================================================== */}
 
         <div className="shrink-0 border-t border-indigo-600 p-3">
+
           {/* USER INFO */}
 
           <div className="mb-2 rounded-xl border border-indigo-500/50 bg-indigo-600/50 px-3 py-2.5">

@@ -19,7 +19,8 @@ import {
   ChevronDown,
   Settings,
   Activity,
-  BookOpen,
+  ShoppingBag,
+  Fingerprint,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -44,6 +45,19 @@ const overviewItems: NavItem[] = [
     label: "Transactions",
     href: "/dashboard/admin/transactions",
     icon: ReceiptText,
+  },
+];
+
+const managementItems: NavItem[] = [
+  {
+    label: "Purchases History",
+    href: "/dashboard/admin/purchases",
+    icon: ShoppingBag,
+  },
+  {
+    label: "NIN Verifications",
+    href: "/dashboard/admin/nin",
+    icon: Fingerprint,
   },
 ];
 
@@ -89,15 +103,20 @@ export default function AdminSidebar() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [financeOpen, setFinanceOpen] = useState(
-    pathname.startsWith("/dashboard/admin/revenue") ||
-      pathname.startsWith("/dashboard/admin/wallet") ||
-      pathname.startsWith("/dashboard/admin/provider-wallet")
+  const [managementOpen, setManagementOpen] = useState(
+    pathname.startsWith("/dashboard/admin/purchases") ||
+      pathname.startsWith("/dashboard/admin/nin")
   );
 
   const [educationOpen, setEducationOpen] = useState(
     pathname.startsWith("/dashboard/admin/cbt") ||
       pathname.startsWith("/dashboard/admin/results")
+  );
+
+  const [financeOpen, setFinanceOpen] = useState(
+    pathname.startsWith("/dashboard/admin/revenue") ||
+      pathname.startsWith("/dashboard/admin/wallet") ||
+      pathname.startsWith("/dashboard/admin/provider-wallet")
   );
 
   function closeSidebar() {
@@ -134,9 +153,9 @@ export default function AdminSidebar() {
         key={item.href}
         href={item.href}
         onClick={closeSidebar}
-        className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
+        className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-all duration-200 ${
           active
-            ? "bg-white text-indigo-700 shadow-sm"
+            ? "bg-white text-indigo-700 shadow-md"
             : "text-indigo-100 hover:bg-indigo-600 hover:text-white"
         }`}
       >
@@ -159,9 +178,9 @@ export default function AdminSidebar() {
 
   return (
     <>
-      {/* =========================================
+      {/* =====================================================
           MOBILE MENU BUTTON
-      ========================================= */}
+      ===================================================== */}
 
       <button
         type="button"
@@ -172,9 +191,9 @@ export default function AdminSidebar() {
         <Menu className="h-6 w-6" />
       </button>
 
-      {/* =========================================
+      {/* =====================================================
           MOBILE OVERLAY
-      ========================================= */}
+      ===================================================== */}
 
       {isOpen && (
         <button
@@ -185,20 +204,18 @@ export default function AdminSidebar() {
         />
       )}
 
-      {/* =========================================
+      {/* =====================================================
           SIDEBAR
-      ========================================= */}
+      ===================================================== */}
 
       <aside
         className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-indigo-700 text-white shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
-          isOpen
-            ? "translate-x-0"
-            : "-translate-x-full"
+          isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* =========================================
+        {/* =====================================================
             HEADER
-        ========================================= */}
+        ===================================================== */}
 
         <div className="flex h-20 shrink-0 items-center justify-between border-b border-indigo-600 px-5">
           <Link
@@ -231,13 +248,15 @@ export default function AdminSidebar() {
           </button>
         </div>
 
-        {/* =========================================
+        {/* =====================================================
             NAVIGATION
-        ========================================= */}
+        ===================================================== */}
 
         <div className="flex-1 overflow-y-auto px-4 py-5">
 
-          {/* OVERVIEW */}
+          {/* =================================================
+              OVERVIEW
+          ================================================= */}
 
           <div>
             <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-wider text-indigo-300">
@@ -249,7 +268,37 @@ export default function AdminSidebar() {
             </nav>
           </div>
 
-          {/* EDUCATION */}
+          {/* =================================================
+              MANAGEMENT
+          ================================================= */}
+
+          <div className="mt-7">
+            <button
+              type="button"
+              onClick={() =>
+                setManagementOpen(!managementOpen)
+              }
+              className="mb-2 flex w-full items-center justify-between px-3 text-left text-[11px] font-bold uppercase tracking-wider text-indigo-300 transition hover:text-white"
+            >
+              <span>Management</span>
+
+              <ChevronDown
+                className={`h-4 w-4 transition-transform duration-200 ${
+                  managementOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {managementOpen && (
+              <nav className="space-y-1">
+                {managementItems.map(renderItem)}
+              </nav>
+            )}
+          </div>
+
+          {/* =================================================
+              EDUCATION
+          ================================================= */}
 
           <div className="mt-7">
             <button
@@ -257,15 +306,13 @@ export default function AdminSidebar() {
               onClick={() =>
                 setEducationOpen(!educationOpen)
               }
-              className="mb-2 flex w-full items-center justify-between px-3 text-left text-[11px] font-bold uppercase tracking-wider text-indigo-300"
+              className="mb-2 flex w-full items-center justify-between px-3 text-left text-[11px] font-bold uppercase tracking-wider text-indigo-300 transition hover:text-white"
             >
               <span>Education</span>
 
               <ChevronDown
-                className={`h-4 w-4 transition-transform ${
-                  educationOpen
-                    ? "rotate-180"
-                    : ""
+                className={`h-4 w-4 transition-transform duration-200 ${
+                  educationOpen ? "rotate-180" : ""
                 }`}
               />
             </button>
@@ -277,7 +324,9 @@ export default function AdminSidebar() {
             )}
           </div>
 
-          {/* FINANCE */}
+          {/* =================================================
+              FINANCE
+          ================================================= */}
 
           <div className="mt-7">
             <button
@@ -285,15 +334,13 @@ export default function AdminSidebar() {
               onClick={() =>
                 setFinanceOpen(!financeOpen)
               }
-              className="mb-2 flex w-full items-center justify-between px-3 text-left text-[11px] font-bold uppercase tracking-wider text-indigo-300"
+              className="mb-2 flex w-full items-center justify-between px-3 text-left text-[11px] font-bold uppercase tracking-wider text-indigo-300 transition hover:text-white"
             >
               <span>Finance</span>
 
               <ChevronDown
-                className={`h-4 w-4 transition-transform ${
-                  financeOpen
-                    ? "rotate-180"
-                    : ""
+                className={`h-4 w-4 transition-transform duration-200 ${
+                  financeOpen ? "rotate-180" : ""
                 }`}
               />
             </button>
@@ -305,7 +352,9 @@ export default function AdminSidebar() {
             )}
           </div>
 
-          {/* FUTURE SETTINGS */}
+          {/* =================================================
+              SYSTEM
+          ================================================= */}
 
           <div className="mt-7">
             <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-wider text-indigo-300">
@@ -315,35 +364,36 @@ export default function AdminSidebar() {
             <Link
               href="/dashboard/admin/settings"
               onClick={closeSidebar}
-              className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
-                isActive(
-                  "/dashboard/admin/settings"
-                )
-                  ? "bg-white text-indigo-700"
+              className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-all ${
+                isActive("/dashboard/admin/settings")
+                  ? "bg-white text-indigo-700 shadow-md"
                   : "text-indigo-100 hover:bg-indigo-600 hover:text-white"
               }`}
             >
-              <Settings className="h-5 w-5" />
+              <Settings className="h-5 w-5 shrink-0" />
 
               <span>Settings</span>
+
+              {isActive("/dashboard/admin/settings") && (
+                <span className="ml-auto h-2 w-2 rounded-full bg-indigo-600" />
+              )}
             </Link>
           </div>
-
         </div>
 
-        {/* =========================================
+        {/* =====================================================
             ADMIN PROFILE / LOGOUT
-        ========================================= */}
+        ===================================================== */}
 
         <div className="shrink-0 border-t border-indigo-600 p-4">
 
           <div className="mb-3 flex items-center gap-3 rounded-xl bg-indigo-600/50 p-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-indigo-700">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-indigo-700 shadow-sm">
               <ShieldCheck className="h-5 w-5" />
             </div>
 
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">
+              <p className="truncate text-sm font-bold">
                 Administrator
               </p>
 
@@ -357,7 +407,7 @@ export default function AdminSidebar() {
             type="button"
             onClick={handleLogout}
             disabled={loading}
-            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-indigo-100 transition hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold text-indigo-100 transition-all hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <LogOut className="h-5 w-5" />
 

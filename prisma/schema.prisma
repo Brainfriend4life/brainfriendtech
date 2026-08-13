@@ -278,7 +278,6 @@ model CablePlan {
 
   @@index([provider])
   @@index([status])
-  @@index([provider, status])
 }
 
 model ElectricityProvider {
@@ -321,6 +320,7 @@ model NinVerification {
   hasPdf        Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  pdfBase64     String?
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])

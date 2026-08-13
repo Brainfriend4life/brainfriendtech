@@ -41,6 +41,7 @@ export async function GET() {
     |--------------------------------------------------------------------------
     | Successful business revenue
     |--------------------------------------------------------------------------
+    | isTest: false ensures test transactions never count as real revenue.
     */
 
     const revenueResult =
@@ -50,6 +51,8 @@ export async function GET() {
             equals: "success",
             mode: "insensitive",
           },
+
+          isTest: false,
 
           type: {
             notIn: [
@@ -263,6 +266,7 @@ export async function POST(
     |--------------------------------------------------------------------------
     | Check available revenue
     |--------------------------------------------------------------------------
+    | isTest: false ensures test transactions never count as real revenue.
     */
 
     const revenueResult =
@@ -272,6 +276,8 @@ export async function POST(
             equals: "success",
             mode: "insensitive",
           },
+
+          isTest: false,
 
           type: {
             notIn: [
