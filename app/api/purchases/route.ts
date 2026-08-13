@@ -12,6 +12,38 @@ const PURCHASE_TYPES = [
   "NIN",
 ] as const;
 
+type PurchaseDetails =
+  | null
+  | {
+      pin: string;
+      serial: string;
+    }
+  | {
+      nin: string;
+      cardType: string;
+      firstName: string | null;
+      middleName: string | null;
+      surname: string | null;
+      gender: string | null;
+      birthDate: string | null;
+      telephone: string | null;
+      photo: string | null;
+      hasPdf: boolean;
+      transactionId: string | null;
+    };
+
+type Purchase = {
+  id: string;
+  type: string;
+  amount: number;
+  description: string;
+  status: string;
+  reference: string;
+  provider: string;
+  createdAt: Date;
+  details: PurchaseDetails;
+};
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -115,7 +147,7 @@ export async function GET() {
     // COMBINED PURCHASES
     // =========================================================
 
-    const purchases = transactions.map((transaction) => ({
+    const purchases: Purchase[] = transactions.map((transaction) => ({
       id: transaction.id,
       type: transaction.type,
       amount: Number(transaction.amount),
