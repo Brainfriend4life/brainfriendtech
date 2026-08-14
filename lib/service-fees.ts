@@ -1,82 +1,89 @@
 import { prisma } from "@/lib/prisma";
 
-export const SERVICE_FEE_SETTING_KEY =
-  "SERVICE_FEE_PERCENT";
+const DEFAULT_SERVICE_FEE_PERCENTAGE = 5;
+const SERVICE_FEE_SETTING_KEY = "SERVICE_FEE_PERCENT";
 
-export const DEFAULT_SERVICE_FEE_PERCENT = 5;
+export async function getServiceFeePercentage(): Promise<number> {
+  try {
+    const setting =
+      await prisma.systemSetting.findUnique({
+        where: {
+          key: SERVICE_FEE_SETTING_KEY,
+        },
+      });
 
-export async function getServiceFeePercent(): Promise<number> {
-  const setting =
-    await prisma.systemSetting.findUnique({
-      where: {
-        key: SERVICE_FEE_SETTING_KEY,
-      },
-    });
+    if (!setting) {
+      return DEFAULT_SERVICE_FEE_PERCENTAGE;
+    }
 
-  if (!setting) {
-    return DEFAULT_SERVICE_FEE_PERCENT;
+    const value = Number(setting.value);
+
+    if (
+      !Number.isFinite(value) ||
+      value < 0 ||
+      value > 100
+    ) {
+      return DEFAULT_SERVICE_FEE_PERCENTAGE;
+    }
+
+    return value;
+  } catch (error) {
+    console.error(
+      "SERVICE FEE SETTINGS ERROR:",
+      error
+    );
+
+    return DEFAULT_SERVICE_FEE_PERCENTAGE;
   }
-
-  const value = Number(setting.value);
-
-  if (
-    !Number.isFinite(value) ||
-    value < 0 ||
-    value > 100
-  ) {
-    return DEFAULT_SERVICE_FEE_PERCENT;
-  }
-
-  return value;
 }
 
 export function calculateServiceFee(
-  providerCost: number,
-  feePercent: number
+  amount: number,
+  percentage: number
+): number {
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0
+  ) {
+    return 0;
+  }
+
+  if (
+    !Number.isFinite(percentage) ||
+    percentage < 0
+  ) {
+    return 0;
+  }
+
+  return Number(
+    (
+      amount *
+      (percentage / 100)
+    ).toFixed(2)
+  );
+}
+
+export async function calculateServiceFeeWithSettings(
+  amount: number
 ) {
-  const cost = Number(providerCost);
-  const percent = Number(feePercent);
-
-  if (
-    !Number.isFinite(cost) ||
-    cost < 0
-  ) {
-    throw new Error(
-      "Invalid provider cost."
-    );
-  }
-
-  if (
-    !Number.isFinite(percent) ||
-    percent < 0 ||
-    percent > 100
-  ) {
-    throw new Error(
-      "Invalid service fee percentage."
-    );
-  }
+  const percentage =
+    await getServiceFeePercentage();
 
   const serviceFee =
-    cost * (percent / 100);
+    calculateServiceFee(
+      amount,
+      percentage
+    );
 
-  const totalAmount =
-    cost + serviceFee;
+  const total = Number(
+    (amount + serviceFee).toFixed(2)
+  );
 
   return {
-    providerCost: Number(
-      cost.toFixed(2)
-    ),
-
-    serviceFee: Number(
-      serviceFee.toFixed(2)
-    ),
-
-    totalAmount: Number(
-      totalAmount.toFixed(2)
-    ),
-
-    profit: Number(
-      serviceFee.toFixed(2)
-    ),
+    baseAmount: amount,
+    serviceFee,
+    serviceFeePercentage:
+      percentage,
+    total,
   };
 }
