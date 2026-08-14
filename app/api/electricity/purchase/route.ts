@@ -1,5 +1,3 @@
-// app/api/electricity/purchase/route.ts
-
 import {
   NextRequest,
   NextResponse,
@@ -38,10 +36,6 @@ export async function POST(
   let transactionId: string | null = null;
 
   try {
-    // ========================================================
-    // AUTHENTICATION
-    // ========================================================
-
     const session =
       await getServerSession(authOptions);
 
@@ -57,10 +51,6 @@ export async function POST(
 
     const userId = session.user.id;
 
-    // ========================================================
-    // REQUEST BODY
-    // ========================================================
-
     const body = await request.json();
 
     const {
@@ -70,10 +60,6 @@ export async function POST(
       meterType,
       phone,
     } = body;
-
-    // ========================================================
-    // VALIDATION
-    // ========================================================
 
     const numericDiscoId = Number(discoId);
     const numericAmount = Number(amount);
@@ -86,11 +72,10 @@ export async function POST(
       phone || ""
     ).replace(/\s+/g, "");
 
-    const normalizedMeterType = String(
-      meterType || "PREPAID"
-    )
-      .trim()
-      .toUpperCase();
+    const normalizedMeterType =
+      String(meterType || "PREPAID")
+        .trim()
+        .toUpperCase();
 
     if (
       !Number.isInteger(numericDiscoId) ||
@@ -99,7 +84,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid electricity provider.",
+          error:
+            "Invalid electricity provider.",
         },
         { status: 400 }
       );
@@ -112,7 +98,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid electricity amount.",
+          error:
+            "Invalid electricity amount.",
         },
         { status: 400 }
       );
@@ -122,7 +109,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error: "Meter number is required.",
+          error:
+            "Meter number is required.",
         },
         { status: 400 }
       );
@@ -132,7 +120,8 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error: "Phone number is required.",
+          error:
+            "Phone number is required.",
         },
         { status: 400 }
       );
@@ -153,21 +142,19 @@ export async function POST(
       );
     }
 
-    // ========================================================
-    // FIND USER
-    // ========================================================
-
-    const user = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
-    });
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+      });
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          error: "User account not found.",
+          error:
+            "User account not found.",
         },
         { status: 404 }
       );
@@ -177,36 +164,21 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error: "Your account is not active.",
+          error:
+            "Your account is not active.",
         },
         { status: 403 }
       );
     }
 
-    // ========================================================
-    // GLOBAL SERVICE FEE
-    // ========================================================
-    //
-    // The amount entered by the customer is treated as the
-    // provider/base amount.
-    //
-    // Example:
-    // Amount = ₦1,000
-    // Service fee = 5%
-    // Service fee = ₦50
-    // Customer pays = ₦1,050
-    //
-    // The provider still receives only ₦1,000.
-    // The ₦50 becomes additional platform profit.
-    // ========================================================
-
     const serviceFeePercent =
       await getServiceFeePercent();
 
-    const pricing = calculateServiceFee(
-      numericAmount,
-      serviceFeePercent
-    );
+    const pricing =
+      calculateServiceFee(
+        numericAmount,
+        serviceFeePercent
+      );
 
     const providerCost =
       pricing.providerCost;
@@ -219,10 +191,6 @@ export async function POST(
 
     const profit =
       pricing.profit;
-
-    // ========================================================
-    // CHECK WALLET
-    // ========================================================
 
     const walletBalance =
       Number(user.walletBalance);
@@ -247,10 +215,6 @@ export async function POST(
       );
     }
 
-    // ========================================================
-    // API KEY
-    // ========================================================
-
     const apiKey =
       process.env.CHEAPDATAHUB_API_KEY;
 
@@ -265,24 +229,14 @@ export async function POST(
       );
     }
 
-    // ========================================================
-    // REFERENCE
-    // ========================================================
-
     const reference =
       generateReference();
-
-    // ========================================================
-    // CREATE PENDING TRANSACTION
-    // ========================================================
 
     const transaction =
       await prisma.transaction.create({
         data: {
           userId: user.id,
-
           type: "ELECTRICITY",
-
           amount: totalAmount,
 
           description:
@@ -292,12 +246,11 @@ export async function POST(
 
           reference,
 
-          provider: "CheapDataHub",
+          provider:
+            "CheapDataHub",
 
           cost: providerCost,
-
           profit,
-
           isTest: false,
         },
       });
@@ -305,41 +258,25 @@ export async function POST(
     transactionId =
       transaction.id;
 
-    // ========================================================
-    // PROVIDER REQUEST
-    // ========================================================
-    //
-    // IMPORTANT:
-    // Send ONLY the actual electricity amount to
-    // CheapDataHub.
-    //
-    // The service fee is charged to the customer separately.
-    // ========================================================
-
     const providerBody = {
-      disco_id: numericDiscoId,
+      disco_id:
+        numericDiscoId,
 
-      meter_number: cleanedMeter,
+      meter_number:
+        cleanedMeter,
 
-      amount: providerCost,
+      amount:
+        providerCost,
 
       meter_type:
         normalizedMeterType.toLowerCase(),
 
-      phone: cleanedPhone,
+      phone:
+        cleanedPhone,
     };
 
     console.log(
-      "=========================================="
-    );
-
-    console.log(
       "CHEAPDATAHUB ELECTRICITY PURCHASE"
-    );
-
-    console.log(
-      "URL:",
-      CHEAPDATAHUB_ELECTRICITY_URL
     );
 
     console.log(
@@ -365,20 +302,6 @@ export async function POST(
     console.log(
       "CUSTOMER TOTAL:",
       totalAmount
-    );
-
-    console.log(
-      "EXPECTED PROFIT:",
-      profit
-    );
-
-    console.log(
-      "API KEY EXISTS:",
-      Boolean(apiKey)
-    );
-
-    console.log(
-      "=========================================="
     );
 
     const providerResponse =
@@ -420,10 +343,6 @@ export async function POST(
       responseText
     );
 
-    // ========================================================
-    // PARSE PROVIDER RESPONSE
-    // ========================================================
-
     let providerResult: any = null;
 
     try {
@@ -457,15 +376,14 @@ export async function POST(
             providerResponse.status,
 
           providerResponse:
-            responseText.substring(0, 500),
+            responseText.substring(
+              0,
+              500
+            ),
         },
         { status: 502 }
       );
     }
-
-    // ========================================================
-    // PROVIDER SUCCESS
-    // ========================================================
 
     const providerSuccess =
       providerResult?.status === true ||
@@ -507,10 +425,6 @@ export async function POST(
       );
     }
 
-    // ========================================================
-    // PROVIDER DATA
-    // ========================================================
-
     const providerData =
       providerResult?.data || {};
 
@@ -534,10 +448,6 @@ export async function POST(
       providerResult?.units ||
       providerData?.units ||
       null;
-
-    // ========================================================
-    // ATOMIC ACCOUNTING
-    // ========================================================
 
     const result =
       await prisma.$transaction(
@@ -657,10 +567,6 @@ export async function POST(
               ).toFixed(2)
             );
 
-          // ==================================================
-          // DEDUCT CUSTOMER WALLET
-          // ==================================================
-
           await tx.user.update({
             where: {
               id: user.id,
@@ -672,10 +578,6 @@ export async function POST(
             },
           });
 
-          // ==================================================
-          // MARK TRANSACTION SUCCESS
-          // ==================================================
-
           await tx.transaction.update({
             where: {
               id: transaction.id,
@@ -683,20 +585,12 @@ export async function POST(
 
             data: {
               status: "SUCCESS",
-
               amount: totalAmount,
-
               cost: providerCost,
-
               profit,
-
               isTest: false,
             },
           });
-
-          // ==================================================
-          // UPDATE BUSINESS WALLET
-          // ==================================================
 
           await tx.businessWallet.update({
             where: {
@@ -721,10 +615,6 @@ export async function POST(
                 newAvailableProfit,
             },
           });
-
-          // ==================================================
-          // BUSINESS REVENUE
-          // ==================================================
 
           await tx.businessRevenue.create({
             data: {
@@ -777,10 +667,6 @@ export async function POST(
         }
       );
 
-    // ========================================================
-    // SUCCESS RESPONSE
-    // ========================================================
-
     return NextResponse.json({
       success: true,
 
@@ -804,23 +690,18 @@ export async function POST(
       phone:
         cleanedPhone,
 
-      // Original electricity amount
       providerAmount:
         providerCost,
 
-      // Global platform fee
       serviceFeePercent,
 
       serviceFee,
 
-      // What customer actually paid
       amount:
         totalAmount,
 
-      // Provider cost
       providerCost,
 
-      // Platform profit
       profit,
 
       token,

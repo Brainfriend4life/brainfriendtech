@@ -1,85 +1,90 @@
-const NETWORKDATASUB_API_URL =
-  process.env.NETWORKDATASUB_API_URL ||
-  "https://www.networkdatasub.com/api";
-
-const NETWORKDATASUB_API_TOKEN =
-  process.env.NETWORKDATASUB_API_TOKEN;
+const NETWORKDATASUB_BASE_URL =
+  process.env.NETWORKDATASUB_BASE_URL ||
+  "https://networkdatasub.com/api";
 
 type NetworkDataSubOptions = {
-  method?: "GET" | "POST";
-  body?: Record<string, unknown>;
+  method?: string;
+  body?: unknown;
+  headers?: Record<
+    string,
+    string
+  >;
 };
 
-export async function networkDataSubRequest<T = any>(
+export async function networkDataSubRequest<T>(
   endpoint: string,
   options: NetworkDataSubOptions = {}
 ): Promise<{
   response: Response;
-  data: T | null;
+  data: T;
 }> {
-  if (!NETWORKDATASUB_API_TOKEN) {
+  const apiKey =
+    process.env.NETWORKDATASUB_API_KEY;
+
+  if (!apiKey) {
     throw new Error(
-      "NETWORKDATASUB_API_TOKEN is not configured."
+      "NETWORKDATASUB_API_KEY is not configured."
     );
   }
 
-  const method = options.method || "GET";
+  const url =
+    `${NETWORKDATASUB_BASE_URL.replace(
+      /\/$/,
+      ""
+    )}/${endpoint.replace(
+      /^\//,
+      ""
+    )}`;
 
-  const baseUrl =
-    NETWORKDATASUB_API_URL.replace(/\/+$/, "");
+  const response =
+    await fetch(url, {
+      method:
+        options.method ||
+        "GET",
 
-  const cleanEndpoint = endpoint.startsWith("/")
-    ? endpoint
-    : `/${endpoint}`;
+      headers: {
+        Accept:
+          "application/json",
 
-  const url = `${baseUrl}${cleanEndpoint}`;
+        "Content-Type":
+          "application/json",
 
-  console.log("NETWORKDATASUB REQUEST:", {
-    method,
-    url,
-  });
+        Authorization:
+          `Bearer ${apiKey}`,
 
-  const response = await fetch(url, {
-    method,
+        ...(options.headers || {}),
+      },
 
-    headers: {
-      Authorization: `Token ${NETWORKDATASUB_API_TOKEN}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "User-Agent": "BrainfriendTech/1.0",
-    },
+      ...(options.body !==
+      undefined
+        ? {
+            body:
+              JSON.stringify(
+                options.body
+              ),
+          }
+        : {}),
 
-    ...(method === "POST"
-      ? {
-          body: JSON.stringify(
-            options.body || {}
-          ),
-        }
-      : {}),
+      cache:
+        "no-store",
+    });
 
-    cache: "no-store",
-  });
+  const text =
+    await response.text();
 
-  const text = await response.text();
-
-  console.log(
-    "NETWORKDATASUB RESPONSE STATUS:",
-    response.status
-  );
-
-  console.log(
-    "NETWORKDATASUB RESPONSE BODY:",
-    text
-  );
-
-  let data: T | null = null;
+  let data: T;
 
   try {
-    data = text.trim()
+    data = text
       ? JSON.parse(text)
-      : null;
+      : ({} as T);
   } catch {
-    data = null;
+    data =
+      ({
+        message:
+          text ||
+          "Invalid provider response.",
+      } as T);
   }
 
   return {

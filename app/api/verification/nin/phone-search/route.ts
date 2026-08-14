@@ -1,13 +1,28 @@
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
 
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
+import {
+  getServerSession,
+} from "next-auth";
 
-import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { networkDataSubRequest } from "@/lib/networkdatasub";
+import {
+  authOptions,
+} from "@/lib/auth";
+
+import {
+  prisma,
+} from "@/lib/prisma";
+
+import {
+  networkDataSubRequest,
+} from "@/lib/networkdatasub";
 
 const DEFAULT_SERVICE_FEE_PERCENTAGE = 5;
-const SERVICE_FEE_SETTING_KEY = "SERVICE_FEE_PERCENT";
+
+const SERVICE_FEE_SETTING_KEY =
+  "SERVICE_FEE_PERCENT";
 
 const ALLOWED_CARD_TYPES = [
   "standard",
@@ -16,7 +31,8 @@ const ALLOWED_CARD_TYPES = [
   "vnin_slip",
 ] as const;
 
-type CardType = (typeof ALLOWED_CARD_TYPES)[number];
+type CardType =
+  (typeof ALLOWED_CARD_TYPES)[number];
 
 type PricingItem = {
   card_type?: string;
@@ -24,27 +40,26 @@ type PricingItem = {
   is_active?: boolean | number | string;
 };
 
-const FALLBACK_PROVIDER_PRICES: Record<CardType, number> = {
-  standard: 100,
-  regular: 150,
-  premium: 200,
-  vnin_slip: 150,
-};
+const FALLBACK_PROVIDER_PRICES:
+  Record<CardType, number> = {
+    standard: 100,
+    regular: 150,
+    premium: 200,
+    vnin_slip: 150,
+  };
 
-/*
-|--------------------------------------------------------------------------
-| HELPERS
-|--------------------------------------------------------------------------
-*/
-
-function normalizeCardType(value: unknown): string {
+function normalizeCardType(
+  value: unknown
+): string {
   return String(value || "")
     .trim()
     .toLowerCase()
     .replace(/[\s-]+/g, "_");
 }
 
-function toPositiveNumber(value: unknown): number | null {
+function toPositiveNumber(
+  value: unknown
+): number | null {
   if (
     value === null ||
     value === undefined ||
@@ -53,15 +68,18 @@ function toPositiveNumber(value: unknown): number | null {
     return null;
   }
 
-  const numberValue = Number(
-    String(value)
-      .replace(/,/g, "")
-      .replace(/₦/g, "")
-      .trim()
-  );
+  const numberValue =
+    Number(
+      String(value)
+        .replace(/,/g, "")
+        .replace(/₦/g, "")
+        .trim()
+    );
 
   if (
-    !Number.isFinite(numberValue) ||
+    !Number.isFinite(
+      numberValue
+    ) ||
     numberValue <= 0
   ) {
     return null;
@@ -70,16 +88,20 @@ function toPositiveNumber(value: unknown): number | null {
   return numberValue;
 }
 
-function isActive(item: PricingItem): boolean {
-  if (item.is_active === undefined) {
+function isActive(
+  item: PricingItem
+): boolean {
+  if (
+    item.is_active ===
+    undefined
+  ) {
     return true;
   }
 
-  if (item.is_active === true) {
-    return true;
-  }
-
-  if (item.is_active === 1) {
+  if (
+    item.is_active === true ||
+    item.is_active === 1
+  ) {
     return true;
   }
 
@@ -95,44 +117,42 @@ function isActive(item: PricingItem): boolean {
   );
 }
 
-/*
-|--------------------------------------------------------------------------
-| NORMALIZE PHONE
-|--------------------------------------------------------------------------
-*/
-
-function normalizePhone(value: unknown): string {
-  let phone = String(value || "").trim();
+function normalizePhone(
+  value: unknown
+): string {
+  let phone =
+    String(value || "").trim();
 
   phone = phone.replace(
     /[\s\-()]/g,
     ""
   );
 
-  if (phone.startsWith("+234")) {
-    phone = "0" + phone.substring(4);
+  if (
+    phone.startsWith("+234")
+  ) {
+    phone =
+      "0" +
+      phone.substring(4);
   } else if (
     phone.startsWith("234") &&
     phone.length === 13
   ) {
-    phone = "0" + phone.substring(3);
+    phone =
+      "0" +
+      phone.substring(3);
   }
 
   return phone;
 }
-
-/*
-|--------------------------------------------------------------------------
-| SERVICE FEE
-|--------------------------------------------------------------------------
-*/
 
 async function getServiceFeePercentage(): Promise<number> {
   try {
     const setting =
       await prisma.systemSetting.findUnique({
         where: {
-          key: SERVICE_FEE_SETTING_KEY,
+          key:
+            SERVICE_FEE_SETTING_KEY,
         },
       });
 
@@ -140,7 +160,8 @@ async function getServiceFeePercentage(): Promise<number> {
       return DEFAULT_SERVICE_FEE_PERCENTAGE;
     }
 
-    const value = Number(setting.value);
+    const value =
+      Number(setting.value);
 
     if (
       !Number.isFinite(value) ||
@@ -161,12 +182,6 @@ async function getServiceFeePercentage(): Promise<number> {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| PROVIDER PRICES
-|--------------------------------------------------------------------------
-*/
-
 async function getProviderPrices(): Promise<
   Record<CardType, number>
 > {
@@ -176,25 +191,13 @@ async function getProviderPrices(): Promise<
         "/verification/nin/pricing"
       );
 
-    console.log(
-      "NETWORKDATASUB NIN PRICING STATUS:",
-      response?.response?.status
-    );
-
-    console.log(
-      "NETWORKDATASUB NIN PRICING RESPONSE:",
-      JSON.stringify(
-        response?.data || {},
-        null,
-        2
-      )
-    );
-
     const providerData =
       response?.data;
 
     const items: PricingItem[] =
-      Array.isArray(providerData?.data)
+      Array.isArray(
+        providerData?.data
+      )
         ? providerData.data
         : Array.isArray(
             providerData?.data?.data
@@ -202,12 +205,18 @@ async function getProviderPrices(): Promise<
         ? providerData.data.data
         : [];
 
-    const prices: Record<CardType, number> = {
+    const prices:
+      Record<CardType, number> = {
       ...FALLBACK_PROVIDER_PRICES,
     };
 
-    for (const item of items) {
-      if (!item || !isActive(item)) {
+    for (
+      const item of items
+    ) {
+      if (
+        !item ||
+        !isActive(item)
+      ) {
         continue;
       }
 
@@ -216,10 +225,6 @@ async function getProviderPrices(): Promise<
           item.card_type
         );
 
-      /*
-       * NetworkDataSub may return
-       * "slip" instead of "vnin_slip".
-       */
       const cardType =
         normalized === "slip"
           ? "vnin_slip"
@@ -258,44 +263,45 @@ async function getProviderPrices(): Promise<
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| BUILD SELLING PRICING
-|--------------------------------------------------------------------------
-*/
-
 function buildPricing(
-  providerPrices: Record<CardType, number>,
+  providerPrices:
+    Record<CardType, number>,
   feePercentage: number
 ) {
-  const result: Record<
-    CardType,
-    {
-      basePrice: number;
-      serviceFee: number;
-      price: number;
-      serviceFeePercentage: number;
-      apiPrice: number;
-    }
-  > = {} as any;
+  const result:
+    Record<
+      CardType,
+      {
+        basePrice: number;
+        serviceFee: number;
+        price: number;
+        serviceFeePercentage: number;
+        apiPrice: number;
+      }
+    > = {} as any;
 
-  for (const cardType of ALLOWED_CARD_TYPES) {
+  for (
+    const cardType of
+      ALLOWED_CARD_TYPES
+  ) {
     const basePrice =
       providerPrices[cardType];
 
-    const serviceFee = Number(
-      (
-        basePrice *
-        (feePercentage / 100)
-      ).toFixed(2)
-    );
+    const serviceFee =
+      Number(
+        (
+          basePrice *
+          (feePercentage / 100)
+        ).toFixed(2)
+      );
 
-    const price = Number(
-      (
-        basePrice +
-        serviceFee
-      ).toFixed(2)
-    );
+    const price =
+      Number(
+        (
+          basePrice +
+          serviceFee
+        ).toFixed(2)
+      );
 
     result[cardType] = {
       basePrice,
@@ -303,18 +309,13 @@ function buildPricing(
       price,
       serviceFeePercentage:
         feePercentage,
-      apiPrice: basePrice,
+      apiPrice:
+        basePrice,
     };
   }
 
   return result;
 }
-
-/*
-|--------------------------------------------------------------------------
-| GET PRICING
-|--------------------------------------------------------------------------
-*/
 
 export async function GET() {
   try {
@@ -348,7 +349,9 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
+
       data: pricing,
+
       serviceFeePercentage:
         feePercentage,
     });
@@ -369,26 +372,18 @@ export async function GET() {
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| POST PHONE VERIFICATION
-|--------------------------------------------------------------------------
-*/
-
 export async function POST(
   request: NextRequest
 ) {
-  let transactionId: string | null = null;
-  let currentUserId: string | null = null;
+  let transactionId:
+    string | null = null;
+
+  let currentUserId:
+    string | null = null;
+
   let chargedAmount = 0;
 
   try {
-    /*
-    |--------------------------------------------------------------------------
-    | AUTHENTICATION
-    |--------------------------------------------------------------------------
-    */
-
     const session =
       await getServerSession(
         authOptions
@@ -408,16 +403,11 @@ export async function POST(
     currentUserId =
       session.user.id;
 
-    /*
-    |--------------------------------------------------------------------------
-    | REQUEST BODY
-    |--------------------------------------------------------------------------
-    */
-
     let body: any;
 
     try {
-      body = await request.json();
+      body =
+        await request.json();
     } catch {
       return NextResponse.json(
         {
@@ -429,39 +419,27 @@ export async function POST(
       );
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | PHONE
-    |--------------------------------------------------------------------------
-    */
-
     const phone =
-      normalizePhone(body?.phone);
-
-    /*
-    |--------------------------------------------------------------------------
-    | CARD TYPE
-    |--------------------------------------------------------------------------
-    */
+      normalizePhone(
+        body?.phone
+      );
 
     const normalizedCardType =
       normalizeCardType(
         body?.cardType ||
-          body?.card_type
+        body?.card_type
       );
 
-    const cardType =
-      normalizedCardType === "slip"
-        ? "vnin_slip"
-        : (normalizedCardType as CardType);
+    const cardType: CardType =
+  normalizedCardType === "slip"
+    ? "vnin_slip"
+    : (normalizedCardType as CardType);
 
-    /*
-    |--------------------------------------------------------------------------
-    | VALIDATE PHONE
-    |--------------------------------------------------------------------------
-    */
-
-    if (!/^0\d{10}$/.test(phone)) {
+    if (
+      !/^0\d{10}$/.test(
+        phone
+      )
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -471,12 +449,6 @@ export async function POST(
         { status: 400 }
       );
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | VALIDATE CARD TYPE
-    |--------------------------------------------------------------------------
-    */
 
     if (
       !ALLOWED_CARD_TYPES.includes(
@@ -493,16 +465,11 @@ export async function POST(
       );
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | USER
-    |--------------------------------------------------------------------------
-    */
-
     const user =
       await prisma.user.findUnique({
         where: {
-          id: session.user.id,
+          id:
+            session.user.id,
         },
       });
 
@@ -517,7 +484,10 @@ export async function POST(
       );
     }
 
-    if (user.status !== "ACTIVE") {
+    if (
+      user.status !==
+      "ACTIVE"
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -527,12 +497,6 @@ export async function POST(
         { status: 403 }
       );
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | PRICING
-    |--------------------------------------------------------------------------
-    */
 
     const feePercentage =
       await getServiceFeePercentage();
@@ -566,36 +530,38 @@ export async function POST(
     const providerCost =
       selectedPricing.apiPrice;
 
-    const profit = Number(
-      (
-        amount -
-        providerCost
-      ).toFixed(2)
-    );
+    const profit =
+      Number(
+        (
+          amount -
+          providerCost
+        ).toFixed(2)
+      );
 
     chargedAmount =
       amount;
 
-    /*
-    |--------------------------------------------------------------------------
-    | WALLET CHECK
-    |--------------------------------------------------------------------------
-    */
-
     const walletBalance =
-      Number(user.walletBalance);
+      Number(
+        user.walletBalance
+      );
 
     if (
-      !Number.isFinite(walletBalance) ||
-      walletBalance < amount
+      !Number.isFinite(
+        walletBalance
+      ) ||
+      walletBalance <
+        amount
     ) {
       return NextResponse.json(
         {
           success: false,
           message:
             "Insufficient wallet balance.",
+
           balance:
             walletBalance,
+
           required:
             amount,
         },
@@ -603,23 +569,11 @@ export async function POST(
       );
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | REFERENCE
-    |--------------------------------------------------------------------------
-    */
-
     const reference =
       `PHONE-${Date.now()}-${Math.random()
         .toString(36)
         .substring(2, 8)
         .toUpperCase()}`;
-
-    /*
-    |--------------------------------------------------------------------------
-    | DEBIT USER + CREATE PENDING TRANSACTION
-    |--------------------------------------------------------------------------
-    */
 
     const transaction =
       await prisma.$transaction(
@@ -627,20 +581,29 @@ export async function POST(
           const debit =
             await tx.user.updateMany({
               where: {
-                id: user.id,
-                status: "ACTIVE",
+                id:
+                  user.id,
+
+                status:
+                  "ACTIVE",
+
                 walletBalance: {
-                  gte: amount,
+                  gte:
+                    amount,
                 },
               },
+
               data: {
                 walletBalance: {
-                  decrement: amount,
+                  decrement:
+                    amount,
                 },
               },
             });
 
-          if (debit.count !== 1) {
+          if (
+            debit.count !== 1
+          ) {
             throw new Error(
               "Insufficient wallet balance."
             );
@@ -648,16 +611,28 @@ export async function POST(
 
           return tx.transaction.create({
             data: {
-              userId: user.id,
-              type: "NIN",
+              userId:
+                user.id,
+
+              type:
+                "NIN",
+
               amount,
+
               description:
                 `NIN phone verification (${cardType}) - ${phone}`,
-              status: "PENDING",
+
+              status:
+                "PENDING",
+
               reference,
+
               provider:
                 "NetworkDataSub",
-              cost: providerCost,
+
+              cost:
+                providerCost,
+
               profit,
             },
           });
@@ -667,12 +642,6 @@ export async function POST(
     transactionId =
       transaction.id;
 
-    /*
-    |--------------------------------------------------------------------------
-    | CALL NETWORKDATASUB
-    |--------------------------------------------------------------------------
-    */
-
     let providerResponse: any;
 
     try {
@@ -681,8 +650,10 @@ export async function POST(
           "/verification/nin/phone-search",
           {
             method: "POST",
+
             body: {
               phone,
+
               card_type:
                 cardType,
             },
@@ -696,27 +667,26 @@ export async function POST(
 
       await refundTransaction({
         transactionId,
-        userId: user.id,
+        userId:
+          user.id,
         amount,
       });
 
       return NextResponse.json(
         {
           success: false,
+
           message:
             "NetworkDataSub could not be reached.",
+
           reference,
-          refunded: true,
+
+          refunded:
+            true,
         },
         { status: 502 }
       );
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | LOG PROVIDER RESPONSE
-    |--------------------------------------------------------------------------
-    */
 
     const providerData =
       providerResponse?.data;
@@ -724,11 +694,6 @@ export async function POST(
     console.log(
       "NETWORKDATASUB PHONE HTTP STATUS:",
       providerResponse?.response?.status
-    );
-
-    console.log(
-      "NETWORKDATASUB PHONE HTTP OK:",
-      providerResponse?.response?.ok
     );
 
     console.log(
@@ -740,19 +705,14 @@ export async function POST(
       )
     );
 
-    /*
-    |--------------------------------------------------------------------------
-    | PROVIDER HTTP ERROR
-    |--------------------------------------------------------------------------
-    */
-
     if (
       !providerResponse?.response?.ok ||
       !providerData
     ) {
       await refundTransaction({
         transactionId,
-        userId: user.id,
+        userId:
+          user.id,
         amount,
       });
 
@@ -783,72 +743,70 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
+
           message:
             providerMessage,
+
           providerStatus:
-            providerResponse?.response
-              ?.status || null,
+            providerResponse
+              ?.response?.status ||
+            null,
+
           providerResponse:
-            providerData || null,
+            providerData ||
+            null,
+
           reference,
-          refunded: true,
+
+          refunded:
+            true,
         },
         { status: 400 }
       );
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | PROVIDER APPLICATION ERROR
-    |--------------------------------------------------------------------------
-    */
-
     if (
-      providerData.success !== true
+      providerData.success !==
+      true
     ) {
       await refundTransaction({
         transactionId,
-        userId: user.id,
+        userId:
+          user.id,
         amount,
       });
 
       return NextResponse.json(
         {
           success: false,
+
           message:
             providerData.message ||
             providerData.error ||
             "NetworkDataSub rejected the phone verification request.",
+
           providerErrors:
             providerData.errors ||
             null,
+
           providerData:
             providerData.data ||
             null,
+
           reference,
-          refunded: true,
+
+          refunded:
+            true,
         },
         { status: 400 }
       );
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | PROVIDER DATA
-    |--------------------------------------------------------------------------
-    */
 
     const providerDetails =
       providerData?.data
         ?.details ||
       providerData?.data ||
       {};
-
-    /*
-    |--------------------------------------------------------------------------
-    | EXTRACT DETAILS
-    |--------------------------------------------------------------------------
-    */
 
     const firstName =
       typeof providerDetails.firstName ===
@@ -936,20 +894,16 @@ export async function POST(
 
     const pdfBase64 =
       typeof providerData?.data
-        ?.pdf_base64 === "string"
-        ? providerData.data.pdf_base64
+        ?.pdf_base64 ===
+      "string"
+        ? providerData.data
+            .pdf_base64
         : null;
 
     const hasPdf =
       providerData?.data
         ?.has_pdf === true ||
       Boolean(pdfBase64);
-
-    /*
-    |--------------------------------------------------------------------------
-    | FINALIZE DATABASE
-    |--------------------------------------------------------------------------
-    */
 
     const result =
       await prisma.$transaction(
@@ -968,11 +922,17 @@ export async function POST(
                 data: {
                   name:
                     "Brainfriend Tech",
+
                   balance: 0,
+
                   totalRevenue: 0,
+
                   totalCost: 0,
+
                   totalProfit: 0,
+
                   withdrawnProfit: 0,
+
                   availableProfit: 0,
                 },
               });
@@ -980,11 +940,17 @@ export async function POST(
 
           await tx.transaction.update({
             where: {
-              id: transaction.id,
+              id:
+                transaction.id,
             },
+
             data: {
-              status: "SUCCESS",
-              cost: providerCost,
+              status:
+                "SUCCESS",
+
+              cost:
+                providerCost,
+
               profit,
             },
           });
@@ -995,23 +961,28 @@ export async function POST(
                 id:
                   businessWallet.id,
               },
+
               data: {
                 balance: {
                   increment:
                     amount,
                 },
+
                 totalRevenue: {
                   increment:
                     amount,
                 },
+
                 totalCost: {
                   increment:
                     providerCost,
                 },
+
                 totalProfit: {
                   increment:
                     profit,
                 },
+
                 availableProfit: {
                   increment:
                     profit,
@@ -1023,64 +994,86 @@ export async function POST(
             data: {
               transactionId:
                 transaction.id,
-              type: "NIN",
+
+              type:
+                "NIN",
+
               provider:
                 "NetworkDataSub",
+
               amount,
+
               cost:
                 providerCost,
+
               profit,
+
               reference,
+
               description:
                 `NIN phone verification (${cardType}) - ${phone}`,
+
               businessWalletId:
                 businessWallet.id,
             },
           });
+          
+const verification =
+  await tx.ninVerification.create({
+    data: {
+      userId: user.id,
 
-          const verification =
-            await tx.phoneVerification.create({
-              data: {
-                userId: user.id,
-                phone,
-                cardType,
-                amount,
-                cost:
-                  providerCost,
-                profit,
-                reference,
-                transactionId:
-                  transaction.id,
-                status:
-                  "SUCCESS",
-                firstName,
-                middleName,
-                surname,
-                gender,
-                birthDate,
-                telephone,
-                nin,
-                photo,
-              },
-            });
+      nin:
+        nin || "N/A",
+
+      cardType,
+
+      amount,
+
+      reference,
+
+      transactionId:
+        transaction.id,
+
+      status:
+        "SUCCESS",
+
+      firstName,
+      middleName,
+      surname,
+      gender,
+      birthDate,
+      telephone,
+      photo,
+
+      hasPdf,
+
+      pdfBase64,
+    },
+  });
 
           const freshUser =
             await tx.user.findUnique({
               where: {
-                id: user.id,
+                id:
+                  user.id,
               },
+
               select: {
-                walletBalance: true,
+                walletBalance:
+                  true,
               },
             });
 
           return {
             verification,
+
             walletBalance:
               Number(
                 freshUser?.walletBalance ||
-                  0
+                0
               ),
+
             businessBalance:
               Number(
                 updatedWallet.balance
@@ -1089,17 +1082,13 @@ export async function POST(
         }
       );
 
-    /*
-    |--------------------------------------------------------------------------
-    | SUCCESS RESPONSE
-    |--------------------------------------------------------------------------
-    */
-
     return NextResponse.json({
       success: true,
+
       message:
         providerData.message ||
         "Phone number verification completed successfully.",
+
       data: {
         verification_id:
           result.verification.id,
@@ -1165,12 +1154,6 @@ export async function POST(
       error
     );
 
-    /*
-    |--------------------------------------------------------------------------
-    | REFUND IF ALREADY DEBITED
-    |--------------------------------------------------------------------------
-    */
-
     if (
       transactionId &&
       currentUserId &&
@@ -1178,14 +1161,17 @@ export async function POST(
     ) {
       await refundTransaction({
         transactionId,
-        userId: currentUserId,
-        amount: chargedAmount,
+        userId:
+          currentUserId,
+        amount:
+          chargedAmount,
       });
     }
 
     return NextResponse.json(
       {
         success: false,
+
         message:
           error?.message ||
           "Phone verification failed.",
@@ -1195,17 +1181,13 @@ export async function POST(
   }
 }
 
-/*
-|--------------------------------------------------------------------------
-| REFUND FAILED TRANSACTION
-|--------------------------------------------------------------------------
-*/
-
-async function refundTransaction(params: {
-  transactionId: string;
-  userId: string;
-  amount: number;
-}) {
+async function refundTransaction(
+  params: {
+    transactionId: string;
+    userId: string;
+    amount: number;
+  }
+) {
   const {
     transactionId,
     userId,
@@ -1226,7 +1208,8 @@ async function refundTransaction(params: {
         const transaction =
           await tx.transaction.findUnique({
             where: {
-              id: transactionId,
+              id:
+                transactionId,
             },
           });
 
@@ -1234,10 +1217,6 @@ async function refundTransaction(params: {
           return;
         }
 
-        /*
-         * Only pending transactions
-         * can be refunded.
-         */
         if (
           transaction.status !==
           "PENDING"
@@ -1247,8 +1226,10 @@ async function refundTransaction(params: {
 
         await tx.user.update({
           where: {
-            id: userId,
+            id:
+              userId,
           },
+
           data: {
             walletBalance: {
               increment:
@@ -1259,8 +1240,10 @@ async function refundTransaction(params: {
 
         await tx.transaction.update({
           where: {
-            id: transactionId,
+            id:
+              transactionId,
           },
+
           data: {
             status:
               "FAILED",
@@ -1275,4 +1258,3 @@ async function refundTransaction(params: {
     );
   }
 }
-

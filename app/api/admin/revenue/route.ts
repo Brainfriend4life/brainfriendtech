@@ -1,14 +1,16 @@
+
+
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { TransactionType, Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 
 export async function GET() {
   try {
-    const session = await getServerSession(
-      authOptions
-    );
+    const session = await getServerSession(authOptions);
 
     if (
       !session?.user ||
@@ -23,26 +25,22 @@ export async function GET() {
       );
     }
 
-    const serviceTypes = [
-      "AIRTIME",
-      "DATA",
-      "ELECTRICITY",
-      "CABLE",
-      "EXAM_PIN",
-      "NIN",
-    ] as const;
+    const serviceTypes: TransactionType[] = [
+      TransactionType.AIRTIME,
+      TransactionType.DATA,
+      TransactionType.ELECTRICITY,
+      TransactionType.CABLE,
+      TransactionType.EXAM_PIN,
+      TransactionType.NIN,
+    ];
 
-    const serviceWhere = {
+    const serviceWhere: Prisma.TransactionWhereInput = {
       status: "SUCCESS",
       isTest: false,
       type: {
         in: serviceTypes,
       },
     };
-
-    /*
-     * DATE RANGES
-     */
 
     const now = new Date();
 
@@ -51,9 +49,7 @@ export async function GET() {
 
     const startOfWeek = new Date(now);
     const day = startOfWeek.getDay();
-
-    const diff =
-      day === 0 ? 6 : day - 1;
+    const diff = day === 0 ? 6 : day - 1;
 
     startOfWeek.setDate(
       startOfWeek.getDate() - diff
@@ -67,11 +63,10 @@ export async function GET() {
     );
 
     /*
-     * MAIN REVENUE
+     * TOTAL REVENUE
      */
-
-    const revenue = await prisma.transaction.aggregate(
-      {
+    const revenue =
+      await prisma.transaction.aggregate({
         where: serviceWhere,
 
         _sum: {
@@ -79,85 +74,100 @@ export async function GET() {
           cost: true,
           profit: true,
         },
-
-        _count: {
-          id: true,
-        },
-      }
-    );
+      });
 
     /*
      * TODAY
      */
+    const todayWhere: Prisma.TransactionWhereInput = {
+      ...serviceWhere,
+      createdAt: {
+        gte: startOfToday,
+      },
+    };
 
     const todayRevenue =
       await prisma.transaction.aggregate({
-        where: {
-          ...serviceWhere,
-          createdAt: {
-            gte: startOfToday,
-          },
-        },
+        where: todayWhere,
 
         _sum: {
           amount: true,
         },
-
-        _count: {
-          id: true,
-        },
       });
 
     /*
-     * WEEK
+     * THIS WEEK
      */
+    const weekWhere: Prisma.TransactionWhereInput = {
+      ...serviceWhere,
+      createdAt: {
+        gte: startOfWeek,
+      },
+    };
 
     const weekRevenue =
       await prisma.transaction.aggregate({
-        where: {
-          ...serviceWhere,
-          createdAt: {
-            gte: startOfWeek,
-          },
-        },
+        where: weekWhere,
 
         _sum: {
           amount: true,
         },
-
-        _count: {
-          id: true,
-        },
       });
 
     /*
-     * MONTH
+     * THIS MONTH
      */
+    const monthWhere: Prisma.TransactionWhereInput = {
+      ...serviceWhere,
+      createdAt: {
+        gte: startOfMonth,
+      },
+    };
 
     const monthRevenue =
       await prisma.transaction.aggregate({
-        where: {
-          ...serviceWhere,
-          createdAt: {
-            gte: startOfMonth,
-          },
-        },
+        where: monthWhere,
 
         _sum: {
           amount: true,
         },
-
-        _count: {
-          id: true,
-        },
       });
 
     /*
-     * TRANSACTION STATUS
+     * TRANSACTION COUNTS
      */
+    const [
+      totalTransactions,
+      todayTransactions,
+      weekTransactions,
+      monthTransactions,
+    ] = await Promise.all([
+      prisma.transaction.count({
+        where: serviceWhere,
+      }),
 
-    const successful =
-      await prisma.transaction.count({
+      prisma.transaction.count({
+        where: todayWhere,
+      }),
+
+      prisma.transaction.count({
+        where: weekWhere,
+      }),
+
+      prisma.transaction.count({
+        where: monthWhere,
+      }),
+    ]);
+
+    /*
+     * SUCCESSFUL / FAILED / PENDING
+     */
+    const [
+      successful,
+      failed,
+      pending,
+    ] = await Promise.all([
+      prisma.transaction.count({
         where: {
           type: {
             in: serviceTypes,
@@ -165,10 +175,9 @@ export async function GET() {
           isTest: false,
           status: "SUCCESS",
         },
-      });
+      }),
 
-    const failed =
-      await prisma.transaction.count({
+      prisma.transaction.count({
         where: {
           type: {
             in: serviceTypes,
@@ -176,10 +185,9 @@ export async function GET() {
           isTest: false,
           status: "FAILED",
         },
-      });
+      }),
 
-    const pending =
-      await prisma.transaction.count({
+      prisma.transaction.count({
         where: {
           type: {
             in: serviceTypes,
@@ -187,16 +195,16 @@ export async function GET() {
           isTest: false,
           status: "PENDING",
         },
-      });
+      }),
+    ]);
 
     /*
      * WALLET FUNDING
      */
-
     const funding =
       await prisma.transaction.aggregate({
         where: {
-          type: "FUND_WALLET",
+          type: TransactionType.FUND_WALLET,
           isTest: false,
           status: "SUCCESS",
         },
@@ -204,20 +212,24 @@ export async function GET() {
         _sum: {
           amount: true,
         },
+      });
 
-        _count: {
-          id: true,
+    const fundingCount =
+      await prisma.transaction.count({
+        where: {
+          type: TransactionType.FUND_WALLET,
+          isTest: false,
+          status: "SUCCESS",
         },
       });
 
     /*
-     * USER WITHDRAWALS
+     * WITHDRAWALS
      */
-
     const withdrawals =
       await prisma.transaction.aggregate({
         where: {
-          type: "WITHDRAWAL",
+          type: TransactionType.WITHDRAWAL,
           isTest: false,
           status: "SUCCESS",
         },
@@ -225,16 +237,20 @@ export async function GET() {
         _sum: {
           amount: true,
         },
+      });
 
-        _count: {
-          id: true,
+    const withdrawalCount =
+      await prisma.transaction.count({
+        where: {
+          type: TransactionType.WITHDRAWAL,
+          isTest: false,
+          status: "SUCCESS",
         },
       });
 
     /*
-     * SERVICE BREAKDOWN
+     * REVENUE BY SERVICE
      */
-
     const revenueByService =
       await prisma.transaction.groupBy({
         by: ["type"],
@@ -246,16 +262,45 @@ export async function GET() {
           cost: true,
           profit: true,
         },
-
-        _count: {
-          id: true,
-        },
       });
 
     /*
-     * RECENT TRANSACTIONS
+     * COUNT EACH SERVICE TYPE
      */
+    const serviceCounts =
+      await Promise.all(
+        revenueByService.map(async (item) => {
+          const count =
+            await prisma.transaction.count({
+              where: {
+                ...serviceWhere,
+                type: item.type,
+              },
+            });
 
+          return {
+            type: item.type,
+            count,
+          };
+        })
+      );
+
+    const serviceCountMap =
+      new Map(
+        serviceCounts.map((item) => [
+          item.type,
+          item.count,
+        ])
+      );
+
+    /*
+     * RECENT TRANSACTIONS
+     *
+     * We intentionally use userId here instead of
+     * transaction.user because the currently generated
+     * Prisma client does not expose the user relation
+     * on this model.
+     */
     const recentTransactions =
       await prisma.transaction.findMany({
         where: serviceWhere,
@@ -268,6 +313,7 @@ export async function GET() {
 
         select: {
           id: true,
+          userId: true,
           type: true,
           amount: true,
           cost: true,
@@ -277,54 +323,76 @@ export async function GET() {
           reference: true,
           createdAt: true,
           provider: true,
+        },
+      });
 
-          user: {
+    /*
+     * GET USERS FOR RECENT TRANSACTIONS
+     */
+    const userIds = Array.from(
+      new Set(
+        recentTransactions.map(
+          (transaction) =>
+            transaction.userId
+        )
+      )
+    );
+
+    const users =
+      userIds.length > 0
+        ? await prisma.user.findMany({
+            where: {
+              id: {
+                in: userIds,
+              },
+            },
+
             select: {
               id: true,
               fullName: true,
               email: true,
               phone: true,
             },
-          },
-        },
-      });
+          })
+        : [];
+
+    const userMap = new Map(
+      users.map((user) => [
+        user.id,
+        user,
+      ])
+    );
 
     /*
-     * RETURN THE EXACT STRUCTURE
-     * EXPECTED BY THE ADMIN REVENUE PAGE
+     * RESPONSE
      */
-
     return NextResponse.json({
       success: true,
 
       revenue: {
         total: Number(
-          revenue._sum.amount ?? 0
+          revenue._sum?.amount ?? 0
         ),
 
         today: Number(
-          todayRevenue._sum.amount ?? 0
+          todayRevenue._sum?.amount ?? 0
         ),
 
         week: Number(
-          weekRevenue._sum.amount ?? 0
+          weekRevenue._sum?.amount ?? 0
         ),
 
         month: Number(
-          monthRevenue._sum.amount ?? 0
+          monthRevenue._sum?.amount ?? 0
         ),
 
-        totalTransactions:
-          revenue._count.id,
+        totalTransactions,
 
-        todayTransactions:
-          todayRevenue._count.id,
+        todayTransactions,
 
-        weekTransactions:
-          weekRevenue._count.id,
+        weekTransactions,
 
-        monthTransactions:
-          monthRevenue._count.id,
+        monthTransactions,
       },
 
       transactions: {
@@ -335,18 +403,16 @@ export async function GET() {
 
       wallet: {
         funding: Number(
-          funding._sum.amount ?? 0
+          funding._sum?.amount ?? 0
         ),
 
-        fundingCount:
-          funding._count.id,
+        fundingCount,
 
         withdrawals: Number(
-          withdrawals._sum.amount ?? 0
+          withdrawals._sum?.amount ?? 0
         ),
 
-        withdrawalCount:
-          withdrawals._count.id,
+        withdrawalCount,
       },
 
       byType: revenueByService.map(
@@ -355,21 +421,22 @@ export async function GET() {
 
           _sum: {
             amount: Number(
-              item._sum.amount ?? 0
+              item._sum?.amount ?? 0
             ),
 
             cost: Number(
-              item._sum.cost ?? 0
+              item._sum?.cost ?? 0
             ),
 
             profit: Number(
-              item._sum.profit ?? 0
+              item._sum?.profit ?? 0
             ),
           },
 
-          _count: {
-            id: item._count.id,
-          },
+          _count:
+            serviceCountMap.get(
+              item.type
+            ) ?? 0,
         })
       ),
 
@@ -377,6 +444,10 @@ export async function GET() {
         recentTransactions.map(
           (transaction) => ({
             id: transaction.id,
+
+            userId:
+              transaction.userId,
+
             type: transaction.type,
 
             amount: Number(
@@ -394,7 +465,8 @@ export async function GET() {
             description:
               transaction.description,
 
-            status: transaction.status,
+            status:
+              transaction.status,
 
             reference:
               transaction.reference,
@@ -405,7 +477,10 @@ export async function GET() {
             provider:
               transaction.provider,
 
-            user: transaction.user,
+            user:
+              userMap.get(
+                transaction.userId
+              ) ?? null,
           })
         ),
     });
@@ -425,3 +500,4 @@ export async function GET() {
     );
   }
 }
+
