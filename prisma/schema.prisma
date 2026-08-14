@@ -1,3 +1,4 @@
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,17 +14,27 @@ model User {
   fullName                 String
   email                    String            @unique
   phone                    String            @unique
+
+  // PHONE VERIFICATION
+  phoneVerified            Boolean           @default(false)
+  phoneVerificationCode    String?
+  phoneVerificationExpires DateTime?
+
   password                 String
   walletBalance            Float             @default(0)
   role                     Role              @default(USER)
   createdAt                DateTime          @default(now())
   updatedAt                DateTime          @updatedAt
+
   resetPasswordExpires     DateTime?
   resetPasswordToken       String?
+
   status                   UserStatus        @default(ACTIVE)
+
   emailVerificationExpires DateTime?
   emailVerificationToken   String?           @unique
   emailVerified            Boolean           @default(false)
+
   cbtAttempts              CbtAttempt[]
   examPins                 ExamPin[]
   ninVerifications         NinVerification[]
@@ -48,6 +59,7 @@ model Transaction {
   cost        Float           @default(0)
   profit      Float           @default(0)
   isTest      Boolean         @default(false)
+
   user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -69,6 +81,7 @@ model Withdrawal {
   processedAt   DateTime?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
+
   user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -77,24 +90,26 @@ model Withdrawal {
 }
 
 model BusinessWithdrawal {
-  id            String                   @id @default(cuid())
-  amount        Float
-  accountName   String
-  accountNumber String
-  bankName      String
-  recipientCode String?
-  transferCode  String?
-  reference     String                   @unique
-  status        BusinessWithdrawalStatus @default(PENDING)
-  adminNote     String?
-  processedAt   DateTime?
-  createdAt     DateTime                 @default(now())
-  updatedAt     DateTime                 @updatedAt
-  method        BusinessWithdrawalMethod @default(MANUAL)
+  id                 String                   @id @default(cuid())
+  amount             Float
+  accountName        String
+  accountNumber      String
+  bankName           String
+  recipientCode      String?
+  transferCode       String?
+  reference          String                   @unique
+  paystackReference  String?                  @unique
+  status             BusinessWithdrawalStatus @default(PENDING)
+  adminNote          String?
+  processedAt        DateTime?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  method             BusinessWithdrawalMethod @default(MANUAL)
 
   @@index([status])
   @@index([createdAt])
   @@index([method])
+  @@index([paystackReference])
 }
 
 model BusinessWallet {
@@ -109,6 +124,7 @@ model BusinessWallet {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   recipientCode   String?
+
   revenues        BusinessRevenue[]
 }
 
@@ -124,6 +140,7 @@ model BusinessRevenue {
   description      String?
   createdAt        DateTime        @default(now())
   businessWalletId String
+
   businessWallet   BusinessWallet  @relation(fields: [businessWalletId], references: [id], onDelete: Cascade)
 
   @@index([type])
@@ -150,6 +167,7 @@ model ExamPin {
   amount    Float
   reference String   @unique
   createdAt DateTime @default(now())
+
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
@@ -164,6 +182,7 @@ model CbtAnswer {
   isCorrect      Boolean     @default(false)
   marksAwarded   Int         @default(0)
   createdAt      DateTime    @default(now())
+
   attempt        CbtAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   question       CbtQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
@@ -181,7 +200,9 @@ model CbtAttempt {
   percentage  Float       @default(0)
   startedAt   DateTime    @default(now())
   completedAt DateTime?
+
   answers     CbtAnswer[]
+
   exam        CbtExam     @relation(fields: [examId], references: [id], onDelete: Cascade)
   user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -199,6 +220,7 @@ model CbtExam {
   isActive    Boolean      @default(true)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+
   attempts    CbtAttempt[]
   subjects    CbtSubject[]
 }
@@ -217,6 +239,7 @@ model CbtQuestion {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   subjectId     String
+
   answers       CbtAnswer[]
   subject       CbtSubject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
@@ -230,6 +253,7 @@ model CbtSubject {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   examId      String
+
   questions   CbtQuestion[]
   exam        CbtExam       @relation(fields: [examId], references: [id], onDelete: Cascade)
 
@@ -321,6 +345,7 @@ model NinVerification {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   pdfBase64     String?
+
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -369,3 +394,4 @@ enum BusinessWithdrawalMethod {
   MANUAL
   PAYSTACK
 }
+

@@ -1,79 +1,10 @@
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { networkDataSubRequest } from "@/lib/networkdatasub";
-
-/**
- * NetworkDataSub returns pricing as an array:
- *
- * {
- *   success: true,
- *   message: "...",
- *   data: [
- *     {
- *       card_type: "standard",
- *       price: "160.00",
- *       api_price: "120.00",
- *       is_active: 1
- *     }
- *   ]
- * }
- */
-
-type NetworkDataSubPricingItem = {
-  id?: number;
-  card_type?: string;
-  price?: string | number | null;
-  api_price?: string | number | null;
-  user_type?: string;
-  is_active?: number | boolean;
-  description?: string | null;
-  created_at?: string;
-  updated_at?: string;
-};
-
-type NormalizedPrice = {
-  price: number;
-  api_price: number | null;
-};
-
-type PricingResponse = {
-  success: boolean;
-  message?: string;
-  data: Record<string, NormalizedPrice>;
-};
-
-// ==========================================
-// EMERGENCY FALLBACK PRICING
-// ==========================================
-// Used only when NetworkDataSub fails AND we have
-// no cache yet. Update these if provider prices change.
-const FALLBACK_PRICING: Record<string, NormalizedPrice> = {
-  standard: { price: 160, api_price: 120 },
-  regular: { price: 160, api_price: 120 },
-  premium: { price: 250, api_price: 200 },
-  vnin_slip: { price: 200, api_price: 150 },
-};
-
-/**
- * Short in-memory cache.
- *
- * This protects the application from a temporary NetworkDataSub
- * pricing 500 immediately breaking the frontend.
- *
- * NOTE:
- * This is intentionally short-lived. The provider remains the
- * source of truth.
- */
-let pricingCache:
-  | {
-      data: Record<string, NormalizedPrice>;
-      expiresAt: number;
-    }
-  | null = null;
-
-const CACHE_TTL_MS = 60_000; // 1 minute
 
 const ALLOWED_CARD_TYPES = [
   "standard",
@@ -82,53 +13,322 @@ const ALLOWED_CARD_TYPES = [
   "vnin_slip",
 ] as const;
 
-function isActive(item: NetworkDataSubPricingItem) {
-  return (
-    item.is_active === undefined ||
-    item.is_active === true ||
-    item.is_active === 1
-  );
+type AllowedCardType =
+  (typeof ALLOWED_CARD_TYPES)[number];
+
+type PricingItem = {
+  id?: number | string;
+  card_type?: string;
+  type?: string;
+  name?: string;
+  price?: string | number | null;
+  api_price?: string | number | null;
+  user_type?: string;
+  is_active?: number | boolean | string;
+  active?: number | boolean | string;
+  status?: number | boolean | string;
+};
+
+type NormalizedPrice = {
+  price: number;
+  basePrice: number;
+  serviceFee: number;
+  serviceFeePercentage: number;
+  api_price: number | null;
+};
+
+const SERVICE_FEE_SETTING_KEY = "SERVICE_FEE_PERCENT";
+const DEFAULT_SERVICE_FEE_PERCENTAGE = 5;
+
+/*
+|--------------------------------------------------------------------------
+| YOUR BASE NIN SELLING PRICES
+|--------------------------------------------------------------------------
+|
+| These are the prices BEFORE your global service fee.
+|
+| The service fee is automatically added from:
+|
+| SERVICE_FEE_PERCENT
+|
+| Example:
+| Premium = ₦250
+| Service fee = 5%
+| Customer pays = ₦262.50
+|
+*/
+
+const NIN_BASE_PRICES: Record<
+  AllowedCardType,
+  number
+> = {
+  standard: 200,
+  regular: 150,
+  premium: 250,
+  vnin_slip: 150,
+};
+
+let pricingCache: {
+  data: Record<string, NormalizedPrice>;
+  expiresAt: number;
+  serviceFeePercentage: number;
+} | null = null;
+
+const CACHE_TTL_MS = 60_000;
+
+/*
+|--------------------------------------------------------------------------
+| JSON RESPONSE
+|--------------------------------------------------------------------------
+*/
+
+function jsonResponse(
+  data: Record<string, any>,
+  status = 200
+) {
+  return NextResponse.json(data, {
+    status,
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
+/*
+|--------------------------------------------------------------------------
+| NORMALIZE CARD TYPE
+|--------------------------------------------------------------------------
+*/
+
+function normalizeCardType(
+  value: unknown
+): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+/*
+|--------------------------------------------------------------------------
+| CHECK PROVIDER ITEM ACTIVE
+|--------------------------------------------------------------------------
+*/
+
+function isActive(
+  item: PricingItem
+): boolean {
+  if (
+    item.is_active === undefined &&
+    item.active === undefined &&
+    item.status === undefined
+  ) {
+    return true;
+  }
+
+  const values = [
+    item.is_active,
+    item.active,
+    item.status,
+  ];
+
+  return values.some((value) => {
+    if (value === true || value === 1) {
+      return true;
+    }
+
+    const normalized = String(value || "")
+      .trim()
+      .toLowerCase();
+
+    return [
+      "true",
+      "1",
+      "active",
+      "enabled",
+      "success",
+    ].includes(normalized);
+  });
+}
+
+/*
+|--------------------------------------------------------------------------
+| NUMBER CONVERTER
+|--------------------------------------------------------------------------
+*/
+
 function toPositiveNumber(
-  value: string | number | null | undefined
+  value:
+    | string
+    | number
+    | null
+    | undefined
 ): number | null {
-  if (value === null || value === undefined) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
     return null;
   }
 
-  const numberValue = Number(value);
+  const cleaned = String(value)
+    .replace(/,/g, "")
+    .replace(/₦/g, "")
+    .trim();
 
-  if (!Number.isFinite(numberValue) || numberValue <= 0) {
+  const numberValue = Number(cleaned);
+
+  if (
+    !Number.isFinite(numberValue) ||
+    numberValue <= 0
+  ) {
     return null;
   }
 
   return numberValue;
 }
 
-function normalizePricing(
-  responseData: any
-): Record<string, NormalizedPrice> {
-  const items: NetworkDataSubPricingItem[] =
-    Array.isArray(responseData?.data)
-      ? responseData.data
-      : [];
+/*
+|--------------------------------------------------------------------------
+| GET SERVICE FEE FROM DATABASE
+|--------------------------------------------------------------------------
+*/
+
+async function getServiceFeePercentage(): Promise<number> {
+  try {
+    const setting =
+      await prisma.systemSetting.findUnique({
+        where: {
+          key: SERVICE_FEE_SETTING_KEY,
+        },
+      });
+
+    if (!setting) {
+      return DEFAULT_SERVICE_FEE_PERCENTAGE;
+    }
+
+    const percentage = Number(
+      setting.value
+    );
+
+    if (
+      !Number.isFinite(percentage) ||
+      percentage < 0 ||
+      percentage > 100
+    ) {
+      return DEFAULT_SERVICE_FEE_PERCENTAGE;
+    }
+
+    return percentage;
+  } catch (error) {
+    console.error(
+      "NIN SERVICE FEE SETTING ERROR:",
+      error
+    );
+
+    return DEFAULT_SERVICE_FEE_PERCENTAGE;
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| EXTRACT PROVIDER PRICING
+|--------------------------------------------------------------------------
+*/
+
+function extractItems(
+  providerData: any
+): PricingItem[] {
+  if (
+    Array.isArray(providerData?.data)
+  ) {
+    return providerData.data;
+  }
+
+  if (
+    Array.isArray(
+      providerData?.data?.data
+    )
+  ) {
+    return providerData.data.data;
+  }
+
+  if (
+    Array.isArray(
+      providerData?.data?.pricing
+    )
+  ) {
+    return providerData.data.pricing;
+  }
+
+  if (
+    Array.isArray(
+      providerData?.pricing
+    )
+  ) {
+    return providerData.pricing;
+  }
+
+  if (
+    Array.isArray(
+      providerData?.prices
+    )
+  ) {
+    return providerData.prices;
+  }
+
+  if (
+    Array.isArray(
+      providerData?.data?.prices
+    )
+  ) {
+    return providerData.data.prices;
+  }
+
+  return [];
+}
+
+/*
+|--------------------------------------------------------------------------
+| GET NETWORKDATASUB API PRICES
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+|
+| api_price is ONLY the provider/API cost.
+|
+| It does NOT control what your customer pays.
+|
+*/
+
+function extractApiPrices(
+  providerData: any
+): Record<string, number | null> {
+  const items =
+    extractItems(providerData);
 
   const result: Record<
     string,
-    NormalizedPrice
+    number | null
   > = {};
 
   for (const item of items) {
-    const cardType = String(
-      item?.card_type || ""
-    )
-      .trim()
-      .toLowerCase();
+    if (!item) {
+      continue;
+    }
+
+    const cardType =
+      normalizeCardType(
+        item.card_type ||
+          item.type ||
+          item.name
+      );
 
     if (
       !ALLOWED_CARD_TYPES.includes(
-        cardType as (typeof ALLOWED_CARD_TYPES)[number]
+        cardType as AllowedCardType
       )
     ) {
       continue;
@@ -138,229 +338,281 @@ function normalizePricing(
       continue;
     }
 
-    const price = toPositiveNumber(
-      item.price
+    const apiPrice =
+      toPositiveNumber(
+        item.api_price
+      );
+
+    result[cardType] =
+      apiPrice;
+  }
+
+  return result;
+}
+
+/*
+|--------------------------------------------------------------------------
+| BUILD FINAL PRICING
+|--------------------------------------------------------------------------
+|
+| Base price:
+| NIN_BASE_PRICES
+|
+| Service fee:
+| SERVICE_FEE_PERCENT
+|
+| Customer price:
+| base price + service fee
+|
+| API price:
+| NetworkDataSub api_price
+|
+*/
+
+function buildFinalPricing(
+  providerApiPrices: Record<
+    string,
+    number | null
+  >,
+  serviceFeePercentage: number
+): Record<
+  string,
+  NormalizedPrice
+> {
+  const result: Record<
+    string,
+    NormalizedPrice
+  > = {};
+
+  for (const cardType of ALLOWED_CARD_TYPES) {
+    const basePrice =
+      NIN_BASE_PRICES[cardType];
+
+    const serviceFee = Number(
+      (
+        basePrice *
+        (serviceFeePercentage / 100)
+      ).toFixed(2)
     );
 
-    if (price === null) {
-      continue;
-    }
-
-    const apiPrice = toPositiveNumber(
-      item.api_price
+    const customerPrice = Number(
+      (
+        basePrice +
+        serviceFee
+      ).toFixed(2)
     );
 
     result[cardType] = {
-      price,
-      api_price: apiPrice,
+      price: customerPrice,
+
+      basePrice,
+
+      serviceFee,
+
+      serviceFeePercentage,
+
+      api_price:
+        providerApiPrices[
+          cardType
+        ] ?? null,
     };
   }
 
   return result;
 }
 
+/*
+|--------------------------------------------------------------------------
+| GET
+|--------------------------------------------------------------------------
+*/
+
 export async function GET() {
   try {
-    // ==========================================
-    // AUTHENTICATION
-    // ==========================================
+    /*
+    |--------------------------------------------------------------------------
+    | AUTHENTICATION
+    |--------------------------------------------------------------------------
+    */
 
     const session =
-      await getServerSession(authOptions);
+      await getServerSession(
+        authOptions
+      );
 
     if (!session?.user?.id) {
-      return NextResponse.json(
+      return jsonResponse(
         {
           success: false,
-          error: "You must be logged in.",
+          error:
+            "You must be logged in.",
         },
-        { status: 401 }
+        401
       );
     }
 
-    // ==========================================
-    // USE SHORT CACHE IF AVAILABLE
-    // ==========================================
+    /*
+    |--------------------------------------------------------------------------
+    | GET CURRENT SERVICE FEE
+    |--------------------------------------------------------------------------
+    */
+
+    const serviceFeePercentage =
+      await getServiceFeePercentage();
+
+    /*
+    |--------------------------------------------------------------------------
+    | CACHE
+    |--------------------------------------------------------------------------
+    |
+    | IMPORTANT:
+    | Cache is only used if the service fee has not changed.
+    |
+    */
 
     if (
       pricingCache &&
-      pricingCache.expiresAt > Date.now()
+      pricingCache.expiresAt >
+        Date.now() &&
+      pricingCache.serviceFeePercentage ===
+        serviceFeePercentage
     ) {
-      console.log(
-        "NIN PRICING: Returning cached pricing."
-      );
-
-      return NextResponse.json({
+      return jsonResponse({
         success: true,
+
         message:
           "NIN verification pricing retrieved successfully.",
-        data: pricingCache.data,
+
+        data:
+          pricingCache.data,
+
+        serviceFeePercentage,
+
         cached: true,
+
+        fallback: false,
       });
     }
 
-    // ==========================================
-    // CALL NETWORKDATASUB
-    // ==========================================
+    /*
+    |--------------------------------------------------------------------------
+    | GET NETWORKDATASUB API PRICES
+    |--------------------------------------------------------------------------
+    */
 
-    const providerResponse =
-      await networkDataSubRequest<any>(
-        "/verification/nin/pricing"
+    let providerResponse:
+      any = null;
+
+    try {
+      providerResponse =
+        await networkDataSubRequest<any>(
+          "/user"
+        );
+    } catch (error) {
+      console.error(
+        "NETWORKDATASUB NIN PRICING ERROR:",
+        error
+      );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | EXTRACT API PRICE ONLY
+    |--------------------------------------------------------------------------
+    */
+
+    let providerApiPrices: Record<
+      string,
+      number | null
+    > = {};
+
+    if (providerResponse) {
+      console.log(
+        "NETWORKDATASUB NIN PRICING STATUS:",
+        providerResponse?.response?.status
+      );
+
+      console.log(
+        "NETWORKDATASUB NIN PRICING RESPONSE:",
+        JSON.stringify(
+          providerResponse?.data || {},
+          null,
+          2
+        )
+      );
+
+      providerApiPrices =
+        extractApiPrices(
+          providerResponse?.data
+        );
+
+      console.log(
+        "NETWORKDATASUB API PRICES:",
+        JSON.stringify(
+          providerApiPrices,
+          null,
+          2
+        )
+      );
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | BUILD FINAL CUSTOMER PRICES
+    |--------------------------------------------------------------------------
+    */
+
+    const finalPricing =
+      buildFinalPricing(
+        providerApiPrices,
+        serviceFeePercentage
       );
 
     console.log(
-      "NETWORKDATASUB NIN PRICING STATUS:",
-      providerResponse.response.status
+      "FINAL NIN PRICING:",
+      JSON.stringify(
+        finalPricing,
+        null,
+        2
+      )
     );
 
-    console.log(
-      "NETWORKDATASUB NIN PRICING RESPONSE:",
-      providerResponse.data
-    );
-
-    // ==========================================
-    // PROVIDER FAILURE
-    // ==========================================
-
-    if (
-      !providerResponse.response.ok ||
-      !providerResponse.data
-    ) {
-      /**
-       * If NetworkDataSub temporarily fails but we
-       * have a previous successful response, return
-       * that cached response.
-       */
-      if (pricingCache) {
-        console.warn(
-          "NIN PRICING: Provider failed. Returning previous cached pricing."
-        );
-
-        return NextResponse.json({
-          success: true,
-          message:
-            "NIN verification pricing retrieved from cache.",
-          data: pricingCache.data,
-          cached: true,
-        });
-      }
-
-      /**
-       * No cache exists yet (e.g. cold start right after
-       * deploy) AND the provider is down. Use the hardcoded
-       * emergency fallback instead of failing the request.
-       */
-      console.warn(
-        "NIN PRICING: Provider failed and no cache exists. Using emergency fallback pricing."
-      );
-
-      return NextResponse.json({
-        success: true,
-        message:
-          "NIN verification pricing retrieved (fallback).",
-        data: FALLBACK_PRICING,
-        fallback: true,
-      });
-    }
-
-    // ==========================================
-    // NORMALIZE PROVIDER RESPONSE
-    // ==========================================
-
-    if (
-      providerResponse.data?.success !== true
-    ) {
-      if (pricingCache) {
-        console.warn(
-          "NIN PRICING: Provider returned success=false. Returning cached pricing."
-        );
-
-        return NextResponse.json({
-          success: true,
-          message:
-            "NIN verification pricing retrieved from cache.",
-          data: pricingCache.data,
-          cached: true,
-        });
-      }
-
-      console.warn(
-        "NIN PRICING: Provider returned success=false and no cache exists. Using emergency fallback pricing."
-      );
-
-      return NextResponse.json({
-        success: true,
-        message:
-          "NIN verification pricing retrieved (fallback).",
-        data: FALLBACK_PRICING,
-        fallback: true,
-      });
-    }
-
-    const normalizedPricing =
-      normalizePricing(
-        providerResponse.data
-      );
-
-    console.log(
-      "NORMALIZED NIN PRICING:",
-      normalizedPricing
-    );
-
-    // ==========================================
-    // ENSURE PRICING WAS RETURNED
-    // ==========================================
-
-    if (
-      Object.keys(normalizedPricing).length === 0
-    ) {
-      if (pricingCache) {
-        console.warn(
-          "NIN PRICING: Empty provider response. Returning cached pricing."
-        );
-
-        return NextResponse.json({
-          success: true,
-          message:
-            "NIN verification pricing retrieved from cache.",
-          data: pricingCache.data,
-          cached: true,
-        });
-      }
-
-      console.warn(
-        "NIN PRICING: Empty provider response and no cache exists. Using emergency fallback pricing."
-      );
-
-      return NextResponse.json({
-        success: true,
-        message:
-          "NIN verification pricing retrieved (fallback).",
-        data: FALLBACK_PRICING,
-        fallback: true,
-      });
-    }
-
-    // ==========================================
-    // SAVE CACHE
-    // ==========================================
+    /*
+    |--------------------------------------------------------------------------
+    | SAVE CACHE
+    |--------------------------------------------------------------------------
+    */
 
     pricingCache = {
-      data: normalizedPricing,
+      data: finalPricing,
+
       expiresAt:
-        Date.now() + CACHE_TTL_MS,
+        Date.now() +
+        CACHE_TTL_MS,
+
+      serviceFeePercentage,
     };
 
-    // ==========================================
-    // SUCCESS
-    // ==========================================
+    /*
+    |--------------------------------------------------------------------------
+    | SUCCESS
+    |--------------------------------------------------------------------------
+    */
 
-    return NextResponse.json({
+    return jsonResponse({
       success: true,
+
       message:
         "NIN verification pricing retrieved successfully.",
-      data: normalizedPricing,
+
+      data: finalPricing,
+
+      serviceFeePercentage,
+
       cached: false,
+
+      fallback:
+        !providerResponse,
     });
   } catch (error: any) {
     console.error(
@@ -368,34 +620,80 @@ export async function GET() {
       error
     );
 
-    // ==========================================
-    // FALLBACK TO CACHE, THEN HARDCODED PRICING
-    // ==========================================
+    /*
+    |--------------------------------------------------------------------------
+    | CURRENT SERVICE FEE
+    |--------------------------------------------------------------------------
+    */
 
-    if (pricingCache) {
-      console.warn(
-        "NIN PRICING: Unexpected error. Returning cached pricing."
-      );
+    const serviceFeePercentage =
+      await getServiceFeePercentage();
 
-      return NextResponse.json({
+    /*
+    |--------------------------------------------------------------------------
+    | CACHE FALLBACK
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+      pricingCache &&
+      pricingCache.serviceFeePercentage ===
+        serviceFeePercentage
+    ) {
+      return jsonResponse({
         success: true,
+
         message:
           "NIN verification pricing retrieved from cache.",
-        data: pricingCache.data,
+
+        data:
+          pricingCache.data,
+
+        serviceFeePercentage,
+
         cached: true,
+
+        fallback: false,
       });
     }
 
-    console.warn(
-      "NIN PRICING: Unexpected error and no cache exists. Using emergency fallback pricing."
-    );
+    /*
+    |--------------------------------------------------------------------------
+    | FINAL FALLBACK
+    |--------------------------------------------------------------------------
+    */
 
-    return NextResponse.json({
+    const fallbackPricing =
+      buildFinalPricing(
+        {},
+        serviceFeePercentage
+      );
+
+    pricingCache = {
+      data: fallbackPricing,
+
+      expiresAt:
+        Date.now() +
+        CACHE_TTL_MS,
+
+      serviceFeePercentage,
+    };
+
+    return jsonResponse({
       success: true,
+
       message:
-        "NIN verification pricing retrieved (fallback).",
-      data: FALLBACK_PRICING,
+        "NIN verification pricing loaded using configured prices.",
+
+      data:
+        fallbackPricing,
+
+      serviceFeePercentage,
+
+      cached: false,
+
       fallback: true,
     });
   }
 }
+

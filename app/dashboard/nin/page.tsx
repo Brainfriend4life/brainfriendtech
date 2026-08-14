@@ -14,6 +14,8 @@ import {
   ShieldCheck,
   Search,
   RefreshCw,
+  Phone,
+  UserRound,
 } from "lucide-react";
 
 import toast from "react-hot-toast";
@@ -23,6 +25,8 @@ type CardType =
   | "regular"
   | "premium"
   | "vnin_slip";
+
+type VerificationMethod = "nin" | "phone";
 
 type PricingItem = {
   price: number;
@@ -37,61 +41,41 @@ type Pricing = {
 };
 
 type VerificationResult = {
-  verification_id: string;
-
+  verification_id: string | number;
   transaction_id?: string | null;
-
   reference: string;
-
   provider_reference?: string | null;
-
   amount: number;
-
   provider_cost?: number;
-
   profit?: number;
-
   card_type: string;
-
   status: string;
 
   details: {
     nin?: string;
-
     firstName?: string;
-
     middleName?: string | null;
-
     surname?: string;
-
+    lastName?: string;
     gender?: string;
-
     birthDate?: string;
-
+    dateOfBirth?: string;
     telephoneNo?: string;
-
+    mobile?: string;
+    phone?: string;
     photo?: string;
-
     [key: string]: unknown;
   };
 
   pdf_base64?: string | null;
-
   has_pdf?: boolean;
-
   wallet_balance: number;
-
   business_revenue?: number;
-
   business_cost?: number;
-
   business_profit?: number;
 };
 
-const CARD_TYPE_LABELS: Record<
-  CardType,
-  string
-> = {
+const CARD_TYPE_LABELS: Record<CardType, string> = {
   standard: "Standard",
   regular: "Regular",
   premium: "Premium",
@@ -99,21 +83,20 @@ const CARD_TYPE_LABELS: Record<
 };
 
 export default function NinVerificationPage() {
-  const [nin, setNin] =
-    useState("");
+  const [method, setMethod] =
+    useState<VerificationMethod>("nin");
+
+  const [nin, setNin] = useState("");
+  const [phone, setPhone] = useState("");
 
   const [cardType, setCardType] =
-    useState<CardType>(
-      "standard"
-    );
+    useState<CardType>("standard");
 
   const [pricing, setPricing] =
     useState<Pricing>({});
 
-  const [
-    loadingPricing,
-    setLoadingPricing,
-  ] = useState(true);
+  const [loadingPricing, setLoadingPricing] =
+    useState(true);
 
   const [pricingError, setPricingError] =
     useState("");
@@ -122,23 +105,17 @@ export default function NinVerificationPage() {
     useState(false);
 
   const [result, setResult] =
-    useState<VerificationResult | null>(
-      null
-    );
+    useState<VerificationResult | null>(null);
 
-  /**
-   * Prevent React StrictMode from making
-   * duplicate pricing requests.
-   */
   const pricingLoadedRef =
     useRef(false);
 
-  /**
-   * Prevent the user from accidentally
-   * submitting the exact same request twice.
-   */
   const submissionKeyRef =
     useRef<string | null>(null);
+
+  // ============================================================
+  // LOAD PRICING
+  // ============================================================
 
   useEffect(() => {
     if (pricingLoadedRef.current) {
@@ -150,35 +127,47 @@ export default function NinVerificationPage() {
     loadPricing();
   }, []);
 
-  // ============================================================
-  // LOAD PRICING
-  // ============================================================
-
   async function loadPricing(
     showToast = true
   ) {
     try {
       setLoadingPricing(true);
-
       setPricingError("");
 
-      const response =
-        await fetch(
-          "/api/verification/nin/pricing",
+      const response = await fetch(
+        "/api/verification/nin/pricing",
+        {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const responseText =
+        await response.text();
+
+      let data: any = null;
+
+      try {
+        data = responseText.trim()
+          ? JSON.parse(responseText)
+          : null;
+      } catch (parseError) {
+        console.error(
+          "NIN PRICING INVALID JSON:",
           {
-            method: "GET",
-
-            cache: "no-store",
-
-            headers: {
-              Accept:
-                "application/json",
-            },
+            status: response.status,
+            responseText,
+            parseError,
           }
         );
 
-      const data =
-        await response.json();
+        throw new Error(
+          "NIN pricing service returned an invalid response."
+        );
+      }
 
       console.log(
         "NIN PRICING RESPONSE:",
@@ -196,8 +185,7 @@ export default function NinVerificationPage() {
         );
       }
 
-      const source =
-        data?.data;
+      const source = data?.data;
 
       if (
         !source ||
@@ -209,8 +197,7 @@ export default function NinVerificationPage() {
         );
       }
 
-      const normalized: Pricing =
-        {};
+      const normalized: Pricing = {};
 
       const cardTypes: CardType[] = [
         "standard",
@@ -219,11 +206,8 @@ export default function NinVerificationPage() {
         "vnin_slip",
       ];
 
-      for (
-        const type of cardTypes
-      ) {
-        const item =
-          source?.[type];
+      for (const type of cardTypes) {
+        const item = source[type];
 
         if (
           !item ||
@@ -232,22 +216,17 @@ export default function NinVerificationPage() {
           continue;
         }
 
-        const price =
-          Number(
-            item.price
-          );
+        const price = Number(item.price);
 
         const apiPrice =
-          item.api_price === null
+          item.api_price === null ||
+          item.api_price === undefined ||
+          item.api_price === ""
             ? null
-            : Number(
-                item.api_price
-              );
+            : Number(item.api_price);
 
         if (
-          !Number.isFinite(
-            price
-          ) ||
+          !Number.isFinite(price) ||
           price <= 0
         ) {
           continue;
@@ -255,12 +234,9 @@ export default function NinVerificationPage() {
 
         normalized[type] = {
           price,
-
           api_price:
             apiPrice !== null &&
-            Number.isFinite(
-              apiPrice
-            ) &&
+            Number.isFinite(apiPrice) &&
             apiPrice > 0
               ? apiPrice
               : null,
@@ -273,40 +249,23 @@ export default function NinVerificationPage() {
       );
 
       if (
-        Object.keys(
-          normalized
-        ).length === 0
+        Object.keys(normalized).length === 0
       ) {
         throw new Error(
           "No active NIN verification pricing was returned."
         );
       }
 
-      setPricing(
-        normalized
-      );
+      setPricing(normalized);
 
-      /**
-       * Automatically select an available card type
-       * if the current one has no pricing.
-       */
-      if (
-        !normalized[
-          cardType
-        ]
-      ) {
+      if (!normalized[cardType]) {
         const firstAvailable =
           cardTypes.find(
-            (type) =>
-              normalized[type]
+            (type) => normalized[type]
           );
 
-        if (
-          firstAvailable
-        ) {
-          setCardType(
-            firstAvailable
-          );
+        if (firstAvailable) {
+          setCardType(firstAvailable);
         }
       }
 
@@ -316,13 +275,6 @@ export default function NinVerificationPage() {
         );
       }
 
-      /**
-       * The backend falls back to hardcoded emergency
-       * pricing when NetworkDataSub is unreachable and
-       * no cache exists yet. This is silent to the user
-       * (they still see a working price), but logged here
-       * so it's easy to notice during testing/monitoring.
-       */
       if (data?.fallback) {
         console.warn(
           "NIN pricing served from emergency fallback values."
@@ -338,14 +290,10 @@ export default function NinVerificationPage() {
         error?.message ||
         "Unable to load NIN pricing.";
 
-      setPricingError(
-        message
-      );
+      setPricingError(message);
 
       if (showToast) {
-        toast.error(
-          message
-        );
+        toast.error(message);
       }
     } finally {
       setLoadingPricing(false);
@@ -353,54 +301,201 @@ export default function NinVerificationPage() {
   }
 
   // ============================================================
-  // CREATE IDEMPOTENCY KEY
+  // IDEMPOTENCY KEY
   // ============================================================
 
   function createIdempotencyKey() {
-    /**
-     * crypto.randomUUID() is available in modern browsers.
-     *
-     * The fallback handles older environments.
-     */
     if (
       typeof crypto !== "undefined" &&
       typeof crypto.randomUUID ===
         "function"
     ) {
-      return `nin-${crypto.randomUUID()}`;
+      return `verification-${crypto.randomUUID()}`;
     }
 
-    return `nin-${Date.now()}-${Math.random()
+    return `verification-${Date.now()}-${Math.random()
       .toString(36)
       .substring(2, 18)}`;
   }
 
   // ============================================================
-  // SUBMIT NIN
+  // VERIFY NIN
+  // ============================================================
+
+  async function verifyNin(
+    cleanedNin: string,
+    idempotencyKey: string
+  ) {
+    const response =
+      await fetch(
+        "/api/verification/nin",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Accept:
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            nin: cleanedNin,
+            cardType,
+            idempotencyKey,
+          }),
+        }
+      );
+
+    const responseText =
+      await response.text();
+
+    let data: any = null;
+
+    try {
+      data = responseText.trim()
+        ? JSON.parse(responseText)
+        : null;
+    } catch (parseError) {
+      console.error(
+        "NIN VERIFICATION INVALID JSON:",
+        {
+          status: response.status,
+          responseText,
+          parseError,
+        }
+      );
+
+      throw new Error(
+        "The server returned an invalid response."
+      );
+    }
+
+    console.log(
+      "NIN VERIFICATION RESPONSE:",
+      data
+    );
+
+    if (
+      !response.ok ||
+      data?.success !== true
+    ) {
+      throw new Error(
+        data?.error ||
+          data?.message ||
+          "NIN verification failed."
+      );
+    }
+
+    if (!data?.data) {
+      throw new Error(
+        "NIN verification succeeded but no result was returned."
+      );
+    }
+
+    return data.data;
+  }
+
+  // ============================================================
+  // VERIFY NIN BY PHONE
+  // ============================================================
+
+  async function verifyByPhone(
+    cleanedPhone: string,
+    idempotencyKey: string
+  ) {
+    /*
+     * Your local backend route should handle:
+     *
+     * POST /api/verification/nin/phone-search
+     *
+     * and then call NetworkDataSub:
+     *
+     * POST https://networkdatasub.com/api/verification/nin/phone-search
+     *
+     * This keeps your API token hidden from the browser.
+     */
+
+    const response =
+      await fetch(
+        "/api/verification/nin/phone-search",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Accept:
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            phone: cleanedPhone,
+            cardType,
+            idempotencyKey,
+          }),
+        }
+      );
+
+    const responseText =
+      await response.text();
+
+    let data: any = null;
+
+    try {
+      data = responseText.trim()
+        ? JSON.parse(responseText)
+        : null;
+    } catch (parseError) {
+      console.error(
+        "PHONE VERIFICATION INVALID JSON:",
+        {
+          status: response.status,
+          responseText,
+          parseError,
+        }
+      );
+
+      throw new Error(
+        "The server returned an invalid response."
+      );
+    }
+
+    console.log(
+      "PHONE VERIFICATION RESPONSE:",
+      data
+    );
+
+    if (
+      !response.ok ||
+      data?.success !== true
+    ) {
+      throw new Error(
+        data?.error ||
+          data?.message ||
+          "Phone number verification failed."
+      );
+    }
+
+    if (!data?.data) {
+      throw new Error(
+        "Phone verification succeeded but no result was returned."
+      );
+    }
+
+    return data.data;
+  }
+
+  // ============================================================
+  // SUBMIT
   // ============================================================
 
   async function handleSubmit(
     event: FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
-
-    const cleanedNin =
-      nin.replace(
-        /\s+/g,
-        ""
-      );
-
-    if (
-      !/^\d{11}$/.test(
-        cleanedNin
-      )
-    ) {
-      toast.error(
-        "Please enter a valid 11-digit NIN."
-      );
-
-      return;
-    }
 
     const selectedPricing =
       pricing[cardType];
@@ -413,18 +508,50 @@ export default function NinVerificationPage() {
       selectedPricing.price <= 0
     ) {
       toast.error(
-        "The selected NIN verification price is unavailable."
+        "The selected verification price is unavailable."
       );
 
       return;
     }
 
-    /**
-     * Create exactly ONE key for this submission.
-     *
-     * If the request is retried, the same key prevents
-     * the wallet from being charged twice.
-     */
+    let cleanedValue = "";
+
+    if (method === "nin") {
+      cleanedValue = nin.replace(
+        /\s+/g,
+        ""
+      );
+
+      if (
+        !/^\d{11}$/.test(
+          cleanedValue
+        )
+      ) {
+        toast.error(
+          "Please enter a valid 11-digit NIN."
+        );
+
+        return;
+      }
+    } else {
+      cleanedValue = phone.replace(
+        /\s+/g,
+        ""
+      );
+
+      if (
+        !/^0\d{10}$/.test(
+          cleanedValue
+        )
+      ) {
+        toast.error(
+          "Please enter a valid 11-digit Nigerian phone number."
+        );
+
+        return;
+      }
+    }
+
     const idempotencyKey =
       createIdempotencyKey();
 
@@ -433,108 +560,56 @@ export default function NinVerificationPage() {
 
     try {
       setLoading(true);
-
       setResult(null);
 
       console.log(
-        "NIN SUBMISSION:",
+        "VERIFICATION SUBMISSION:",
         {
-          nin: cleanedNin,
+          method,
+          value: cleanedValue,
           cardType,
           idempotencyKey,
         }
       );
 
-      const response =
-        await fetch(
-          "/api/verification/nin",
-          {
-            method: "POST",
+      let verificationResult;
 
-            headers: {
-              "Content-Type":
-                "application/json",
-
-              Accept:
-                "application/json",
-            },
-
-            body: JSON.stringify({
-              nin:
-                cleanedNin,
-
-              cardType,
-
-              /**
-               * THIS WAS MISSING BEFORE.
-               *
-               * The backend now receives the transaction key.
-               */
-              idempotencyKey,
-            }),
-          }
-        );
-
-      let data: any;
-
-      try {
-        data =
-          await response.json();
-      } catch {
-        throw new Error(
-          "The server returned an invalid response."
-        );
-      }
-
-      console.log(
-        "NIN VERIFICATION RESPONSE:",
-        data
-      );
-
-      if (
-        !response.ok ||
-        data?.success !== true
-      ) {
-        throw new Error(
-          data?.error ||
-            data?.message ||
-            "NIN verification failed."
-        );
-      }
-
-      if (
-        !data?.data
-      ) {
-        throw new Error(
-          "NIN verification succeeded but no result was returned."
-        );
+      if (method === "nin") {
+        verificationResult =
+          await verifyNin(
+            cleanedValue,
+            idempotencyKey
+          );
+      } else {
+        verificationResult =
+          await verifyByPhone(
+            cleanedValue,
+            idempotencyKey
+          );
       }
 
       setResult(
-        data.data
+        verificationResult
       );
 
       toast.success(
-        "NIN verification completed successfully."
+        method === "nin"
+          ? "NIN verification completed successfully."
+          : "Phone number verification completed successfully."
       );
     } catch (error: any) {
       console.error(
-        "NIN VERIFICATION ERROR:",
+        "VERIFICATION ERROR:",
         error
       );
 
       toast.error(
         error?.message ||
-          "NIN verification failed."
+          "Verification failed."
       );
     } finally {
       setLoading(false);
 
-      /**
-       * Clear the key after the request has completed.
-       *
-       * A new button submission gets a new key.
-       */
       submissionKeyRef.current =
         null;
     }
@@ -545,9 +620,7 @@ export default function NinVerificationPage() {
   // ============================================================
 
   function downloadPdf() {
-    if (
-      !result?.pdf_base64
-    ) {
+    if (!result?.pdf_base64) {
       toast.error(
         "PDF certificate is not available."
       );
@@ -556,15 +629,6 @@ export default function NinVerificationPage() {
     }
 
     try {
-      /**
-       * Providers may return either:
-       *
-       * data:application/pdf;base64,...
-       *
-       * or just:
-       *
-       * JVBERi0x...
-       */
       const base64 =
         result.pdf_base64
           .replace(
@@ -608,33 +672,24 @@ export default function NinVerificationPage() {
         );
 
       const url =
-        URL.createObjectURL(
-          blob
-        );
+        URL.createObjectURL(blob);
 
       const link =
-        document.createElement(
-          "a"
-        );
+        document.createElement("a");
 
-      link.href =
-        url;
+      link.href = url;
 
       link.download =
         `NIN-${result.reference}.pdf`;
 
-      document.body.appendChild(
-        link
-      );
+      document.body.appendChild(link);
 
       link.click();
 
       link.remove();
 
       setTimeout(() => {
-        URL.revokeObjectURL(
-          url
-        );
+        URL.revokeObjectURL(url);
       }, 1000);
     } catch (error) {
       console.error(
@@ -681,65 +736,152 @@ export default function NinVerificationPage() {
 
           <p className="mt-3 max-w-2xl text-gray-500">
             Verify a Nigerian National
-            Identification Number securely
-            and receive the verification
-            details and certificate.
+            Identification Number directly
+            or search for a NIN using a
+            registered phone number.
           </p>
         </div>
 
-        {/* MAIN GRID */}
+        {/* ======================================================
+            VERIFICATION METHOD
+        ====================================================== */}
+
+        <div className="mb-6 rounded-3xl border border-gray-100 bg-white p-2 shadow-sm">
+          <div className="grid grid-cols-2 gap-2">
+
+            <button
+              type="button"
+              onClick={() => {
+                setMethod("nin");
+                setResult(null);
+              }}
+              disabled={loading}
+              className={`flex items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-sm font-bold transition ${
+                method === "nin"
+                  ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+                  : "text-gray-500 hover:bg-gray-50"
+              }`}
+            >
+              <UserRound className="h-5 w-5" />
+
+              Verify by NIN
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setMethod("phone");
+                setResult(null);
+              }}
+              disabled={loading}
+              className={`flex items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-sm font-bold transition ${
+                method === "phone"
+                  ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+                  : "text-gray-500 hover:bg-gray-50"
+              }`}
+            >
+              <Phone className="h-5 w-5" />
+
+              Verify by Phone
+            </button>
+
+          </div>
+        </div>
+
+        {/* ======================================================
+            MAIN GRID
+        ====================================================== */}
 
         <div className="grid gap-6 lg:grid-cols-2">
 
-          {/* FORM */}
+          {/* ====================================================
+              FORM
+          ==================================================== */}
 
           <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
 
             <form
-              onSubmit={
-                handleSubmit
-              }
+              onSubmit={handleSubmit}
               className="space-y-6"
             >
 
-              {/* NIN */}
+              {/* INPUT */}
 
-              <div>
-                <label
-                  htmlFor="nin"
-                  className="mb-2 block text-sm font-semibold text-gray-800"
-                >
-                  NIN
-                </label>
+              {method === "nin" ? (
+                <div>
+                  <label
+                    htmlFor="nin"
+                    className="mb-2 block text-sm font-semibold text-gray-800"
+                  >
+                    NIN
+                  </label>
 
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
 
-                  <input
-                    id="nin"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    maxLength={11}
-                    placeholder="Enter 11-digit NIN"
-                    value={nin}
-                    onChange={(event) =>
-                      setNin(
-                        event.target.value.replace(
-                          /\D/g,
-                          ""
+                    <input
+                      id="nin"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      maxLength={11}
+                      placeholder="Enter 11-digit NIN"
+                      value={nin}
+                      onChange={(event) =>
+                        setNin(
+                          event.target.value.replace(
+                            /\D/g,
+                            ""
+                          )
                         )
-                      )
-                    }
-                    disabled={loading}
-                    className="w-full rounded-xl border border-gray-200 bg-white py-3.5 pl-12 pr-4 text-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:bg-gray-50"
-                  />
-                </div>
+                      }
+                      disabled={loading}
+                      className="w-full rounded-xl border border-gray-200 bg-white py-3.5 pl-12 pr-4 text-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:bg-gray-50"
+                    />
+                  </div>
 
-                <p className="mt-2 text-xs text-gray-400">
-                  {nin.length}/11 digits
-                </p>
-              </div>
+                  <p className="mt-2 text-xs text-gray-400">
+                    {nin.length}/11 digits
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label
+                    htmlFor="phone"
+                    className="mb-2 block text-sm font-semibold text-gray-800"
+                  >
+                    Phone Number
+                  </label>
+
+                  <div className="relative">
+                    <Phone className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+
+                    <input
+                      id="phone"
+                      type="tel"
+                      inputMode="numeric"
+                      autoComplete="tel"
+                      maxLength={11}
+                      placeholder="08012345678"
+                      value={phone}
+                      onChange={(event) =>
+                        setPhone(
+                          event.target.value.replace(
+                            /\D/g,
+                            ""
+                          )
+                        )
+                      }
+                      disabled={loading}
+                      className="w-full rounded-xl border border-gray-200 bg-white py-3.5 pl-12 pr-4 text-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 disabled:bg-gray-50"
+                    />
+                  </div>
+
+                  <p className="mt-2 text-xs text-gray-400">
+                    {phone.length}/11 digits
+                  </p>
+                </div>
+              )}
 
               {/* CARD TYPE */}
 
@@ -753,12 +895,11 @@ export default function NinVerificationPage() {
 
                 <select
                   id="cardType"
-                  value={
-                    cardType
-                  }
+                  value={cardType}
                   onChange={(event) =>
                     setCardType(
-                      event.target.value as CardType
+                      event.target
+                        .value as CardType
                     )
                   }
                   disabled={
@@ -789,14 +930,17 @@ export default function NinVerificationPage() {
 
               <div className="rounded-2xl bg-slate-50 p-4">
                 <div className="flex items-center justify-between gap-4">
+
                   <span className="text-sm text-gray-500">
                     Verification fee
                   </span>
 
                   <span className="text-lg font-bold text-gray-900">
+
                     {loadingPricing ? (
                       <span className="flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
+
                         Loading...
                       </span>
                     ) : selectedPrice ? (
@@ -810,6 +954,7 @@ export default function NinVerificationPage() {
                     ) : (
                       "Unavailable"
                     )}
+
                   </span>
                 </div>
 
@@ -829,6 +974,7 @@ export default function NinVerificationPage() {
 
               {pricingError && (
                 <div className="rounded-xl border border-red-100 bg-red-50 p-4">
+
                   <p className="text-sm text-red-600">
                     {pricingError}
                   </p>
@@ -836,9 +982,7 @@ export default function NinVerificationPage() {
                   <button
                     type="button"
                     onClick={() =>
-                      loadPricing(
-                        true
-                      )
+                      loadPricing(true)
                     }
                     disabled={
                       loadingPricing
@@ -855,6 +999,7 @@ export default function NinVerificationPage() {
 
                     Retry pricing
                   </button>
+
                 </div>
               )}
 
@@ -873,20 +1018,31 @@ export default function NinVerificationPage() {
                   <>
                     <Loader2 className="h-5 w-5 animate-spin" />
 
-                    Verifying NIN...
+                    {method === "nin"
+                      ? "Verifying NIN..."
+                      : "Searching Phone..."}
                   </>
                 ) : (
                   <>
-                    <ShieldCheck className="h-5 w-5" />
+                    {method === "nin" ? (
+                      <ShieldCheck className="h-5 w-5" />
+                    ) : (
+                      <Phone className="h-5 w-5" />
+                    )}
 
-                    Verify NIN
+                    {method === "nin"
+                      ? "Verify NIN"
+                      : "Verify by Phone"}
                   </>
                 )}
               </button>
+
             </form>
           </div>
 
-          {/* RESULT */}
+          {/* ====================================================
+              RESULT
+          ==================================================== */}
 
           <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
 
@@ -894,7 +1050,11 @@ export default function NinVerificationPage() {
               <div className="flex min-h-[420px] flex-col items-center justify-center text-center">
 
                 <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                  <FileText className="h-8 w-8" />
+                  {method === "nin" ? (
+                    <FileText className="h-8 w-8" />
+                  ) : (
+                    <Phone className="h-8 w-8" />
+                  )}
                 </div>
 
                 <h2 className="text-lg font-bold text-gray-900">
@@ -902,10 +1062,11 @@ export default function NinVerificationPage() {
                 </h2>
 
                 <p className="mt-2 max-w-sm text-sm leading-6 text-gray-500">
-                  Your verified identity
-                  information will appear here
-                  after successful verification.
+                  {method === "nin"
+                    ? "Your verified identity information will appear here after successful NIN verification."
+                    : "The NIN information associated with the phone number will appear here after successful search."}
                 </p>
+
               </div>
             ) : (
               <div>
@@ -927,6 +1088,7 @@ export default function NinVerificationPage() {
                       {result.reference}
                     </p>
                   </div>
+
                 </div>
 
                 {/* AMOUNT */}
@@ -934,6 +1096,7 @@ export default function NinVerificationPage() {
                 <div className="mb-6 rounded-2xl bg-green-50 p-4">
 
                   <div className="flex items-center justify-between">
+
                     <span className="text-sm text-green-700">
                       Amount charged
                     </span>
@@ -950,11 +1113,13 @@ export default function NinVerificationPage() {
                         }
                       )}
                     </span>
+
                   </div>
 
                   <div className="mt-1 flex items-center justify-between">
+
                     <span className="text-xs text-green-600">
-                      Card type
+                      Verification type
                     </span>
 
                     <span className="text-xs font-semibold text-green-700">
@@ -965,7 +1130,9 @@ export default function NinVerificationPage() {
                         result.card_type
                       }
                     </span>
+
                   </div>
+
                 </div>
 
                 {/* DETAILS */}
@@ -992,7 +1159,9 @@ export default function NinVerificationPage() {
                     label="Surname"
                     value={
                       result.details
-                        ?.surname
+                        ?.surname ||
+                      result.details
+                        ?.lastName
                     }
                   />
 
@@ -1008,7 +1177,9 @@ export default function NinVerificationPage() {
                     label="Date of Birth"
                     value={
                       result.details
-                        ?.birthDate
+                        ?.birthDate ||
+                      result.details
+                        ?.dateOfBirth
                     }
                   />
 
@@ -1016,7 +1187,19 @@ export default function NinVerificationPage() {
                     label="Phone"
                     value={
                       result.details
-                        ?.telephoneNo
+                        ?.telephoneNo ||
+                      result.details
+                        ?.mobile ||
+                      result.details
+                        ?.phone
+                    }
+                  />
+
+                  <ResultRow
+                    label="NIN"
+                    value={
+                      result.details
+                        ?.nin
                     }
                   />
 
@@ -1046,6 +1229,7 @@ export default function NinVerificationPage() {
                     </span>
 
                   </div>
+
                 </div>
 
                 {/* PDF */}
@@ -1054,9 +1238,7 @@ export default function NinVerificationPage() {
                   result.pdf_base64 && (
                     <button
                       type="button"
-                      onClick={
-                        downloadPdf
-                      }
+                      onClick={downloadPdf}
                       className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-3.5 text-sm font-bold text-indigo-600 transition hover:bg-indigo-100"
                     >
                       <FileText className="h-5 w-5" />
@@ -1070,6 +1252,32 @@ export default function NinVerificationPage() {
 
           </div>
         </div>
+
+        {/* ======================================================
+            INFORMATION
+        ====================================================== */}
+
+        <div className="mt-6 rounded-2xl border border-indigo-100 bg-indigo-50 p-5">
+          <div className="flex gap-3">
+
+            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-indigo-600" />
+
+            <div>
+              <h3 className="text-sm font-bold text-indigo-900">
+                Verification Information
+              </h3>
+
+              <p className="mt-1 text-sm leading-6 text-indigo-700">
+                You can verify directly with an
+                11-digit NIN or search for the
+                NIN associated with an 11-digit
+                Nigerian phone number.
+              </p>
+            </div>
+
+          </div>
+        </div>
+
       </div>
     </main>
   );

@@ -21,6 +21,7 @@ import {
   Activity,
   ShoppingBag,
   Fingerprint,
+  Percent,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -97,27 +98,67 @@ const financeItems: NavItem[] = [
   },
 ];
 
+const systemItems: NavItem[] = [
+  {
+    label: "Settings",
+    href: "/dashboard/admin/settings",
+    icon: Settings,
+  },
+  {
+    label: "Service Fees",
+    href: "/dashboard/admin/service-fees",
+    icon: Percent,
+  },
+];
+
 export default function AdminSidebar() {
   const pathname = usePathname();
 
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [managementOpen, setManagementOpen] = useState(
-    pathname.startsWith("/dashboard/admin/purchases") ||
-      pathname.startsWith("/dashboard/admin/nin")
-  );
+  const [managementOpen, setManagementOpen] =
+    useState(
+      pathname.startsWith(
+        "/dashboard/admin/purchases"
+      ) ||
+        pathname.startsWith(
+          "/dashboard/admin/nin"
+        )
+    );
 
-  const [educationOpen, setEducationOpen] = useState(
-    pathname.startsWith("/dashboard/admin/cbt") ||
-      pathname.startsWith("/dashboard/admin/results")
-  );
+  const [educationOpen, setEducationOpen] =
+    useState(
+      pathname.startsWith(
+        "/dashboard/admin/cbt"
+      ) ||
+        pathname.startsWith(
+          "/dashboard/admin/results"
+        )
+    );
 
-  const [financeOpen, setFinanceOpen] = useState(
-    pathname.startsWith("/dashboard/admin/revenue") ||
-      pathname.startsWith("/dashboard/admin/wallet") ||
-      pathname.startsWith("/dashboard/admin/provider-wallet")
-  );
+  const [financeOpen, setFinanceOpen] =
+    useState(
+      pathname.startsWith(
+        "/dashboard/admin/revenue"
+      ) ||
+        pathname.startsWith(
+          "/dashboard/admin/wallet"
+        ) ||
+        pathname.startsWith(
+          "/dashboard/admin/provider-wallet"
+        )
+    );
+
+  const [systemOpen, setSystemOpen] =
+    useState(
+      pathname.startsWith(
+        "/dashboard/admin/settings"
+      ) ||
+        pathname.startsWith(
+          "/dashboard/admin/service-fees"
+        )
+    );
 
   function closeSidebar() {
     setIsOpen(false);
@@ -139,7 +180,11 @@ export default function AdminSidebar() {
         callbackUrl: "/login",
       });
     } catch (error) {
-      console.error("ADMIN LOGOUT ERROR:", error);
+      console.error(
+        "ADMIN LOGOUT ERROR:",
+        error
+      );
+
       setLoading(false);
     }
   }
@@ -178,10 +223,7 @@ export default function AdminSidebar() {
 
   return (
     <>
-      {/* =====================================================
-          MOBILE MENU BUTTON
-      ===================================================== */}
-
+      {/* MOBILE MENU BUTTON */}
       <button
         type="button"
         onClick={() => setIsOpen(true)}
@@ -191,10 +233,7 @@ export default function AdminSidebar() {
         <Menu className="h-6 w-6" />
       </button>
 
-      {/* =====================================================
-          MOBILE OVERLAY
-      ===================================================== */}
-
+      {/* MOBILE OVERLAY */}
       {isOpen && (
         <button
           type="button"
@@ -204,19 +243,15 @@ export default function AdminSidebar() {
         />
       )}
 
-      {/* =====================================================
-          SIDEBAR
-      ===================================================== */}
-
+      {/* SIDEBAR */}
       <aside
         className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-indigo-700 text-white shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
+          isOpen
+            ? "translate-x-0"
+            : "-translate-x-full"
         }`}
       >
-        {/* =====================================================
-            HEADER
-        ===================================================== */}
-
+        {/* HEADER */}
         <div className="flex h-20 shrink-0 items-center justify-between border-b border-indigo-600 px-5">
           <Link
             href="/dashboard/admin"
@@ -248,16 +283,9 @@ export default function AdminSidebar() {
           </button>
         </div>
 
-        {/* =====================================================
-            NAVIGATION
-        ===================================================== */}
-
+        {/* NAVIGATION */}
         <div className="flex-1 overflow-y-auto px-4 py-5">
-
-          {/* =================================================
-              OVERVIEW
-          ================================================= */}
-
+          {/* OVERVIEW */}
           <div>
             <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-wider text-indigo-300">
               Overview
@@ -268,15 +296,14 @@ export default function AdminSidebar() {
             </nav>
           </div>
 
-          {/* =================================================
-              MANAGEMENT
-          ================================================= */}
-
+          {/* MANAGEMENT */}
           <div className="mt-7">
             <button
               type="button"
               onClick={() =>
-                setManagementOpen(!managementOpen)
+                setManagementOpen(
+                  !managementOpen
+                )
               }
               className="mb-2 flex w-full items-center justify-between px-3 text-left text-[11px] font-bold uppercase tracking-wider text-indigo-300 transition hover:text-white"
             >
@@ -284,27 +311,30 @@ export default function AdminSidebar() {
 
               <ChevronDown
                 className={`h-4 w-4 transition-transform duration-200 ${
-                  managementOpen ? "rotate-180" : ""
+                  managementOpen
+                    ? "rotate-180"
+                    : ""
                 }`}
               />
             </button>
 
             {managementOpen && (
               <nav className="space-y-1">
-                {managementItems.map(renderItem)}
+                {managementItems.map(
+                  renderItem
+                )}
               </nav>
             )}
           </div>
 
-          {/* =================================================
-              EDUCATION
-          ================================================= */}
-
+          {/* EDUCATION */}
           <div className="mt-7">
             <button
               type="button"
               onClick={() =>
-                setEducationOpen(!educationOpen)
+                setEducationOpen(
+                  !educationOpen
+                )
               }
               className="mb-2 flex w-full items-center justify-between px-3 text-left text-[11px] font-bold uppercase tracking-wider text-indigo-300 transition hover:text-white"
             >
@@ -312,22 +342,23 @@ export default function AdminSidebar() {
 
               <ChevronDown
                 className={`h-4 w-4 transition-transform duration-200 ${
-                  educationOpen ? "rotate-180" : ""
+                  educationOpen
+                    ? "rotate-180"
+                    : ""
                 }`}
               />
             </button>
 
             {educationOpen && (
               <nav className="space-y-1">
-                {educationItems.map(renderItem)}
+                {educationItems.map(
+                  renderItem
+                )}
               </nav>
             )}
           </div>
 
-          {/* =================================================
-              FINANCE
-          ================================================= */}
-
+          {/* FINANCE */}
           <div className="mt-7">
             <button
               type="button"
@@ -340,53 +371,54 @@ export default function AdminSidebar() {
 
               <ChevronDown
                 className={`h-4 w-4 transition-transform duration-200 ${
-                  financeOpen ? "rotate-180" : ""
+                  financeOpen
+                    ? "rotate-180"
+                    : ""
                 }`}
               />
             </button>
 
             {financeOpen && (
               <nav className="space-y-1">
-                {financeItems.map(renderItem)}
+                {financeItems.map(
+                  renderItem
+                )}
               </nav>
             )}
           </div>
 
-          {/* =================================================
-              SYSTEM
-          ================================================= */}
-
+          {/* SYSTEM */}
           <div className="mt-7">
-            <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-wider text-indigo-300">
-              System
-            </p>
-
-            <Link
-              href="/dashboard/admin/settings"
-              onClick={closeSidebar}
-              className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold transition-all ${
-                isActive("/dashboard/admin/settings")
-                  ? "bg-white text-indigo-700 shadow-md"
-                  : "text-indigo-100 hover:bg-indigo-600 hover:text-white"
-              }`}
+            <button
+              type="button"
+              onClick={() =>
+                setSystemOpen(!systemOpen)
+              }
+              className="mb-2 flex w-full items-center justify-between px-3 text-left text-[11px] font-bold uppercase tracking-wider text-indigo-300 transition hover:text-white"
             >
-              <Settings className="h-5 w-5 shrink-0" />
+              <span>System</span>
 
-              <span>Settings</span>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform duration-200 ${
+                  systemOpen
+                    ? "rotate-180"
+                    : ""
+                }`}
+              />
+            </button>
 
-              {isActive("/dashboard/admin/settings") && (
-                <span className="ml-auto h-2 w-2 rounded-full bg-indigo-600" />
-              )}
-            </Link>
+            {systemOpen && (
+              <nav className="space-y-1">
+                {systemItems.map(
+                  renderItem
+                )}
+              </nav>
+            )}
           </div>
         </div>
 
-        {/* =====================================================
-            ADMIN PROFILE / LOGOUT
-        ===================================================== */}
-
+        {/* PROFILE / LOGOUT */}
         <div className="shrink-0 border-t border-indigo-600 p-4">
-
           <div className="mb-3 flex items-center gap-3 rounded-xl bg-indigo-600/50 p-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-indigo-700 shadow-sm">
               <ShieldCheck className="h-5 w-5" />

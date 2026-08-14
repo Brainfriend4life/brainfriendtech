@@ -1,195 +1,466 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { prisma } from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
+
+import {
+  getServerSession,
+} from "next-auth";
+
+import {
+  authOptions,
+} from "@/lib/auth";
+
+import {
+  prisma,
+} from "@/lib/prisma";
 
 const CHEAPDATAHUB_EXAM_PIN_URL =
   "https://www.cheapdatahub.ng/api/v1/resellers/exam-pin/purchase/";
 
-export async function POST(request: NextRequest) {
-  try {
-    // ==========================================
-    // AUTHENTICATION
-    // ==========================================
+const DEFAULT_SERVICE_FEE_PERCENTAGE = 5;
 
-    const session = await getServerSession(authOptions);
+function generateReference() {
+  return `EXAMPIN-${Date.now()}-${Math.random()
+    .toString(36)
+    .substring(2, 8)
+    .toUpperCase()}`;
+}
+
+type ExamProduct = {
+  examName: string;
+  price: number;
+};
+
+const EXAM_PRODUCTS: Record<number, ExamProduct> = {
+  1: {
+    examName: "WAEC",
+    price: 6000,
+  },
+
+  2: {
+    examName: "NECO",
+    price: 2500,
+  },
+
+  3: {
+    examName: "NABTEB",
+    price: 1200,
+  },
+};
+
+function isProviderSuccessful(result: any): boolean {
+  return (
+    result?.status === true ||
+    result?.status === "true" ||
+    result?.status === "success" ||
+    result?.success === true
+  );
+}
+
+function extractPins(
+  providerResult: any
+): Array<{
+  pin: string;
+  serial: string;
+}> {
+  const delivery =
+    providerResult?.data?.delivery ||
+    providerResult?.delivery ||
+    {};
+
+  const rawPins =
+    Array.isArray(delivery?.pins)
+      ? delivery.pins
+      : Array.isArray(providerResult?.pins)
+      ? providerResult.pins
+      : [];
+
+  return rawPins
+    .map((pin: any) => {
+      if (typeof pin === "string") {
+        return {
+          pin: pin.trim(),
+          serial: "",
+        };
+      }
+
+      return {
+        pin: String(
+          pin?.pin ||
+            pin?.pin_number ||
+            pin?.voucher ||
+            pin?.voucher_pin ||
+            ""
+        ).trim(),
+
+        serial: String(
+          pin?.serial ||
+            pin?.serial_number ||
+            pin?.voucher_serial ||
+            ""
+        ).trim(),
+      };
+    })
+    .filter(
+      (item: {
+        pin: string;
+        serial: string;
+      }) => Boolean(item.pin)
+    );
+}
+
+/*
+ * ============================================================
+ * GET SERVICE FEE
+ * ============================================================
+ *
+ * The admin service-fee setting is now used here.
+ *
+ * Supported database keys:
+ *
+ * SERVICE_FEE_PERCENT
+ * DATA_SERVICE_FEE_PERCENTAGE
+ * SERVICE_FEE_PERCENTAGE
+ * SERVICE_FEE
+ *
+ * SERVICE_FEE_PERCENT is checked first because that is the
+ * setting currently being created by your admin service-fees
+ * page.
+ */
+async function getServiceFeePercentage(): Promise<number> {
+  try {
+    const setting =
+      await prisma.systemSetting.findFirst({
+        where: {
+          key: {
+            in: [
+              "SERVICE_FEE_PERCENT",
+              "DATA_SERVICE_FEE_PERCENTAGE",
+              "SERVICE_FEE_PERCENTAGE",
+              "SERVICE_FEE",
+            ],
+          },
+        },
+
+        orderBy: {
+          updatedAt: "desc",
+        },
+      });
+
+    if (setting) {
+      const parsedFee = Number(setting.value);
+
+      if (
+        Number.isFinite(parsedFee) &&
+        parsedFee >= 0 &&
+        parsedFee <= 100
+      ) {
+        return parsedFee;
+      }
+    }
+  } catch (error) {
+    console.error(
+      "EXAM PIN SERVICE FEE SETTING ERROR:",
+      error
+    );
+  }
+
+  return DEFAULT_SERVICE_FEE_PERCENTAGE;
+}
+
+export async function POST(
+  request: NextRequest
+) {
+  let transactionId: string | null = null;
+
+  try {
+    // ========================================================
+    // AUTHENTICATION
+    // ========================================================
+
+    const session =
+      await getServerSession(
+        authOptions
+      );
 
     if (!session?.user?.id) {
       return NextResponse.json(
         {
           success: false,
-          error: "You must be logged in.",
+          error:
+            "You must be logged in.",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
     }
 
-    const userId = session.user.id;
+    const userId =
+      session.user.id;
 
-    // ==========================================
+    // ========================================================
     // REQUEST BODY
-    // ==========================================
+    // ========================================================
 
-    const body = await request.json();
+    const body =
+      await request.json();
 
-    const { productId, quantity } = body;
+    const {
+      productId,
+      quantity,
+    } = body;
 
-    if (!productId || !quantity) {
+    if (
+      productId === undefined ||
+      quantity === undefined
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: "productId and quantity are required.",
+          error:
+            "productId and quantity are required.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // ==========================================
-    // VALIDATE PRODUCT ID
-    // ==========================================
+    // ========================================================
+    // VALIDATION
+    // ========================================================
 
-    const numericProductId = Number(productId);
+    const numericProductId =
+      Number(productId);
+
+    const numericQuantity =
+      Number(quantity);
 
     if (
-      !Number.isInteger(numericProductId) ||
+      !Number.isInteger(
+        numericProductId
+      ) ||
       numericProductId <= 0
     ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid exam PIN product.",
+          error:
+            "Invalid exam PIN product.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // ==========================================
-    // VALIDATE QUANTITY
-    // ==========================================
-
-    const numericQuantity = Number(quantity);
-
-    if (![1, 2, 5].includes(numericQuantity)) {
+    if (
+      !Number.isInteger(
+        numericQuantity
+      ) ||
+      ![1, 2, 5].includes(
+        numericQuantity
+      )
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Quantity must be 1, 2, or 5.",
+          error:
+            "Quantity must be 1, 2, or 5.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // ==========================================
-    // EXAM PRODUCTS
-    // ==========================================
-
-    const examProducts: Record<
-      number,
-      {
-        examName: string;
-        price: number;
-      }
-    > = {
-      1: {
-        examName: "WAEC",
-        price: 6000,
-      },
-
-      2: {
-        examName: "NECO",
-        price: 2500,
-      },
-
-      3: {
-        examName: "NABTEB",
-        price: 1200,
-      },
-    };
+    // ========================================================
+    // PRODUCT
+    // ========================================================
 
     const product =
-      examProducts[numericProductId];
+      EXAM_PRODUCTS[
+        numericProductId
+      ];
 
     if (!product) {
       return NextResponse.json(
         {
           success: false,
-          error: "Exam PIN product not found.",
+          error:
+            "Exam PIN product not found.",
         },
-        { status: 404 }
+        {
+          status: 404,
+        }
       );
     }
 
-    // ==========================================
-    // CALCULATE AMOUNT
-    // ==========================================
+    const unitPrice =
+      Number(product.price);
 
-    const unitPrice = Number(product.price);
+    if (
+      !Number.isFinite(unitPrice) ||
+      unitPrice <= 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Invalid exam PIN pricing configuration.",
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    /*
+     * ========================================================
+     * SERVICE FEE
+     * ========================================================
+     *
+     * Example:
+     *
+     * WAEC = ₦6,000
+     * Service fee = 5%
+     *
+     * Fee = ₦300
+     * Customer pays = ₦6,300
+     *
+     * For quantity 2:
+     *
+     * Base = ₦12,000
+     * Fee = ₦600
+     * Customer pays = ₦12,600
+     */
+
+    const serviceFeePercentage =
+      await getServiceFeePercentage();
+
+    const baseAmount =
+      Number(
+        (
+          unitPrice *
+          numericQuantity
+        ).toFixed(2)
+      );
+
+    const serviceFee =
+      Number(
+        (
+          baseAmount *
+          (serviceFeePercentage / 100)
+        ).toFixed(2)
+      );
 
     const totalAmount =
-      unitPrice * numericQuantity;
+      Number(
+        (
+          baseAmount +
+          serviceFee
+        ).toFixed(2)
+      );
 
-    // ==========================================
+    // ========================================================
     // FIND USER
-    // ==========================================
+    // ========================================================
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
-    });
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+      });
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          error: "User not found.",
+          error:
+            "User account not found.",
         },
-        { status: 404 }
-      );
-    }
-
-    // ==========================================
-    // CHECK ACCOUNT STATUS
-    // ==========================================
-
-    if (user.status !== "ACTIVE") {
-      return NextResponse.json(
         {
-          success: false,
-          error: "Your account is not active.",
-        },
-        { status: 403 }
+          status: 404,
+        }
       );
     }
-
-    // ==========================================
-    // CHECK WALLET
-    // ==========================================
-
-    const walletBalance =
-      Number(user.walletBalance);
 
     if (
-      !Number.isFinite(walletBalance) ||
-      walletBalance < totalAmount
+      user.status !== "ACTIVE"
     ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Insufficient wallet balance.",
-          balance: walletBalance,
-          required: totalAmount,
+          error:
+            "Your account is not active.",
         },
-        { status: 400 }
+        {
+          status: 403,
+        }
       );
     }
 
-    // ==========================================
+    const walletBalance =
+      Number(
+        user.walletBalance
+      );
+
+    if (
+      !Number.isFinite(
+        walletBalance
+      )
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Invalid wallet balance.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      walletBalance <
+      totalAmount
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+
+          error:
+            "Insufficient wallet balance.",
+
+          balance:
+            walletBalance,
+
+          required:
+            totalAmount,
+
+          baseAmount,
+
+          serviceFeePercentage,
+
+          serviceFee,
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // ========================================================
     // API KEY
-    // ==========================================
+    // ========================================================
 
     const apiKey =
-      process.env.CHEAPDATAHUB_API_KEY;
+      process.env
+        .CHEAPDATAHUB_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
@@ -198,51 +469,90 @@ export async function POST(request: NextRequest) {
           error:
             "CheapDataHub API key is not configured.",
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
-    // ==========================================
-    // TRANSACTION REFERENCE
-    // ==========================================
+    // ========================================================
+    // REFERENCE
+    // ========================================================
 
     const reference =
-      `EXAMPIN-${Date.now()}-${Math.random()
-        .toString(36)
-        .substring(2, 8)
-        .toUpperCase()}`;
+      generateReference();
 
-    // ==========================================
+    // ========================================================
     // CREATE PENDING TRANSACTION
-    // ==========================================
+    // ========================================================
 
     const transaction =
       await prisma.transaction.create({
         data: {
-          userId: user.id,
-          type: "EXAM_PIN",
-          amount: totalAmount,
+          userId:
+            user.id,
+
+          type:
+            "EXAM_PIN",
+
+          amount:
+            totalAmount,
+
           description:
             `${product.examName} Exam PIN x${numericQuantity}`,
-          status: "PENDING",
+
+          status:
+            "PENDING",
+
           reference,
-          provider: "CheapDataHub",
-          cost: totalAmount,
-          profit: 0,
+
+          provider:
+            "CheapDataHub",
+
+          /*
+           * Provider cost is kept as the actual base amount.
+           * The service fee increases customer payment and
+           * therefore increases business profit.
+           */
+          cost:
+            baseAmount,
+
+          profit:
+            serviceFee,
+
+          isTest:
+            false,
         },
       });
 
-    // ==========================================
-    // SEND REQUEST TO CHEAPDATAHUB
-    // ==========================================
+    transactionId =
+      transaction.id;
+
+    // ========================================================
+    // PROVIDER REQUEST
+    // ========================================================
+    //
+    // IMPORTANT:
+    // The service fee is NOT sent to CheapDataHub.
+    //
+    // CheapDataHub receives the original product quantity.
+    // The customer pays totalAmount from the wallet.
+    //
 
     const requestBody = {
-      product_id: numericProductId,
-      quantity: numericQuantity,
+      product_id:
+        numericProductId,
+
+      quantity:
+        numericQuantity,
     };
 
     console.log(
-      "========== EXAM PIN PURCHASE =========="
+      "=========================================="
+    );
+
+    console.log(
+      "CHEAPDATAHUB EXAM PIN PURCHASE"
     );
 
     console.log(
@@ -256,12 +566,32 @@ export async function POST(request: NextRequest) {
     );
 
     console.log(
-      "API KEY EXISTS:",
-      !!apiKey
+      "BASE AMOUNT:",
+      baseAmount
     );
 
     console.log(
-      "========================================"
+      "SERVICE FEE PERCENTAGE:",
+      serviceFeePercentage
+    );
+
+    console.log(
+      "SERVICE FEE:",
+      serviceFee
+    );
+
+    console.log(
+      "CUSTOMER TOTAL:",
+      totalAmount
+    );
+
+    console.log(
+      "API KEY EXISTS:",
+      Boolean(apiKey)
+    );
+
+    console.log(
+      "=========================================="
     );
 
     const providerResponse =
@@ -281,82 +611,84 @@ export async function POST(request: NextRequest) {
               "application/json",
           },
 
-          body: JSON.stringify(
-            requestBody
-          ),
+          body:
+            JSON.stringify(
+              requestBody
+            ),
+
+          cache:
+            "no-store",
         }
       );
-
-    // ==========================================
-    // READ RESPONSE
-    // ==========================================
 
     const responseText =
       await providerResponse.text();
 
     console.log(
-      "EXAM PIN STATUS:",
+      "EXAM PIN PROVIDER STATUS:",
       providerResponse.status
     );
 
     console.log(
-      "EXAM PIN RESPONSE:",
+      "EXAM PIN PROVIDER RESPONSE:",
       responseText
     );
 
-    let providerResult: any = null;
+    // ========================================================
+    // PARSE RESPONSE
+    // ========================================================
 
-    if (responseText.trim()) {
-      try {
-        providerResult =
-          JSON.parse(responseText);
-      } catch {
-        providerResult = null;
-      }
+    let providerResult:
+      any = null;
+
+    try {
+      providerResult =
+        responseText.trim()
+          ? JSON.parse(
+              responseText
+            )
+          : null;
+    } catch {
+      providerResult = null;
     }
-
-    // ==========================================
-    // INVALID PROVIDER RESPONSE
-    // ==========================================
 
     if (!providerResult) {
       await prisma.transaction.update({
         where: {
-          id: transaction.id,
+          id:
+            transaction.id,
         },
 
         data: {
-          status: "FAILED",
+          status:
+            "FAILED",
         },
       });
 
       return NextResponse.json(
         {
           success: false,
+
           error:
             "CheapDataHub returned an invalid response.",
 
           providerStatus:
             providerResponse.status,
-
-          providerResponse:
-            responseText.substring(
-              0,
-              500
-            ),
         },
-        { status: 502 }
+        {
+          status: 502,
+        }
       );
     }
 
-    // ==========================================
-    // CHECK PROVIDER SUCCESS
-    // ==========================================
+    // ========================================================
+    // PROVIDER SUCCESS
+    // ========================================================
 
     const providerSuccess =
-      providerResult?.status === true ||
-      providerResult?.status === "true" ||
-      providerResult?.success === true;
+      isProviderSuccessful(
+        providerResult
+      );
 
     if (
       !providerResponse.ok ||
@@ -364,11 +696,13 @@ export async function POST(request: NextRequest) {
     ) {
       await prisma.transaction.update({
         where: {
-          id: transaction.id,
+          id:
+            transaction.id,
         },
 
         data: {
-          status: "FAILED",
+          status:
+            "FAILED",
         },
       });
 
@@ -379,6 +713,7 @@ export async function POST(request: NextRequest) {
           error:
             providerResult?.message ||
             providerResult?.error ||
+            providerResult?.response_description ||
             "Exam PIN purchase failed.",
 
           providerStatus:
@@ -387,25 +722,72 @@ export async function POST(request: NextRequest) {
           providerResponse:
             providerResult,
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // ==========================================
-    // EXTRACT PINS
-    // ==========================================
+    // ========================================================
+    // EXTRACT DELIVERY
+    // ========================================================
 
     const delivery =
-      providerResult?.data?.delivery || {};
+      providerResult?.data
+        ?.delivery ||
+      providerResult?.delivery ||
+      {};
 
     const pins =
-      Array.isArray(delivery?.pins)
-        ? delivery.pins
-        : [];
+      extractPins(
+        providerResult
+      );
 
-    // ==========================================
-    // DEDUCT WALLET
-    // ==========================================
+    // ========================================================
+    // VERIFY DELIVERY
+    // ========================================================
+
+    if (
+      pins.length <
+      numericQuantity
+    ) {
+      await prisma.transaction.update({
+        where: {
+          id:
+            transaction.id,
+        },
+
+        data: {
+          status:
+            "FAILED",
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+
+          error:
+            "Exam PIN purchase was reported successful, but the expected PINs were not returned.",
+
+          expected:
+            numericQuantity,
+
+          received:
+            pins.length,
+
+          providerResponse:
+            providerResult,
+        },
+        {
+          status: 502,
+        }
+      );
+    }
+
+    // ========================================================
+    // ATOMIC PAYMENT
+    // ========================================================
 
     const finalResult =
       await prisma.$transaction(
@@ -413,13 +795,14 @@ export async function POST(request: NextRequest) {
           const freshUser =
             await tx.user.findUnique({
               where: {
-                id: user.id,
+                id:
+                  user.id,
               },
             });
 
           if (!freshUser) {
             throw new Error(
-              "User not found."
+              "User account not found."
             );
           }
 
@@ -429,21 +812,83 @@ export async function POST(request: NextRequest) {
             );
 
           if (
+            !Number.isFinite(
+              freshBalance
+            ) ||
             freshBalance <
-            totalAmount
+              totalAmount
           ) {
             throw new Error(
               "Insufficient wallet balance."
             );
           }
 
+          const businessWallet =
+            await tx.businessWallet.upsert({
+              where: {
+                name:
+                  "Brainfriend Tech",
+              },
+
+              update: {},
+
+              create: {
+                name:
+                  "Brainfriend Tech",
+
+                balance:
+                  0,
+
+                totalRevenue:
+                  0,
+
+                totalCost:
+                  0,
+
+                totalProfit:
+                  0,
+
+                withdrawnProfit:
+                  0,
+
+                availableProfit:
+                  0,
+              },
+            });
+
           const newBalance =
-            freshBalance -
+            Number(
+              (
+                freshBalance -
+                totalAmount
+              ).toFixed(2)
+            );
+
+          /*
+           * Revenue = what customer actually paid.
+           *
+           * Cost = original exam PIN price.
+           *
+           * Profit = service fee.
+           */
+          const revenue =
             totalAmount;
+
+          const cost =
+            baseAmount;
+
+          const profit =
+            Number(
+              (
+                revenue -
+                cost
+              ).toFixed(2)
+            );
 
           await tx.user.update({
             where: {
-              id: user.id,
+              id:
+                user.id,
             },
 
             data: {
@@ -454,24 +899,194 @@ export async function POST(request: NextRequest) {
 
           await tx.transaction.update({
             where: {
-              id: transaction.id,
+              id:
+                transaction.id,
             },
 
             data: {
-              status: "SUCCESS",
+              status:
+                "SUCCESS",
+
+              amount:
+                revenue,
+
+              cost,
+
+              profit,
+
+              isTest:
+                false,
             },
           });
+
+          const newBusinessBalance =
+            Number(
+              (
+                Number(
+                  businessWallet.balance
+                ) +
+                revenue
+              ).toFixed(2)
+            );
+
+          const newTotalRevenue =
+            Number(
+              (
+                Number(
+                  businessWallet.totalRevenue
+                ) +
+                revenue
+              ).toFixed(2)
+            );
+
+          const newTotalCost =
+            Number(
+              (
+                Number(
+                  businessWallet.totalCost
+                ) +
+                cost
+              ).toFixed(2)
+            );
+
+          const newTotalProfit =
+            Number(
+              (
+                Number(
+                  businessWallet.totalProfit
+                ) +
+                profit
+              ).toFixed(2)
+            );
+
+          const newAvailableProfit =
+            Number(
+              (
+                Number(
+                  businessWallet.availableProfit
+                ) +
+                profit
+              ).toFixed(2)
+            );
+
+          await tx.businessWallet.update({
+            where: {
+              id:
+                businessWallet.id,
+            },
+
+            data: {
+              balance:
+                newBusinessBalance,
+
+              totalRevenue:
+                newTotalRevenue,
+
+              totalCost:
+                newTotalCost,
+
+              totalProfit:
+                newTotalProfit,
+
+              availableProfit:
+                newAvailableProfit,
+            },
+          });
+
+          await tx.businessRevenue.create({
+            data: {
+              transactionId:
+                transaction.id,
+
+              type:
+                "EXAM_PIN",
+
+              provider:
+                "CheapDataHub",
+
+              amount:
+                revenue,
+
+              cost,
+
+              profit,
+
+              reference,
+
+              description:
+                `${product.examName} Exam PIN x${numericQuantity}`,
+
+              businessWalletId:
+                businessWallet.id,
+            },
+          });
+
+          // ====================================================
+          // SAVE PINS
+          // ====================================================
+
+          for (
+            const pin of pins.slice(
+              0,
+              numericQuantity
+            )
+          ) {
+            await tx.examPin.create({
+              data: {
+                userId:
+                  user.id,
+
+                provider:
+                  "CheapDataHub",
+
+                pin:
+                  pin.pin,
+
+                serial:
+                  pin.serial,
+
+                amount:
+                  Number(
+                    (
+                      unitPrice +
+                      (
+                        unitPrice *
+                        (
+                          serviceFeePercentage /
+                          100
+                        )
+                      )
+                    ).toFixed(2)
+                  ),
+
+                reference:
+                  `${reference}-${Math.random()
+                    .toString(36)
+                    .substring(2, 8)
+                    .toUpperCase()}`,
+              },
+            });
+          }
 
           return {
             walletBalance:
               newBalance,
+
+            businessBalance:
+              newBusinessBalance,
+
+            revenue,
+
+            cost,
+
+            profit,
           };
         }
       );
 
-    // ==========================================
-    // SUCCESS RESPONSE
-    // ==========================================
+    // ========================================================
+    // SUCCESS
+    // ========================================================
 
     return NextResponse.json({
       success: true,
@@ -484,6 +1099,7 @@ export async function POST(request: NextRequest) {
 
       examName:
         delivery?.exam_name ||
+        delivery?.examName ||
         product.examName,
 
       quantity:
@@ -492,12 +1108,27 @@ export async function POST(request: NextRequest) {
 
       unitPrice,
 
+      baseAmount,
+
+      serviceFeePercentage,
+
+      serviceFee,
+
       totalAmount,
 
       pins,
 
       walletBalance:
         finalResult.walletBalance,
+
+      businessRevenue:
+        finalResult.revenue,
+
+      businessCost:
+        finalResult.cost,
+
+      businessProfit:
+        finalResult.profit,
 
       providerResponse:
         providerResult,
@@ -508,14 +1139,38 @@ export async function POST(request: NextRequest) {
       error
     );
 
+    if (transactionId) {
+      try {
+        await prisma.transaction.update({
+          where: {
+            id:
+              transactionId,
+          },
+
+          data: {
+            status:
+              "FAILED",
+          },
+        });
+      } catch (updateError) {
+        console.error(
+          "FAILED TO UPDATE EXAM PIN TRANSACTION:",
+          updateError
+        );
+      }
+    }
+
     return NextResponse.json(
       {
         success: false,
+
         error:
           error?.message ||
           "Exam PIN purchase failed.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }

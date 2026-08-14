@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -5,6 +6,21 @@ import { prisma } from "@/lib/prisma";
 
 const CHEAPDATAHUB_DATA_URL =
   "https://www.cheapdatahub.ng/api/v1/resellers/data/purchase/";
+
+/*
+ * DEFAULT PLATFORM FEE
+ *
+ * This is only used when no SERVICE_FEE_PERCENT
+ * exists in the database.
+ *
+ * Example:
+ * 5 = 5%
+ * 7.5 = 7.5%
+ * 10 = 10%
+ */
+const DEFAULT_SERVICE_FEE_PERCENTAGE = 5;
+
+const SERVICE_FEE_SETTING_KEY = "SERVICE_FEE_PERCENT";
 
 const dataPlans: Record<
   number,
@@ -481,9 +497,9 @@ export async function POST(request: NextRequest) {
   let transactionId: string | null = null;
 
   try {
-    // ==========================================
+    // ============================================================
     // AUTHENTICATION
-    // ==========================================
+    // ============================================================
 
     const session = await getServerSession(authOptions);
 
@@ -497,9 +513,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ==========================================
+    // ============================================================
     // REQUEST BODY
-    // ==========================================
+    // ============================================================
 
     const body = await request.json();
 
@@ -517,10 +533,6 @@ export async function POST(request: NextRequest) {
 
     const bundleId = Number(rawBundleId);
 
-    // ==========================================
-    // VALIDATE PLAN
-    // ==========================================
-
     if (
       !Number.isInteger(bundleId) ||
       !dataPlans[bundleId]
@@ -537,9 +549,9 @@ export async function POST(request: NextRequest) {
 
     const plan = dataPlans[bundleId];
 
-    // ==========================================
-    // NORMALIZE PHONE NUMBER
-    // ==========================================
+    // ============================================================
+    // PHONE NUMBER
+    // ============================================================
 
     const cleanedPhone = String(phoneNumber || "")
       .replace(/\s+/g, "")
@@ -556,9 +568,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ==========================================
-    // GET USER
-    // ==========================================
+    // ============================================================
+    // USER
+    // ============================================================
 
     const user = await prisma.user.findUnique({
       where: {
@@ -586,9 +598,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ==========================================
+    // ============================================================
     // API KEY
-    // ==========================================
+    // ============================================================
 
     const apiKey =
       process.env.CHEAPDATAHUB_API_KEY;
@@ -604,30 +616,139 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ==========================================
-    // CUSTOMER PRICE
-    // ==========================================
+    // ============================================================
+    // BASE PRICING
+    // ============================================================
 
-    const amount = Number(plan.resellerPrice);
+    const basePrice = Number(
+      plan.resellerPrice
+    );
 
-    // ==========================================
-    // PROVIDER COST
-    // ==========================================
+    const providerCost = Number(
+      plan.apiPrice
+    );
 
-    const providerCost = Number(plan.apiPrice);
+    if (
+      !Number.isFinite(basePrice) ||
+      basePrice <= 0 ||
+      !Number.isFinite(providerCost) ||
+      providerCost < 0
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Invalid pricing configuration.",
+        },
+        { status: 500 }
+      );
+    }
 
-    // ==========================================
-    // BUSINESS PROFIT
-    // ==========================================
+    // ============================================================
+    // LOAD GLOBAL SERVICE FEE
+    // ============================================================
+    //
+    // IMPORTANT:
+    //
+    // Your admin service-fee page saves:
+    //
+    // SERVICE_FEE_PERCENT
+    //
+    // Therefore this route MUST read the same key.
+    //
+    // This makes the percentage in:
+    //
+    // /dashboard/admin/service-fees
+    //
+    // automatically affect data purchases.
+    //
+    // Example:
+    //
+    // base price = ₦1,000
+    // fee = 5%
+    // fee amount = ₦50
+    // customer pays = ₦1,050
+    //
+    // If you change the admin setting to 10%:
+    //
+    // base price = ₦1,000
+    // fee = ₦100
+    // customer pays = ₦1,100
+    // ============================================================
 
-    const profit = amount - providerCost;
+    let serviceFeePercentage =
+      DEFAULT_SERVICE_FEE_PERCENTAGE;
 
-    // ==========================================
+    try {
+      const setting =
+        await prisma.systemSetting.findUnique({
+          where: {
+            key: SERVICE_FEE_SETTING_KEY,
+          },
+        });
+
+      if (setting) {
+        const parsedFee = Number(
+          setting.value
+        );
+
+        if (
+          Number.isFinite(parsedFee) &&
+          parsedFee >= 0 &&
+          parsedFee <= 100
+        ) {
+          serviceFeePercentage =
+            parsedFee;
+        }
+      }
+    } catch (settingError) {
+      console.error(
+        "DATA SERVICE FEE SETTING ERROR:",
+        settingError
+      );
+
+      /*
+       * If the setting cannot be loaded,
+       * keep using the safe default.
+       */
+    }
+
+    // ============================================================
+    // CALCULATE CUSTOMER PRICE
+    // ============================================================
+
+    const serviceFee = Number(
+      (
+        basePrice *
+        (serviceFeePercentage / 100)
+      ).toFixed(2)
+    );
+
+    const amount = Number(
+      (
+        basePrice +
+        serviceFee
+      ).toFixed(2)
+    );
+
+    /*
+     * Total profit is the customer payment
+     * minus the actual provider cost.
+     */
+    const profit = Number(
+      (
+        amount -
+        providerCost
+      ).toFixed(2)
+    );
+
+    // ============================================================
     // WALLET CHECK
-    // ==========================================
+    // ============================================================
 
-    const walletBalance =
-      Number(user.walletBalance);
+    const walletBalance = Number(
+      user.walletBalance
+    );
 
     if (
       !Number.isFinite(walletBalance) ||
@@ -636,7 +757,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "Insufficient wallet balance.",
+          message:
+            "Insufficient wallet balance.",
           balance: walletBalance,
           required: amount,
         },
@@ -644,9 +766,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ==========================================
-    // REFERENCE
-    // ==========================================
+    // ============================================================
+    // TRANSACTION REFERENCE
+    // ============================================================
 
     const reference =
       `DATA-${Date.now()}-${Math.random()
@@ -654,9 +776,9 @@ export async function POST(request: NextRequest) {
         .substring(2, 8)
         .toUpperCase()}`;
 
-    // ==========================================
+    // ============================================================
     // CREATE PENDING TRANSACTION
-    // ==========================================
+    // ============================================================
 
     const transaction =
       await prisma.transaction.create({
@@ -674,54 +796,73 @@ export async function POST(request: NextRequest) {
         },
       });
 
-    transactionId = transaction.id;
+    transactionId =
+      transaction.id;
 
-    // ==========================================
-    // CALL CHEAPDATAHUB
-    // ==========================================
+    // ============================================================
+    // PROVIDER REQUEST
+    // ============================================================
 
     const providerBody = {
       bundle_id: bundleId,
       phone_number: cleanedPhone,
     };
 
-    const providerResponse = await fetch(
-      CHEAPDATAHUB_DATA_URL,
-      {
-        method: "POST",
+    const providerResponse =
+      await fetch(
+        CHEAPDATAHUB_DATA_URL,
+        {
+          method: "POST",
 
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type":
+              "application/json",
+            Accept:
+              "application/json",
+          },
 
-        body: JSON.stringify(providerBody),
+          body: JSON.stringify(
+            providerBody
+          ),
 
-        cache: "no-store",
-      }
-    );
+          cache: "no-store",
+        }
+      );
+
+    // ============================================================
+    // PROVIDER RESPONSE
+    // ============================================================
 
     const responseText =
       await providerResponse.text();
 
-    // ==========================================
-    // PARSE RESPONSE
-    // ==========================================
+    console.log(
+      "CHEAPDATAHUB DATA STATUS:",
+      providerResponse.status
+    );
+
+    console.log(
+      "CHEAPDATAHUB DATA RESPONSE:",
+      responseText
+    );
 
     let providerResult: any;
 
     try {
-      providerResult = responseText.trim()
-        ? JSON.parse(responseText)
-        : null;
+      providerResult =
+        responseText.trim()
+          ? JSON.parse(
+              responseText
+            )
+          : null;
     } catch {
       providerResult = null;
     }
 
-    // ==========================================
+    // ============================================================
     // INVALID PROVIDER RESPONSE
-    // ==========================================
+    // ============================================================
 
     if (!providerResult) {
       await prisma.transaction.update({
@@ -746,14 +887,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ==========================================
-    // CHECK PROVIDER SUCCESS
-    // ==========================================
+    // ============================================================
+    // PROVIDER SUCCESS
+    // ============================================================
 
     const providerSuccess =
-      providerResult.success === true ||
-      providerResult.status === true ||
-      providerResult.status === "true";
+      providerResult.success ===
+        true ||
+      providerResult.status ===
+        true ||
+      providerResult.status ===
+        "true" ||
+      providerResult.status ===
+        "success";
 
     if (
       !providerResponse.ok ||
@@ -772,6 +918,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
+
           message:
             providerResult.message ||
             providerResult.error ||
@@ -780,26 +927,24 @@ export async function POST(request: NextRequest) {
           providerStatus:
             providerResponse.status,
 
-          providerResponse: providerResult,
+          providerResponse:
+            providerResult,
         },
         { status: 400 }
       );
     }
 
-    // ==========================================
-    // SUCCESS
-    //
-    // IMPORTANT:
-    // User wallet is deducted.
-    // Business wallet is credited.
-    // Business revenue is recorded.
-    //
-    // ALL IN ONE DATABASE TRANSACTION.
-    // ==========================================
+    // ============================================================
+    // COMPLETE FINANCIAL TRANSACTION
+    // ============================================================
 
     const result =
       await prisma.$transaction(
         async (tx) => {
+          // ------------------------------------------------------
+          // GET CURRENT USER BALANCE AGAIN
+          // ------------------------------------------------------
+
           const currentUser =
             await tx.user.findUnique({
               where: {
@@ -819,6 +964,9 @@ export async function POST(request: NextRequest) {
             );
 
           if (
+            !Number.isFinite(
+              currentBalance
+            ) ||
             currentBalance < amount
           ) {
             throw new Error(
@@ -826,44 +974,109 @@ export async function POST(request: NextRequest) {
             );
           }
 
-          // ======================================
-          // FIND OR CREATE BUSINESS WALLET
-          // ======================================
+          // ------------------------------------------------------
+          // BUSINESS WALLET
+          // ------------------------------------------------------
 
           let businessWallet =
             await tx.businessWallet.findUnique(
               {
                 where: {
-                  name: "Brainfriend Tech",
+                  name:
+                    "Brainfriend Tech",
                 },
               }
             );
 
           if (!businessWallet) {
             businessWallet =
-              await tx.businessWallet.create({
-                data: {
-                  name: "Brainfriend Tech",
-                  balance: 0,
-                  totalRevenue: 0,
-                  totalCost: 0,
-                  totalProfit: 0,
-                  withdrawnProfit: 0,
-                  availableProfit: 0,
-                },
-              });
+              await tx.businessWallet.create(
+                {
+                  data: {
+                    name:
+                      "Brainfriend Tech",
+
+                    balance: 0,
+
+                    totalRevenue: 0,
+
+                    totalCost: 0,
+
+                    totalProfit: 0,
+
+                    withdrawnProfit: 0,
+
+                    availableProfit: 0,
+                  },
+                }
+              );
           }
 
-          // ======================================
-          // NEW USER BALANCE
-          // ======================================
+          // ------------------------------------------------------
+          // NEW BALANCES
+          // ------------------------------------------------------
 
           const newUserBalance =
-            currentBalance - amount;
+            Number(
+              (
+                currentBalance -
+                amount
+              ).toFixed(2)
+            );
 
-          // ======================================
+          const newBusinessBalance =
+            Number(
+              (
+                Number(
+                  businessWallet.balance
+                ) +
+                amount
+              ).toFixed(2)
+            );
+
+          const newTotalRevenue =
+            Number(
+              (
+                Number(
+                  businessWallet.totalRevenue
+                ) +
+                amount
+              ).toFixed(2)
+            );
+
+          const newTotalCost =
+            Number(
+              (
+                Number(
+                  businessWallet.totalCost
+                ) +
+                providerCost
+              ).toFixed(2)
+            );
+
+          const newTotalProfit =
+            Number(
+              (
+                Number(
+                  businessWallet.totalProfit
+                ) +
+                profit
+              ).toFixed(2)
+            );
+
+          const newAvailableProfit =
+            Number(
+              (
+                Number(
+                  businessWallet.availableProfit
+                ) +
+                profit
+              ).toFixed(2)
+            );
+
+          // ------------------------------------------------------
           // UPDATE USER WALLET
-          // ======================================
+          // ------------------------------------------------------
 
           await tx.user.update({
             where: {
@@ -876,38 +1089,14 @@ export async function POST(request: NextRequest) {
             },
           });
 
-          // ======================================
+          // ------------------------------------------------------
           // UPDATE BUSINESS WALLET
-          // ======================================
-
-          const newBusinessBalance =
-            Number(
-              businessWallet.balance
-            ) + amount;
-
-          const newTotalRevenue =
-            Number(
-              businessWallet.totalRevenue
-            ) + amount;
-
-          const newTotalCost =
-            Number(
-              businessWallet.totalCost
-            ) + providerCost;
-
-          const newTotalProfit =
-            Number(
-              businessWallet.totalProfit
-            ) + profit;
-
-          const newAvailableProfit =
-            Number(
-              businessWallet.availableProfit
-            ) + profit;
+          // ------------------------------------------------------
 
           await tx.businessWallet.update({
             where: {
-              id: businessWallet.id,
+              id:
+                businessWallet.id,
             },
 
             data: {
@@ -928,9 +1117,9 @@ export async function POST(request: NextRequest) {
             },
           });
 
-          // ======================================
-          // BUSINESS REVENUE RECORD
-          // ======================================
+          // ------------------------------------------------------
+          // BUSINESS REVENUE
+          // ------------------------------------------------------
 
           await tx.businessRevenue.create({
             data: {
@@ -944,7 +1133,8 @@ export async function POST(request: NextRequest) {
 
               amount,
 
-              cost: providerCost,
+              cost:
+                providerCost,
 
               profit,
 
@@ -958,9 +1148,9 @@ export async function POST(request: NextRequest) {
             },
           });
 
-          // ======================================
-          // COMPLETE ORIGINAL TRANSACTION
-          // ======================================
+          // ------------------------------------------------------
+          // COMPLETE TRANSACTION
+          // ------------------------------------------------------
 
           await tx.transaction.update({
             where: {
@@ -968,9 +1158,11 @@ export async function POST(request: NextRequest) {
             },
 
             data: {
-              status: "SUCCESS",
+              status:
+                "SUCCESS",
 
-              cost: providerCost,
+              cost:
+                providerCost,
 
               profit,
             },
@@ -988,9 +1180,9 @@ export async function POST(request: NextRequest) {
         }
       );
 
-    // ==========================================
+    // ============================================================
     // SUCCESS RESPONSE
-    // ==========================================
+    // ============================================================
 
     return NextResponse.json({
       success: true,
@@ -1007,21 +1199,38 @@ export async function POST(request: NextRequest) {
         providerResult.transactionId ||
         null,
 
-      bundle_id: bundleId,
+      bundle_id:
+        bundleId,
 
-      phone_number: cleanedPhone,
+      phone_number:
+        cleanedPhone,
 
-      provider: plan.provider,
+      provider:
+        plan.provider,
 
-      size: plan.size,
+      size:
+        plan.size,
 
-      duration: plan.duration,
+      duration:
+        plan.duration,
+
+      /*
+       * Pricing information
+       */
+
+      basePrice,
+
+      serviceFeePercentage,
+
+      serviceFee,
 
       amount,
 
-      cost: providerCost,
+      cost:
+        providerCost,
 
-      profit: result.profit,
+      profit:
+        result.profit,
 
       walletBalance:
         result.walletBalance,
@@ -1030,6 +1239,10 @@ export async function POST(request: NextRequest) {
         providerResult,
     });
   } catch (error: any) {
+    // ============================================================
+    // ERROR HANDLING
+    // ============================================================
+
     console.error(
       "DATA PURCHASE ERROR:",
       error
@@ -1048,7 +1261,7 @@ export async function POST(request: NextRequest) {
         });
       } catch (updateError) {
         console.error(
-          "FAILED TO UPDATE TRANSACTION:",
+          "FAILED TO UPDATE DATA TRANSACTION:",
           updateError
         );
       }
@@ -1066,3 +1279,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

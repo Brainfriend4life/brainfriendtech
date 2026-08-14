@@ -45,28 +45,48 @@ type ProviderNinResponse = {
     document?: string | null;
     document_base64?: string | null;
     documentBase64?: string | null;
+
     pdf_url?: string | null;
     document_url?: string | null;
 
     has_pdf?: boolean;
+
     [key: string]: unknown;
   };
 };
 
+const SERVICE_FEE_SETTING_KEY = "SERVICE_FEE_PERCENT";
+const DEFAULT_SERVICE_FEE_PERCENTAGE = 5;
+
+/*
+|--------------------------------------------------------------------------
+| NIN CUSTOMER BASE PRICES
+|--------------------------------------------------------------------------
+|
+| These are the actual NIN prices before your service fee.
+|
+| Standard   = ₦150
+| Regular    = ₦150
+| Premium    = ₦250
+| VNIN Slip  = ₦150
+|
+*/
+
+const NIN_BASE_PRICES: Record<NinCardType, number> = {
+  standard: 150,
+  regular: 150,
+  premium: 250,
+  vnin_slip: 150,
+};
+
 function toPositiveNumber(value: unknown): number | null {
-  if (
-    value === null ||
-    value === undefined
-  ) {
+  if (value === null || value === undefined || value === "") {
     return null;
   }
 
   const numberValue = Number(value);
 
-  if (
-    !Number.isFinite(numberValue) ||
-    numberValue <= 0
-  ) {
+  if (!Number.isFinite(numberValue) || numberValue <= 0) {
     return null;
   }
 
@@ -80,30 +100,59 @@ function createReference(): string {
     .toUpperCase()}`;
 }
 
-function getNinPrice(
-  cardType: NinCardType
-): number | null {
-  const prices: Record<
-    NinCardType,
-    string | undefined
-  > = {
-    standard:
-      process.env.NIN_STANDARD_PRICE || "150",
+async function getServiceFeePercentage(): Promise<number> {
+  try {
+    const setting = await prisma.systemSetting.findUnique({
+      where: {
+        key: SERVICE_FEE_SETTING_KEY,
+      },
+    });
 
-    regular:
-      process.env.NIN_REGULAR_PRICE || "150",
+    if (!setting) {
+      return DEFAULT_SERVICE_FEE_PERCENTAGE;
+    }
 
-    premium:
-      process.env.NIN_PREMIUM_PRICE || "150",
+    const percentage = Number(setting.value);
 
-    vnin_slip:
-      process.env.NIN_VNIN_SLIP_PRICE ||
-      "150",
-  };
+    if (
+      !Number.isFinite(percentage) ||
+      percentage < 0 ||
+      percentage > 100
+    ) {
+      return DEFAULT_SERVICE_FEE_PERCENTAGE;
+    }
 
-  return toPositiveNumber(
-    prices[cardType]
+    return percentage;
+  } catch (error) {
+    console.error(
+      "NIN SERVICE FEE SETTING ERROR:",
+      error
+    );
+
+    return DEFAULT_SERVICE_FEE_PERCENTAGE;
+  }
+}
+
+function calculateCustomerPrice(
+  basePrice: number,
+  serviceFeePercentage: number
+) {
+  const serviceFee = Number(
+    (
+      basePrice *
+      (serviceFeePercentage / 100)
+    ).toFixed(2)
   );
+
+  const totalAmount = Number(
+    (basePrice + serviceFee).toFixed(2)
+  );
+
+  return {
+    basePrice,
+    serviceFee,
+    totalAmount,
+  };
 }
 
 async function refundFailedTransaction(params: {
@@ -133,10 +182,11 @@ async function refundFailedTransaction(params: {
           );
         }
 
-        if (
-          transaction.status !==
-          "PENDING"
-        ) {
+        /*
+         * Only refund a transaction that is still pending.
+         * This prevents double refunds.
+         */
+        if (transaction.status !== "PENDING") {
           return;
         }
 
@@ -181,43 +231,52 @@ export async function POST(
   request: NextRequest
 ) {
   let transactionId: string | null = null;
-  let transactionReference:
-    | string
-    | null = null;
+  let transactionReference: string | null = null;
 
   try {
-    const session =
-      await getServerSession(
-        authOptions
-      );
+    /*
+    |--------------------------------------------------------------------------
+    | AUTHENTICATION
+    |--------------------------------------------------------------------------
+    */
+
+    const session = await getServerSession(
+      authOptions
+    );
 
     if (!session?.user?.id) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "You must be logged in.",
+          error: "You must be logged in.",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
     }
 
-    const userId =
-      session.user.id;
+    const userId = session.user.id;
+
+    /*
+    |--------------------------------------------------------------------------
+    | REQUEST BODY
+    |--------------------------------------------------------------------------
+    */
 
     let body: any;
 
     try {
-      body =
-        await request.json();
+      body = await request.json();
     } catch {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Invalid request body.",
+          error: "Invalid request body.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
@@ -225,12 +284,17 @@ export async function POST(
       body?.nin || ""
     ).replace(/\s+/g, "");
 
-    const cardType =
-      String(
-        body?.cardType || ""
-      )
-        .trim()
-        .toLowerCase() as NinCardType;
+    const cardType = String(
+      body?.cardType || ""
+    )
+      .trim()
+      .toLowerCase() as NinCardType;
+
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATE NIN
+    |--------------------------------------------------------------------------
+    */
 
     if (!/^\d{11}$/.test(nin)) {
       return NextResponse.json(
@@ -239,78 +303,124 @@ export async function POST(
           error:
             "Please enter a valid 11-digit NIN.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | VALIDATE CARD TYPE
+    |--------------------------------------------------------------------------
+    */
+
     if (
-      !ALLOWED_CARD_TYPES.includes(
-        cardType
-      )
+      !ALLOWED_CARD_TYPES.includes(cardType)
     ) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Invalid NIN card type.",
+          error: "Invalid NIN card type.",
           allowedCardTypes:
             ALLOWED_CARD_TYPES,
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
-        },
-      });
+    /*
+    |--------------------------------------------------------------------------
+    | FIND USER
+    |--------------------------------------------------------------------------
+    */
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+    });
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "User not found.",
+          error: "User not found.",
         },
-        { status: 404 }
+        {
+          status: 404,
+        }
       );
     }
 
-    if (
-      user.status !==
-      "ACTIVE"
-    ) {
+    if (user.status !== "ACTIVE") {
       return NextResponse.json(
         {
           success: false,
           error:
             "Your account is not active.",
         },
-        { status: 403 }
+        {
+          status: 403,
+        }
       );
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | GET SERVICE FEE
+    |--------------------------------------------------------------------------
+    */
+
+    const serviceFeePercentage =
+      await getServiceFeePercentage();
+
+    /*
+    |--------------------------------------------------------------------------
+    | GET NIN BASE PRICE
+    |--------------------------------------------------------------------------
+    */
+
+    const basePrice =
+      NIN_BASE_PRICES[cardType];
+
+    /*
+    |--------------------------------------------------------------------------
+    | CALCULATE CUSTOMER PRICE
+    |--------------------------------------------------------------------------
+    */
+
+    const pricing =
+      calculateCustomerPrice(
+        basePrice,
+        serviceFeePercentage
+      );
+
+    const serviceFee =
+      pricing.serviceFee;
 
     const amount =
-      getNinPrice(cardType);
+      pricing.totalAmount;
 
-    if (amount === null) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            `NIN price is not configured for ${cardType}.`,
-        },
-        { status: 500 }
-      );
-    }
+    /*
+    |--------------------------------------------------------------------------
+    | CREATE REFERENCE
+    |--------------------------------------------------------------------------
+    */
 
     const reference =
       createReference();
 
     transactionReference =
       reference;
+
+    /*
+    |--------------------------------------------------------------------------
+    | RESERVE USER WALLET
+    |--------------------------------------------------------------------------
+    */
 
     let transaction;
 
@@ -329,15 +439,12 @@ export async function POST(
                 },
                 data: {
                   walletBalance: {
-                    decrement:
-                      amount,
+                    decrement: amount,
                   },
                 },
               });
 
-            if (
-              debitResult.count !== 1
-            ) {
+            if (debitResult.count !== 1) {
               throw new Error(
                 "Insufficient wallet balance."
               );
@@ -346,15 +453,23 @@ export async function POST(
             return await tx.transaction.create({
               data: {
                 userId,
+
                 type: "NIN",
+
                 amount,
+
                 description:
                   `NIN verification (${cardType})`,
+
                 status: "PENDING",
+
                 reference,
+
                 provider:
                   "NetworkDataSub",
+
                 cost: 0,
+
                 profit: 0,
               },
             });
@@ -371,6 +486,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
+
           error:
             error?.message ===
             "Insufficient wallet balance."
@@ -387,6 +503,12 @@ export async function POST(
       );
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | NETWORKDATASUB NIN VERIFICATION
+    |--------------------------------------------------------------------------
+    */
+
     let providerResponse;
 
     try {
@@ -395,8 +517,10 @@ export async function POST(
           "/verification/nin",
           {
             method: "POST",
+
             body: {
               nin,
+
               card_type:
                 cardType,
             },
@@ -412,21 +536,29 @@ export async function POST(
         await refundFailedTransaction({
           transactionId:
             transaction.id,
+
           userId,
+
           amount,
         });
 
       return NextResponse.json(
         {
           success: false,
+
           error:
             "NetworkDataSub could not be reached.",
+
           refunded,
+
           reference,
+
           transactionId:
             transaction.id,
         },
-        { status: 502 }
+        {
+          status: 502,
+        }
       );
     }
 
@@ -444,6 +576,12 @@ export async function POST(
       )
     );
 
+    /*
+    |--------------------------------------------------------------------------
+    | PROVIDER HTTP ERROR
+    |--------------------------------------------------------------------------
+    */
+
     if (
       !providerResponse.response.ok ||
       !providerResponse.data
@@ -452,19 +590,25 @@ export async function POST(
         await refundFailedTransaction({
           transactionId:
             transaction.id,
+
           userId,
+
           amount,
         });
 
       return NextResponse.json(
         {
           success: false,
+
           error:
             providerResponse.data
               ?.message ||
             "NIN verification failed.",
+
           refunded,
+
           reference,
+
           transactionId:
             transaction.id,
         },
@@ -477,39 +621,57 @@ export async function POST(
     const providerData =
       providerResponse.data;
 
+    /*
+    |--------------------------------------------------------------------------
+    | PROVIDER BUSINESS ERROR
+    |--------------------------------------------------------------------------
+    */
+
     if (
-      providerData.success !==
-      true
+      providerData.success !== true
     ) {
       const refunded =
         await refundFailedTransaction({
           transactionId:
             transaction.id,
+
           userId,
+
           amount,
         });
 
       return NextResponse.json(
         {
           success: false,
+
           error:
             providerData.message ||
             "NIN verification failed.",
+
           refunded,
+
           reference,
+
           transactionId:
             transaction.id,
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | PROVIDER DATA
+    |--------------------------------------------------------------------------
+    */
 
     const verificationData =
       providerData.data || {};
 
     const details =
-      verificationData.details ||
-      {};
+      verificationData.details || {};
 
     const providerReference =
       verificationData.reference ??
@@ -519,24 +681,47 @@ export async function POST(
       verificationData.transaction_id ??
       null;
 
+    /*
+    |--------------------------------------------------------------------------
+    | PROVIDER COST
+    |--------------------------------------------------------------------------
+    */
+
     const providerAmount =
       toPositiveNumber(
         verificationData.amount
       );
 
     const providerCost =
-      providerAmount ??
-      amount;
+      providerAmount ?? 0;
 
-    const profit = Math.max(
-      0,
-      amount -
-        providerCost
+    /*
+    |--------------------------------------------------------------------------
+    | PROFIT
+    |--------------------------------------------------------------------------
+    |
+    | Customer pays:
+    |
+    | Base price + service fee
+    |
+    | Profit:
+    |
+    | Customer price - actual provider cost
+    |
+    */
+
+    const profit = Number(
+      Math.max(
+        0,
+        amount - providerCost
+      ).toFixed(2)
     );
 
-    // ============================================================
-    // PDF EXTRACTION
-    // ============================================================
+    /*
+    |--------------------------------------------------------------------------
+    | PDF EXTRACTION
+    |--------------------------------------------------------------------------
+    */
 
     let pdfBase64: string | null =
       null;
@@ -567,88 +752,58 @@ export async function POST(
     const hasPdf =
       Boolean(pdfBase64);
 
-    console.log(
-      "========== PDF EXTRACTION =========="
-    );
-
-    console.log({
-      hasPdf,
-      pdfLength:
-        pdfBase64?.length || 0,
-      providerHasPdf:
-        verificationData.has_pdf,
-      hasPdfBase64:
-        Boolean(
-          verificationData.pdf_base64
-        ),
-      hasPdfCamel:
-        Boolean(
-          verificationData.pdfBase64
-        ),
-      hasPdfField:
-        Boolean(
-          verificationData.pdf
-        ),
-      hasDocument:
-        Boolean(
-          verificationData.document
-        ),
-    });
-
-    console.log(
-      "====================================="
-    );
+    /*
+    |--------------------------------------------------------------------------
+    | NIN DETAILS
+    |--------------------------------------------------------------------------
+    */
 
     const firstName =
-      typeof details.firstName ===
-      "string"
+      typeof details.firstName === "string"
         ? details.firstName
         : null;
 
     const middleName =
-      typeof details.middleName ===
-      "string"
+      typeof details.middleName === "string"
         ? details.middleName
         : null;
 
     const surname =
-      typeof details.lastName ===
-      "string"
+      typeof details.lastName === "string"
         ? details.lastName
-        : typeof details.surname ===
-          "string"
+        : typeof details.surname === "string"
         ? details.surname
         : null;
 
     const gender =
-      typeof details.gender ===
-      "string"
+      typeof details.gender === "string"
         ? details.gender
         : null;
 
     const birthDate =
-      typeof details.dateOfBirth ===
-      "string"
+      typeof details.dateOfBirth === "string"
         ? details.dateOfBirth
-        : typeof details.birthDate ===
-          "string"
+        : typeof details.birthDate === "string"
         ? details.birthDate
         : null;
 
     const telephone =
-      typeof details.telephone ===
-      "string"
+      typeof details.telephone === "string"
         ? details.telephone
-        : typeof details.phone ===
-          "string"
+        : typeof details.phone === "string"
         ? details.phone
         : null;
 
     const photo =
-      typeof details.photo ===
-      "string"
+      typeof details.photo === "string"
         ? details.photo
         : null;
+
+    /*
+    |--------------------------------------------------------------------------
+    | FINALIZE TRANSACTION
+    |--------------------------------------------------------------------------
+    */
 
     let result;
 
@@ -663,9 +818,7 @@ export async function POST(
                 },
               });
 
-            if (
-              !currentTransaction
-            ) {
+            if (!currentTransaction) {
               throw new Error(
                 "Transaction could not be found."
               );
@@ -680,11 +833,16 @@ export async function POST(
               );
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | BUSINESS WALLET
+            |--------------------------------------------------------------------------
+            */
+
             let businessWallet =
               await tx.businessWallet.findUnique({
                 where: {
-                  name:
-                    "Brainfriend Tech",
+                  name: "Brainfriend Tech",
                 },
               });
 
@@ -694,15 +852,27 @@ export async function POST(
                   data: {
                     name:
                       "Brainfriend Tech",
+
                     balance: 0,
+
                     totalRevenue: 0,
+
                     totalCost: 0,
+
                     totalProfit: 0,
+
                     withdrawnProfit: 0,
+
                     availableProfit: 0,
                   },
                 });
             }
+
+            /*
+            |--------------------------------------------------------------------------
+            | GET FRESH USER
+            |--------------------------------------------------------------------------
+            */
 
             const freshUser =
               await tx.user.findUnique({
@@ -717,18 +887,32 @@ export async function POST(
               );
             }
 
+            /*
+            |--------------------------------------------------------------------------
+            | UPDATE TRANSACTION
+            |--------------------------------------------------------------------------
+            */
+
             await tx.transaction.update({
               where: {
                 id: transaction.id,
               },
+
               data: {
-                status:
-                  "SUCCESS",
+                status: "SUCCESS",
+
                 cost:
                   providerCost,
+
                 profit,
               },
             });
+
+            /*
+            |--------------------------------------------------------------------------
+            | UPDATE BUSINESS WALLET
+            |--------------------------------------------------------------------------
+            */
 
             const updatedBusinessWallet =
               await tx.businessWallet.update({
@@ -736,23 +920,28 @@ export async function POST(
                   id:
                     businessWallet.id,
                 },
+
                 data: {
                   balance: {
                     increment:
                       amount,
                   },
+
                   totalRevenue: {
                     increment:
                       amount,
                   },
+
                   totalCost: {
                     increment:
                       providerCost,
                   },
+
                   totalProfit: {
                     increment:
                       profit,
                   },
+
                   availableProfit: {
                     increment:
                       profit,
@@ -760,28 +949,44 @@ export async function POST(
                 },
               });
 
+            /*
+            |--------------------------------------------------------------------------
+            | BUSINESS REVENUE
+            |--------------------------------------------------------------------------
+            */
+
             await tx.businessRevenue.create({
               data: {
                 transactionId:
                   transaction.id,
+
                 type: "NIN",
+
                 provider:
                   "NetworkDataSub",
+
                 amount,
+
                 cost:
                   providerCost,
+
                 profit,
+
                 reference,
+
                 description:
                   `NIN verification (${cardType})`,
+
                 businessWalletId:
                   businessWallet.id,
               },
             });
 
-            // ==================================================
-            // SAVE NIN + PDF
-            // ==================================================
+            /*
+            |--------------------------------------------------------------------------
+            | SAVE NIN VERIFICATION
+            |--------------------------------------------------------------------------
+            */
 
             const ninVerification =
               await tx.ninVerification.create({
@@ -817,29 +1022,11 @@ export async function POST(
 
                   photo,
 
-                  pdfBase64:
-                    pdfBase64,
+                  pdfBase64,
 
-                  hasPdf:
-                    hasPdf,
+                  hasPdf,
                 },
               });
-
-            console.log(
-              "NIN SAVED TO DATABASE:",
-              {
-                id:
-                  ninVerification.id,
-                reference:
-                  ninVerification.reference,
-                hasPdf:
-                  ninVerification.hasPdf,
-                pdfLength:
-                  ninVerification
-                    .pdfBase64
-                    ?.length || 0,
-              }
-            );
 
             return {
               ninVerification,
@@ -868,23 +1055,49 @@ export async function POST(
         error
       );
 
+      /*
+      |--------------------------------------------------------------------------
+      | IMPORTANT
+      |--------------------------------------------------------------------------
+      |
+      | The provider already succeeded here.
+      | Do not automatically refund the user because
+      | the database finalization failed.
+      |
+      | The transaction remains pending and should be
+      | reconciled manually if this rare case occurs.
+      |
+      */
+
       return NextResponse.json(
         {
           success: false,
+
           error:
             "NIN verification succeeded but could not be stored.",
+
           reference,
+
           transactionId:
             transaction.id,
+
           debug:
             process.env.NODE_ENV ===
             "development"
               ? error?.message
               : undefined,
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | SUCCESS RESPONSE
+    |--------------------------------------------------------------------------
+    */
 
     return NextResponse.json(
       {
@@ -896,9 +1109,7 @@ export async function POST(
 
         data: {
           verification_id:
-            result
-              .ninVerification
-              .id,
+            result.ninVerification.id,
 
           transaction_id:
             transaction.id,
@@ -910,6 +1121,21 @@ export async function POST(
 
           provider_reference:
             providerReference,
+
+          /*
+          |--------------------------------------------------------------------------
+          | PRICING BREAKDOWN
+          |--------------------------------------------------------------------------
+          */
+
+          base_price:
+            pricing.basePrice,
+
+          service_fee:
+            serviceFee,
+
+          service_fee_percentage:
+            serviceFeePercentage,
 
           amount,
 
@@ -926,23 +1152,27 @@ export async function POST(
 
           details: {
             firstName,
+
             middleName,
+
             surname,
+
             gender,
+
             birthDate,
+
             telephoneNo:
               telephone,
+
             photo,
           },
 
           has_pdf:
-            result
-              .ninVerification
+            result.ninVerification
               .hasPdf,
 
           pdf_url:
-            result
-              .ninVerification
+            result.ninVerification
               .hasPdf
               ? `/api/verification/nin/${result.ninVerification.id}/pdf`
               : null,
@@ -960,7 +1190,9 @@ export async function POST(
             result.profit,
         },
       },
-      { status: 200 }
+      {
+        status: 200,
+      }
     );
   } catch (error: any) {
     console.error(
@@ -971,14 +1203,19 @@ export async function POST(
     return NextResponse.json(
       {
         success: false,
+
         error:
           error?.message ||
           "NIN verification could not be completed.",
+
         transactionId,
+
         reference:
           transactionReference,
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
