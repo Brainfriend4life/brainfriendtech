@@ -1,3 +1,4 @@
+
 import {
   Users,
   CreditCard,
@@ -30,17 +31,29 @@ const stats = [
 
 export default function Stats() {
   return (
-    <section className="bg-indigo-600 py-20 text-white">
+    <section
+      aria-labelledby="stats-heading"
+      className="bg-indigo-600 py-20 text-white"
+    >
       <div className="mx-auto max-w-7xl px-6">
+        {/* Heading */}
+
         <div className="mb-12 text-center">
-          <h2 className="text-4xl font-bold">
-            Trusted by Thousands
+          <h2
+            id="stats-heading"
+            className="text-4xl font-bold"
+          >
+            Trusted for Fast and Reliable VTU Services
           </h2>
 
-          <p className="mt-4 text-indigo-100">
-            We provide reliable and secure VTU services across Nigeria.
+          <p className="mx-auto mt-4 max-w-2xl text-indigo-100">
+            Brainfriend Global Tech provides reliable, secure and
+            convenient VTU and digital payment services to customers
+            across Nigeria.
           </p>
         </div>
+
+        {/* Statistics */}
 
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((item) => {
@@ -51,15 +64,24 @@ export default function Stats() {
                 key={item.subtitle}
                 className="rounded-2xl bg-white/10 p-8 text-center backdrop-blur transition hover:bg-white/20"
               >
+                {/* ICON */}
+
                 <div className="mb-5 flex justify-center">
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
-                    <Icon className="h-8 w-8" />
+                    <Icon
+                      aria-hidden="true"
+                      className="h-8 w-8"
+                    />
                   </div>
                 </div>
+
+                {/* NUMBER */}
 
                 <h3 className="text-4xl font-bold">
                   {item.title}
                 </h3>
+
+                {/* DESCRIPTION */}
 
                 <p className="mt-3 text-indigo-100">
                   {item.subtitle}
@@ -72,3 +94,4 @@ export default function Stats() {
     </section>
   );
 }
+

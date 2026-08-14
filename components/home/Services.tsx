@@ -1,3 +1,4 @@
+
 import Link from "next/link";
 import {
   Smartphone,
@@ -11,51 +12,51 @@ import {
 
 const services = [
   {
-    title: "Airtime",
+    title: "Airtime Recharge",
     description:
-      "Buy airtime instantly for all Nigerian networks.",
+      "Buy airtime instantly for MTN, Airtel, Glo and 9mobile networks across Nigeria.",
     icon: Smartphone,
     href: "/dashboard/airtime",
   },
   {
-    title: "Data",
+    title: "Data Bundles",
     description:
-      "Affordable data bundles delivered immediately.",
+      "Buy affordable MTN, Airtel, Glo and 9mobile data bundles with fast and reliable delivery.",
     icon: Wifi,
     href: "/dashboard/data",
   },
   {
-    title: "Electricity",
+    title: "Electricity Bill Payment",
     description:
-      "Pay electricity bills and receive tokens instantly.",
+      "Pay electricity bills and receive your token quickly and securely from anywhere in Nigeria.",
     icon: Zap,
     href: "/dashboard/electricity",
   },
   {
-    title: "Cable TV",
+    title: "Cable TV Subscription",
     description:
-      "Renew DSTV, GOtv and Startimes subscriptions.",
+      "Renew your DStv, GOtv and StarTimes subscriptions quickly and conveniently.",
     icon: Tv,
     href: "/dashboard/cable",
   },
   {
-    title: "Exam Pins",
+    title: "WAEC, JAMB & NECO Exam Pins",
     description:
-      "Purchase WAEC, JAMB, NECO and other exam PINs.",
+      "Purchase WAEC, JAMB, NECO and other examination PINs securely and conveniently.",
     icon: GraduationCap,
     href: "/dashboard/exams",
   },
   {
-    title: "CBT Examination",
+    title: "Online CBT Examination",
     description:
-      "Practice and take CBT examinations online with instant results.",
+      "Practice and take CBT examinations online with instant results and performance feedback.",
     icon: BookOpen,
     href: "/dashboard/education/cbt",
   },
   {
     title: "NIN Verification",
     description:
-      "Verify NIN details quickly and securely using our verification service.",
+      "Verify NIN details quickly and securely using our reliable NIN verification service.",
     icon: Fingerprint,
     href: "/dashboard/nin",
   },
@@ -65,6 +66,7 @@ export default function Services() {
   return (
     <section
       id="services"
+      aria-labelledby="services-heading"
       className="px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20"
     >
       <div className="mx-auto max-w-7xl">
@@ -72,15 +74,20 @@ export default function Services() {
 
         <div className="px-2 text-center sm:px-0">
           <p className="mb-2 text-sm font-bold uppercase tracking-wider text-indigo-600">
-            What We Offer
+            VTU & Digital Services
           </p>
 
-          <h2 className="text-2xl font-bold text-gray-900 sm:text-3xl lg:text-4xl">
-            Our Services
+          <h2
+            id="services-heading"
+            className="text-2xl font-bold text-gray-900 sm:text-3xl lg:text-4xl"
+          >
+            Our VTU Services in Nigeria
           </h2>
 
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-gray-600 sm:text-base">
-            Everything you need in one secure and reliable VTU platform.
+            Access airtime, data, electricity bill payments, cable TV,
+            examination PINs, CBT examinations and NIN verification from
+            one secure and reliable platform.
           </p>
         </div>
 
@@ -94,12 +101,16 @@ export default function Services() {
               <Link
                 key={service.title}
                 href={service.href}
+                aria-label={`Get started with ${service.title}`}
                 className="group block rounded-2xl border border-gray-100 bg-white p-5 shadow-md transition-all duration-300 hover:-translate-y-2 hover:border-indigo-100 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 sm:p-6"
               >
                 {/* ICON */}
 
                 <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 transition-all duration-300 group-hover:bg-indigo-600 group-hover:shadow-lg sm:h-14 sm:w-14">
-                  <Icon className="h-6 w-6 text-indigo-600 transition-colors duration-300 group-hover:text-white sm:h-7 sm:w-7" />
+                  <Icon
+                    aria-hidden="true"
+                    className="h-6 w-6 text-indigo-600 transition-colors duration-300 group-hover:text-white sm:h-7 sm:w-7"
+                  />
                 </div>
 
                 {/* TITLE */}
@@ -118,7 +129,10 @@ export default function Services() {
 
                 <div className="mt-5 flex items-center text-sm font-bold text-indigo-600">
                   Get Started
-                  <span className="ml-1 inline-block transition-transform duration-300 group-hover:translate-x-1">
+                  <span
+                    aria-hidden="true"
+                    className="ml-1 inline-block transition-transform duration-300 group-hover:translate-x-1"
+                  >
                     →
                   </span>
                 </div>
@@ -130,3 +144,4 @@ export default function Services() {
     </section>
   );
 }
+

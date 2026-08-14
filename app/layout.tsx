@@ -16,8 +16,110 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Brainfriend Globa Tech",
-  description: "Fast and Reliable VTU Platform",
+  metadataBase: new URL(
+    "https://brainfriendglobaltech.vercel.app"
+  ),
+
+  verification: {
+    google: "AQIBWSH6BimsTbJT4tNXn0f_At6RIL6JRwKV-GymDdQ",
+  },
+  
+  title: {
+    default:
+      "Brainfriend Global Tech | Fast & Reliable VTU Platform",
+    template: "%s | Brainfriend Global Tech",
+  },
+
+  description:
+    "Brainfriend Global Tech is a fast and reliable Nigerian VTU platform for NIN verification, airtime, data bundles, electricity tokens, cable TV subscriptions, WAEC, NECO, JAMB and CBT services.",
+
+  keywords: [
+    "Brainfriend Global Tech",
+    "Brainfriend Tech",
+    "VTU Nigeria",
+    "VTU platform Nigeria",
+    "buy data Nigeria",
+    "cheap data Nigeria",
+    "buy airtime Nigeria",
+    "NIN verification Nigeria",
+    "NIN verification",
+    "electricity bill payment Nigeria",
+    "electricity token Nigeria",
+    "DSTV subscription Nigeria",
+    "GOtv subscription Nigeria",
+    "Startimes subscription Nigeria",
+    "WAEC PIN Nigeria",
+    "NECO PIN Nigeria",
+    "JAMB PIN Nigeria",
+    "CBT practice Nigeria",
+    "online VTU",
+    "digital services Nigeria",
+  ],
+
+  applicationName: "Brainfriend Global Tech",
+
+  authors: [
+    {
+      name: "Brainfriend Global Tech",
+      url: "https://brainfriendglobaltech.vercel.app",
+    },
+  ],
+
+  creator: "Brainfriend Global Tech",
+  publisher: "Brainfriend Global Tech",
+
+  alternates: {
+    canonical: "https://brainfriendglobaltech.vercel.app",
+  },
+
+  openGraph: {
+    type: "website",
+    locale: "en_NG",
+    url: "https://brainfriendglobaltech.vercel.app",
+    siteName: "Brainfriend Global Tech",
+
+    title:
+      "Brainfriend Global Tech | Fast & Reliable VTU Platform",
+
+    description:
+      "Buy airtime and data, verify NIN, pay electricity bills, renew cable TV subscriptions and access WAEC, NECO, JAMB and CBT services on Brainfriend Global Tech.",
+
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Brainfriend Global Tech - Fast and Reliable VTU Platform",
+      },
+    ],
+  },
+
+  twitter: {
+    card: "summary_large_image",
+
+    title:
+      "Brainfriend Global Tech | Fast & Reliable VTU Platform",
+
+    description:
+      "Fast and reliable VTU services in Nigeria including airtime, data, NIN verification, electricity, cable TV and examination services.",
+
+    images: ["/og-image.png"],
+  },
+
+  robots: {
+    index: true,
+    follow: true,
+
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+
+  category: "technology",
 };
 
 export default function RootLayout({
@@ -27,7 +129,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="en-NG"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
