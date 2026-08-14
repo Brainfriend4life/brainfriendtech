@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -119,6 +118,17 @@ export default function WithdrawPage() {
         </p>
       </div>
 
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+        <p className="text-sm font-semibold text-red-800">
+          Withdrawals are currently unavailable.
+        </p>
+
+        <p className="mt-1 text-sm text-red-700">
+          Please check back later or contact support
+          for more information.
+        </p>
+      </div>
+
       <form
         onSubmit={handleWithdraw}
         className="space-y-5 rounded-2xl bg-white p-6 shadow-sm"
@@ -205,12 +215,10 @@ export default function WithdrawPage() {
 
         <button
           type="submit"
-          disabled={loading}
-          className="w-full rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+          disabled={true}
+          className="w-full cursor-not-allowed rounded-xl bg-gray-300 px-5 py-3 font-semibold text-gray-500"
         >
-          {loading
-            ? "Submitting..."
-            : "Submit Withdrawal Request"}
+          Withdrawals Unavailable
         </button>
       </form>
 

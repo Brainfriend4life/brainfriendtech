@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -457,8 +456,19 @@ export default function BuyDataPage() {
               : "Buy Data"}
           </button>
         </form>
+
+        {/* NOTE */}
+
+        <div className="mt-6 rounded-xl border border-yellow-200 bg-yellow-50 p-4">
+          <h2 className="text-sm font-semibold text-yellow-800">
+            NOTE
+          </h2>
+
+          <p className="mt-1 text-sm leading-6 text-yellow-700">
+            Data purchases attract a 5% service fee.
+          </p>
+        </div>
       </div>
     </div>
   );
 }
-
