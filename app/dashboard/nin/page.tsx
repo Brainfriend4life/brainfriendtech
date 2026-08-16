@@ -107,6 +107,12 @@ export default function NinVerificationPage() {
   const [result, setResult] =
     useState<VerificationResult | null>(null);
 
+  // Object URL for the inline PDF viewer (built from pdf_base64).
+  // Kept in state so we can revoke it on cleanup / when a new
+  // result comes in, avoiding memory leaks.
+  const [pdfPreviewUrl, setPdfPreviewUrl] =
+    useState<string | null>(null);
+
   const pricingLoadedRef =
     useRef(false);
 
@@ -487,6 +493,51 @@ export default function NinVerificationPage() {
 
     return data.data;
   }
+
+  // ============================================================
+  // BUILD / REVOKE INLINE PDF PREVIEW
+  //
+  // Whenever `result` changes, rebuild the object URL used for
+  // the inline <iframe> preview from pdf_base64. This is scoped
+  // to component state only, so it never touches purchase
+  // history or any other page.
+  // ============================================================
+
+  useEffect(() => {
+    if (!result?.has_pdf || !result?.pdf_base64) {
+      setPdfPreviewUrl(null);
+      return;
+    }
+
+    try {
+      const base64 = result.pdf_base64
+        .replace(/^data:application\/pdf;base64,/, "")
+        .trim();
+
+      const byteCharacters = atob(base64);
+      const byteNumbers = new Array(byteCharacters.length);
+
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], {
+        type: "application/pdf",
+      });
+
+      const url = URL.createObjectURL(blob);
+
+      setPdfPreviewUrl(url);
+
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    } catch (error) {
+      console.error("PDF PREVIEW BUILD ERROR:", error);
+      setPdfPreviewUrl(null);
+    }
+  }, [result]);
 
   // ============================================================
   // SUBMIT
@@ -1232,19 +1283,46 @@ export default function NinVerificationPage() {
 
                 </div>
 
-                {/* PDF */}
+                {/* PDF — inline preview + download.
+                    Only ever rendered here, from local component
+                    state set right after a fresh verification.
+                    Purchase/transaction history is a separate page
+                    with its own data source and never touches
+                    pdf_base64, so it can't leak there. */}
 
                 {result.has_pdf &&
                   result.pdf_base64 && (
-                    <button
-                      type="button"
-                      onClick={downloadPdf}
-                      className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-5 py-3.5 text-sm font-bold text-indigo-600 transition hover:bg-indigo-100"
-                    >
-                      <FileText className="h-5 w-5" />
+                    <div className="mt-6">
 
-                      Download NIN Certificate
-                    </button>
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-gray-900">
+                          NIN Certificate
+                        </h3>
+
+                        <button
+                          type="button"
+                          onClick={downloadPdf}
+                          className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-600 transition hover:bg-indigo-100"
+                        >
+                          <FileText className="h-4 w-4" />
+                          Download
+                        </button>
+                      </div>
+
+                      {pdfPreviewUrl ? (
+                        <iframe
+                          src={pdfPreviewUrl}
+                          title="NIN Certificate PDF preview"
+                          className="h-[480px] w-full rounded-xl border border-gray-200"
+                        />
+                      ) : (
+                        <div className="flex h-32 items-center justify-center rounded-xl border border-gray-200 bg-slate-50 text-sm text-gray-400">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Preparing preview...
+                        </div>
+                      )}
+
+                    </div>
                   )}
 
               </div>

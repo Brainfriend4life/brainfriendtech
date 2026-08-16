@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
@@ -77,6 +76,41 @@ function getNinPrice(cardType: NinCardType): number | null {
   };
 
   return toPositiveNumber(prices[cardType]);
+}
+
+// ============================================================
+// PDF EXTRACTION
+//
+// NetworkDataSub's field name for the PDF has not been confirmed
+// to be stable across card types / response variants, so this
+// checks every plausible field name at both the top level of
+// `data` and inside `data.details`. This does NOT invent a PDF
+// that the provider did not send — it only widens where we look
+// for one that WAS sent.
+// ============================================================
+
+function extractProviderPdf(
+  verificationData: Record<string, unknown>,
+  details: Record<string, unknown>
+): string | null {
+  const candidates = [
+    verificationData.pdf_base64,
+    verificationData.slip_base64,
+    verificationData.document_base64,
+    verificationData.pdf,
+    verificationData.document,
+    details.pdf_base64,
+    details.slip_base64,
+    details.pdf,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
 }
 
 async function refundFailedTransaction(params: {
@@ -374,9 +408,14 @@ export async function POST(request: NextRequest) {
               card_type: cardType,
 
               // IMPORTANT:
-              // Do not force a new verification.
-              // This prevents unnecessary forced re-verification.
-              force_new: false,
+              // Force a fresh verification every time so the
+              // provider does not reuse an old cached record that
+              // may not have a PDF attached. Per NetworkDataSub's
+              // docs, standard verification is supposed to always
+              // return pdf_base64 / has_pdf: true — force_new
+              // ensures we get a live result instead of a stale
+              // cached one.
+              force_new: true,
             },
           }
         );
@@ -516,22 +555,28 @@ export async function POST(request: NextRequest) {
     // 14. PDF
     //
     // We ONLY save a PDF if NetworkDataSub actually returns one.
-    //
     // We DO NOT automatically call the separate slip endpoint.
+    //
+    // extractProviderPdf() checks every plausible field name/
+    // location so we don't miss a PDF that's just under a
+    // different key than we originally assumed.
     // ============================================================
 
-    const rawPdf =
-      typeof verificationData.pdf_base64 === "string"
-        ? verificationData.pdf_base64.trim()
-        : null;
+    const pdfBase64 = extractProviderPdf(
+      verificationData as Record<string, unknown>,
+      details as Record<string, unknown>
+    );
 
-    const pdfBase64 =
-      rawPdf && rawPdf.length > 0
-        ? rawPdf
-        : null;
+    const hasPdf = Boolean(pdfBase64);
 
-    const hasPdf =
-      Boolean(pdfBase64);
+    // TEMPORARY DIAGNOSTIC — remove once the PDF issue is confirmed
+    // resolved. Shows every key the provider actually returned, so
+    // if a PDF is still missing we can see whether it's absent
+    // entirely or hiding under a field name we haven't added above.
+    console.log("NIN RAW PROVIDER DATA KEYS:", {
+      topLevelKeys: Object.keys(verificationData as object),
+      detailsKeys: Object.keys(details as object),
+    });
 
     // ============================================================
     // 15. PROVIDER COST / PROFIT
@@ -1111,4 +1156,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
