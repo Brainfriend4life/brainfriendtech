@@ -1,14 +1,11 @@
 const NETWORKDATASUB_BASE_URL =
-  process.env.NETWORKDATASUB_BASE_URL ||
-  "https://networkdatasub.com/api";
+  process.env.NETWORKDATASUB_API_URL ||
+  "https://www.networkdatasub.com/api";
 
 type NetworkDataSubOptions = {
   method?: string;
   body?: unknown;
-  headers?: Record<
-    string,
-    string
-  >;
+  headers?: Record<string, string>;
 };
 
 export async function networkDataSubRequest<T>(
@@ -18,59 +15,40 @@ export async function networkDataSubRequest<T>(
   response: Response;
   data: T;
 }> {
-  const apiKey =
-    process.env.NETWORKDATASUB_API_KEY;
+  const apiToken =
+    process.env.NETWORKDATASUB_API_TOKEN;
 
-  if (!apiKey) {
+  if (!apiToken) {
     throw new Error(
-      "NETWORKDATASUB_API_KEY is not configured."
+      "NETWORKDATASUB_API_TOKEN is not configured."
     );
   }
 
   const url =
-    `${NETWORKDATASUB_BASE_URL.replace(
-      /\/$/,
-      ""
-    )}/${endpoint.replace(
-      /^\//,
-      ""
-    )}`;
+    `${NETWORKDATASUB_BASE_URL.replace(/\/$/, "")}/${endpoint.replace(/^\//, "")}`;
 
-  const response =
-    await fetch(url, {
-      method:
-        options.method ||
-        "GET",
+  const response = await fetch(url, {
+    method: options.method || "GET",
 
-      headers: {
-        Accept:
-          "application/json",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
 
-        "Content-Type":
-          "application/json",
+      Authorization: `Bearer ${apiToken}`,
 
-        Authorization:
-          `Bearer ${apiKey}`,
+      ...(options.headers || {}),
+    },
 
-        ...(options.headers || {}),
-      },
+    ...(options.body !== undefined
+      ? {
+          body: JSON.stringify(options.body),
+        }
+      : {}),
 
-      ...(options.body !==
-      undefined
-        ? {
-            body:
-              JSON.stringify(
-                options.body
-              ),
-          }
-        : {}),
+    cache: "no-store",
+  });
 
-      cache:
-        "no-store",
-    });
-
-  const text =
-    await response.text();
+  const text = await response.text();
 
   let data: T;
 
@@ -79,12 +57,10 @@ export async function networkDataSubRequest<T>(
       ? JSON.parse(text)
       : ({} as T);
   } catch {
-    data =
-      ({
-        message:
-          text ||
-          "Invalid provider response.",
-      } as T);
+    data = {
+      message:
+        text || "Invalid provider response.",
+    } as T;
   }
 
   return {
