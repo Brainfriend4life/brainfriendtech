@@ -34,7 +34,7 @@ export async function networkDataSubRequest<T>(
       Accept: "application/json",
       "Content-Type": "application/json",
 
-      Authorization: `Bearer ${apiToken}`,
+      Authorization: `Token ${apiToken}`,
 
       ...(options.headers || {}),
     },
