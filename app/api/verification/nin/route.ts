@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
@@ -14,46 +15,59 @@ const ALLOWED_CARD_TYPES = [
 
 type NinCardType = (typeof ALLOWED_CARD_TYPES)[number];
 
+type ProviderDetails = {
+  nin?: string | null;
+  firstName?: string | null;
+  middleName?: string | null;
+  surname?: string | null;
+  lastName?: string | null;
+  gender?: string | null;
+  birthDate?: string | null;
+  dateOfBirth?: string | null;
+  telephoneNo?: string | null;
+  telephone?: string | null;
+  phone?: string | null;
+  mobile?: string | null;
+  photo?: string | null;
+  [key: string]: unknown;
+};
+
+type ProviderNinData = {
+  verification_id?: number | string | null;
+  transaction_id?: string | number | null;
+  reference?: string | null;
+  amount?: number | string | null;
+  details?: ProviderDetails;
+  pdf_base64?: string | null;
+  pdfBase64?: string | null;
+  pdf?: string | null;
+  has_pdf?: boolean;
+  card_type?: string | null;
+  [key: string]: unknown;
+};
+
 type ProviderNinResponse = {
   success?: boolean;
   message?: string;
-
-  data?: {
-    verification_id?: number | string;
-    transaction_id?: string | number | null;
-    reference?: string | null;
-    amount?: number | string | null;
-
-    details?: {
-      firstName?: string | null;
-      middleName?: string | null;
-      lastName?: string | null;
-      surname?: string | null;
-      gender?: string | null;
-      dateOfBirth?: string | null;
-      birthDate?: string | null;
-      telephone?: string | null;
-      phone?: string | null;
-      mobile?: string | null;
-      photo?: string | null;
-      [key: string]: unknown;
-    };
-
-    pdf_base64?: string | null;
-    has_pdf?: boolean;
-
-    [key: string]: unknown;
-  };
+  data?: ProviderNinData;
+  [key: string]: unknown;
 };
 
 function toPositiveNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
     return null;
   }
 
   const numberValue = Number(value);
 
-  if (!Number.isFinite(numberValue) || numberValue <= 0) {
+  if (
+    !Number.isFinite(numberValue) ||
+    numberValue <= 0
+  ) {
     return null;
   }
 
@@ -67,46 +81,150 @@ function createReference(): string {
     .toUpperCase()}`;
 }
 
-function getNinPrice(cardType: NinCardType): number | null {
-  const prices: Record<NinCardType, string | undefined> = {
-    standard: process.env.NIN_STANDARD_PRICE || "150",
-    regular: process.env.NIN_REGULAR_PRICE || "150",
-    premium: process.env.NIN_PREMIUM_PRICE || "150",
-    vnin_slip: process.env.NIN_VNIN_SLIP_PRICE || "150",
+function getNinPrice(
+  cardType: NinCardType
+): number | null {
+  const prices: Record<
+    NinCardType,
+    string | undefined
+  > = {
+    standard:
+      process.env.NIN_STANDARD_PRICE || "150",
+
+    regular:
+      process.env.NIN_REGULAR_PRICE || "300",
+
+    premium:
+      process.env.NIN_PREMIUM_PRICE || "500",
+
+    vnin_slip:
+      process.env.NIN_VNIN_SLIP_PRICE || "300",
   };
 
-  return toPositiveNumber(prices[cardType]);
+  return toPositiveNumber(
+    prices[cardType]
+  );
 }
 
-// ============================================================
-// PDF EXTRACTION
-//
-// NetworkDataSub's field name for the PDF has not been confirmed
-// to be stable across card types / response variants, so this
-// checks every plausible field name at both the top level of
-// `data` and inside `data.details`. This does NOT invent a PDF
-// that the provider did not send — it only widens where we look
-// for one that WAS sent.
-// ============================================================
+/**
+ * NetworkDataSub card-specific endpoints.
+ *
+ * IMPORTANT:
+ * These endpoints only require:
+ *
+ * {
+ *   nin: "12345678901"
+ * }
+ *
+ * Do NOT send card_type or force_new.
+ */
+function getProviderEndpoint(
+  cardType: NinCardType
+): string {
+  switch (cardType) {
+    case "standard":
+      return "/verification/nin/standard";
 
-function extractProviderPdf(
-  verificationData: Record<string, unknown>,
-  details: Record<string, unknown>
+    case "regular":
+      return "/verification/nin/regular";
+
+    case "premium":
+      return "/verification/nin/premium";
+
+    case "vnin_slip":
+      return "/verification/nin/vnin-slip";
+
+    default:
+      return "/verification/nin/standard";
+  }
+}
+
+function extractPdf(
+  response: unknown
 ): string | null {
-  const candidates = [
-    verificationData.pdf_base64,
-    verificationData.slip_base64,
-    verificationData.document_base64,
-    verificationData.pdf,
-    verificationData.document,
-    details.pdf_base64,
-    details.slip_base64,
-    details.pdf,
+  if (
+    !response ||
+    typeof response !== "object"
+  ) {
+    return null;
+  }
+
+  const root =
+    response as Record<string, unknown>;
+
+  const nested =
+    root.data &&
+    typeof root.data === "object"
+      ? (root.data as Record<
+          string,
+          unknown
+        >)
+      : undefined;
+
+  const candidates: unknown[] = [
+    root.pdf_base64,
+    root.pdfBase64,
+    root.pdf,
+
+    nested?.pdf_base64,
+    nested?.pdfBase64,
+    nested?.pdf,
   ];
 
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim().length > 0) {
+  for (
+    const candidate of candidates
+  ) {
+    if (
+      typeof candidate === "string" &&
+      candidate.trim().length > 0
+    ) {
       return candidate.trim();
+    }
+  }
+
+  return null;
+}
+
+function extractProviderCost(
+  response: unknown
+): number | null {
+  if (
+    !response ||
+    typeof response !== "object"
+  ) {
+    return null;
+  }
+
+  const root =
+    response as Record<string, unknown>;
+
+  const nested =
+    root.data &&
+    typeof root.data === "object"
+      ? (root.data as Record<
+          string,
+          unknown
+        >)
+      : undefined;
+
+  const candidates: unknown[] = [
+    root.amount,
+    root.cost,
+    root.price,
+
+    nested?.amount,
+    nested?.cost,
+    nested?.price,
+  ];
+
+  for (
+    const candidate of candidates
+  ) {
+    const value =
+      toPositiveNumber(candidate);
+
+    if (value !== null) {
+      return value;
     }
   }
 
@@ -118,22 +236,32 @@ async function refundFailedTransaction(params: {
   userId: string;
   amount: number;
 }) {
-  const { transactionId, userId, amount } = params;
+  const {
+    transactionId,
+    userId,
+    amount,
+  } = params;
 
   try {
     await prisma.$transaction(
       async (tx) => {
-        const transaction = await tx.transaction.findUnique({
-          where: {
-            id: transactionId,
-          },
-        });
+        const transaction =
+          await tx.transaction.findUnique({
+            where: {
+              id: transactionId,
+            },
+          });
 
         if (!transaction) {
-          throw new Error("Transaction not found during refund.");
+          throw new Error(
+            "Transaction not found during refund."
+          );
         }
 
-        if (transaction.status !== "PENDING") {
+        if (
+          transaction.status !==
+          "PENDING"
+        ) {
           return;
         }
 
@@ -163,45 +291,66 @@ async function refundFailedTransaction(params: {
       }
     );
 
-    console.log("NIN REFUND SUCCESS:", {
-      transactionId,
-      userId,
-      amount,
-    });
+    console.log(
+      "NIN REFUND SUCCESS:",
+      {
+        transactionId,
+        userId,
+        amount,
+      }
+    );
 
     return true;
   } catch (error) {
-    console.error("NIN REFUND FAILED:", error);
+    console.error(
+      "NIN REFUND FAILED:",
+      error
+    );
+
     return false;
   }
 }
 
-export async function POST(request: NextRequest) {
-  let transactionId: string | null = null;
-  let transactionReference: string | null = null;
+export async function POST(
+  request: NextRequest
+) {
+  let transactionId:
+    | string
+    | null = null;
+
+  let transactionReference:
+    | string
+    | null = null;
 
   try {
-    // ============================================================
+    // ========================================================
     // 1. AUTHENTICATION
-    // ============================================================
+    // ========================================================
 
-    const session = await getServerSession(authOptions);
+    const session =
+      await getServerSession(
+        authOptions
+      );
 
     if (!session?.user?.id) {
       return NextResponse.json(
         {
           success: false,
-          error: "You must be logged in.",
+          error:
+            "You must be logged in.",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
     }
 
-    const userId = session.user.id;
+    const userId =
+      session.user.id;
 
-    // ============================================================
+    // ========================================================
     // 2. REQUEST BODY
-    // ============================================================
+    // ========================================================
 
     let body: any;
 
@@ -211,676 +360,901 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid request body.",
+          error:
+            "Invalid request body.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    const nin = String(body?.nin || "").replace(/\s+/g, "");
+    const nin =
+      String(
+        body?.nin || ""
+      ).replace(/\s+/g, "");
 
-    const cardType = String(body?.cardType || "")
-      .trim()
-      .toLowerCase() as NinCardType;
+    const cardType =
+      String(
+        body?.cardType || ""
+      )
+        .trim()
+        .toLowerCase() as NinCardType;
 
-    // ============================================================
+    // ========================================================
     // 3. VALIDATE NIN
-    // ============================================================
+    // ========================================================
 
-    if (!/^\d{11}$/.test(nin)) {
+    if (
+      !/^\d{11}$/.test(nin)
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Please enter a valid 11-digit NIN.",
+          error:
+            "Please enter a valid 11-digit NIN.",
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // ============================================================
+    // ========================================================
     // 4. VALIDATE CARD TYPE
-    // ============================================================
+    // ========================================================
 
-    if (!ALLOWED_CARD_TYPES.includes(cardType)) {
+    if (
+      !ALLOWED_CARD_TYPES.includes(
+        cardType
+      )
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid NIN card type.",
-          allowedCardTypes: ALLOWED_CARD_TYPES,
+          error:
+            "Invalid NIN card type.",
+          allowedCardTypes:
+            ALLOWED_CARD_TYPES,
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // ============================================================
+    // ========================================================
     // 5. FIND USER
-    // ============================================================
+    // ========================================================
 
-    const user = await prisma.user.findUnique({
-      where: {
-        id: userId,
-      },
-    });
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          id: userId,
+        },
+      });
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          error: "User not found.",
+          error:
+            "User not found.",
         },
-        { status: 404 }
+        {
+          status: 404,
+        }
       );
     }
 
-    // ============================================================
+    // ========================================================
     // 6. ACCOUNT STATUS
-    // ============================================================
+    // ========================================================
 
-    if (user.status !== "ACTIVE") {
+    if (
+      user.status !==
+      "ACTIVE"
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Your account is not active.",
+          error:
+            "Your account is not active.",
         },
-        { status: 403 }
+        {
+          status: 403,
+        }
       );
     }
 
-    // ============================================================
-    // 7. GET SELLING PRICE
-    // ============================================================
+    // ========================================================
+    // 7. CUSTOMER PRICE
+    // ========================================================
 
-    const amount = getNinPrice(cardType);
+    const amount =
+      getNinPrice(cardType);
 
     if (amount === null) {
       return NextResponse.json(
         {
           success: false,
-          error: `NIN price is not configured for ${cardType}.`,
+          error:
+            `NIN price is not configured for ${cardType}.`,
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
-    console.log("NIN LOCAL PRICING:", {
-      cardType,
-      customerPrice: amount,
-    });
+    console.log(
+      "NIN LOCAL PRICING:",
+      {
+        cardType,
+        customerPrice:
+          amount,
+      }
+    );
 
-    // ============================================================
-    // 8. CREATE INTERNAL REFERENCE
-    // ============================================================
+    // ========================================================
+    // 8. PROVIDER ENDPOINT
+    // ========================================================
 
-    const reference = createReference();
+    const endpoint =
+      getProviderEndpoint(
+        cardType
+      );
 
-    transactionReference = reference;
+    console.log(
+      "NIN PROVIDER ENDPOINT:",
+      {
+        cardType,
+        endpoint,
+      }
+    );
 
-    // ============================================================
-    // 9. ATOMIC WALLET DEBIT + TRANSACTION
-    // ============================================================
+    // ========================================================
+    // 9. INTERNAL REFERENCE
+    // ========================================================
+
+    const reference =
+      createReference();
+
+    transactionReference =
+      reference;
+
+    // ========================================================
+    // 10. DEBIT CUSTOMER ONCE
+    // ========================================================
 
     let transaction;
 
     try {
-      transaction = await prisma.$transaction(
-        async (tx) => {
-          const debitResult = await tx.user.updateMany({
-            where: {
-              id: userId,
-              status: "ACTIVE",
-              walletBalance: {
-                gte: amount,
-              },
-            },
-            data: {
-              walletBalance: {
-                decrement: amount,
-              },
-            },
-          });
+      transaction =
+        await prisma.$transaction(
+          async (tx) => {
+            const debitResult =
+              await tx.user.updateMany(
+                {
+                  where: {
+                    id: userId,
+                    status:
+                      "ACTIVE",
+                    walletBalance:
+                      {
+                        gte: amount,
+                      },
+                  },
 
-          if (debitResult.count !== 1) {
-            throw new Error("Insufficient wallet balance.");
+                  data: {
+                    walletBalance:
+                      {
+                        decrement:
+                          amount,
+                      },
+                  },
+                }
+              );
+
+            if (
+              debitResult.count !==
+              1
+            ) {
+              throw new Error(
+                "Insufficient wallet balance."
+              );
+            }
+
+            return tx.transaction.create(
+              {
+                data: {
+                  userId,
+
+                  type: "NIN",
+
+                  amount,
+
+                  description:
+                    `NIN verification (${cardType})`,
+
+                  status:
+                    "PENDING",
+
+                  reference,
+
+                  provider:
+                    "NetworkDataSub",
+
+                  cost: 0,
+
+                  profit: 0,
+                },
+              }
+            );
+          },
+          {
+            maxWait: 10000,
+            timeout: 20000,
           }
+        );
 
-          return await tx.transaction.create({
-            data: {
-              userId: user.id,
-              type: "NIN",
-              amount,
-              description: `NIN verification (${cardType})`,
-              status: "PENDING",
-              reference,
-              provider: "NetworkDataSub",
-              cost: 0,
-              profit: 0,
-            },
-          });
-        },
+      transactionId =
+        transaction.id;
+
+      console.log(
+        "NIN CUSTOMER DEBIT SUCCESS:",
         {
-          maxWait: 10000,
-          timeout: 20000,
+          transactionId:
+            transaction.id,
+
+          reference,
+
+          amount,
+
+          cardType,
         }
       );
-
-      transactionId = transaction.id;
-
-      console.log("NIN WALLET DEBIT SUCCESS:", {
-        transactionId: transaction.id,
-        reference,
-        amount,
-        cardType,
-      });
     } catch (error: any) {
-      console.error("NIN WALLET RESERVATION FAILED:", error);
+      console.error(
+        "NIN WALLET RESERVATION FAILED:",
+        error
+      );
 
       const insufficientBalance =
-        error?.message === "Insufficient wallet balance.";
+        error?.message ===
+        "Insufficient wallet balance.";
 
       return NextResponse.json(
         {
           success: false,
-          error: insufficientBalance
-            ? "Insufficient wallet balance."
-            : "Unable to reserve wallet funds. Please try again.",
+
+          error:
+            insufficientBalance
+              ? "Insufficient wallet balance."
+              : "Unable to reserve wallet funds. Please try again.",
         },
         {
-          status: insufficientBalance ? 400 : 500,
+          status:
+            insufficientBalance
+              ? 400
+              : 500,
         }
       );
     }
 
-    // ============================================================
-    // 10. CALL NETWORKDATASUB
-    // ============================================================
+    // ========================================================
+    // 11. NETWORKDATASUB REQUEST
+    //
+    // ONE REQUEST.
+    //
+    // Card-specific endpoint.
+    //
+    // IMPORTANT:
+    // ONLY "nin" is sent.
+    //
+    // No card_type.
+    // No force_new.
+    // ========================================================
 
     let providerResponse;
 
     try {
       providerResponse =
-        await networkDataSubRequest<ProviderNinResponse>(
-          "/verification/nin",
+        await networkDataSubRequest<
+          ProviderNinResponse
+        >(
+          endpoint,
           {
-            method: "POST",
+            method:
+              "POST",
 
             body: {
               nin,
-              card_type: cardType,
-
-              // IMPORTANT:
-              // Force a fresh verification every time so the
-              // provider does not reuse an old cached record that
-              // may not have a PDF attached. Per NetworkDataSub's
-              // docs, standard verification is supposed to always
-              // return pdf_base64 / has_pdf: true — force_new
-              // ensures we get a live result instead of a stale
-              // cached one.
-              force_new: true,
             },
           }
         );
-    } catch (providerError) {
+    } catch (
+      providerError
+    ) {
       console.error(
         "NETWORKDATASUB NIN REQUEST ERROR:",
         providerError
       );
 
-      const refunded = await refundFailedTransaction({
-        transactionId: transaction.id,
-        userId,
-        amount,
-      });
+      const refunded =
+        await refundFailedTransaction(
+          {
+            transactionId:
+              transaction.id,
+
+            userId,
+
+            amount,
+          }
+        );
 
       return NextResponse.json(
         {
           success: false,
-          message: refunded
-            ? "NetworkDataSub could not be reached. Your wallet has been refunded."
-            : "NetworkDataSub could not be reached. Please contact support with your transaction reference.",
-          error: refunded
-            ? "NetworkDataSub could not be reached. Your wallet has been refunded."
-            : "NetworkDataSub could not be reached.",
+
+          error:
+            refunded
+              ? "NetworkDataSub could not be reached. Your wallet has been refunded."
+              : "NetworkDataSub could not be reached.",
+
           refunded,
+
           reference,
-          transactionId: transaction.id,
+
+          transactionId:
+            transaction.id,
         },
-        { status: 502 }
+        {
+          status: 502,
+        }
       );
     }
 
+    // ========================================================
+    // 12. RAW PROVIDER RESPONSE
+    // ========================================================
+
     console.log(
-      "NETWORKDATASUB NIN VERIFICATION STATUS:",
-      providerResponse.response.status
+      "======================================================"
     );
 
     console.log(
-      "NETWORKDATASUB NIN VERIFICATION RESPONSE:",
-      JSON.stringify(providerResponse.data, null, 2)
+      "NETWORKDATASUB RAW NIN RESPONSE"
     );
 
-    // ============================================================
-    // 11. PROVIDER HTTP FAILURE
-    // ============================================================
+    console.log(
+      "HTTP STATUS:",
+      providerResponse
+        .response.status
+    );
+
+    console.log(
+      "REQUESTED CARD TYPE:",
+      cardType
+    );
+
+    console.log(
+      "REQUESTED ENDPOINT:",
+      endpoint
+    );
+
+    console.log(
+      JSON.stringify(
+        providerResponse.data,
+        null,
+        2
+      )
+    );
+
+    console.log(
+      "======================================================"
+    );
+
+    // ========================================================
+    // 13. PROVIDER HTTP FAILURE
+    // ========================================================
 
     if (
-      !providerResponse.response.ok ||
+      !providerResponse.response
+        .ok ||
       !providerResponse.data
     ) {
       const providerMessage =
-        providerResponse.data?.message ||
+        providerResponse
+          .data?.message ||
         "NIN verification failed.";
 
-      const refunded = await refundFailedTransaction({
-        transactionId: transaction.id,
-        userId,
-        amount,
-      });
+      const refunded =
+        await refundFailedTransaction(
+          {
+            transactionId:
+              transaction.id,
+
+            userId,
+
+            amount,
+          }
+        );
 
       return NextResponse.json(
         {
           success: false,
-          message: refunded
-            ? `${providerMessage} Your wallet has been refunded.`
-            : `${providerMessage} Please contact support with your transaction reference.`,
-          error: providerMessage,
-          providerStatus: providerResponse.response.status,
+
+          message:
+            refunded
+              ? `${providerMessage} Your wallet has been refunded.`
+              : `${providerMessage} Please contact support.`,
+
+          error:
+            providerMessage,
+
+          providerStatus:
+            providerResponse
+              .response.status,
+
           refunded,
+
           reference,
-          transactionId: transaction.id,
+
+          transactionId:
+            transaction.id,
         },
         {
           status:
-            providerResponse.response.status >= 400 &&
-            providerResponse.response.status < 500
+            providerResponse
+              .response.status >=
+              400 &&
+            providerResponse
+              .response.status < 500
               ? 400
               : 502,
         }
       );
     }
 
-    // ============================================================
-    // 12. PROVIDER BUSINESS FAILURE
-    // ============================================================
+    // ========================================================
+    // 14. PROVIDER BUSINESS FAILURE
+    // ========================================================
 
-    const providerData = providerResponse.data;
+    const providerData =
+      providerResponse.data;
 
-    if (providerData.success !== true) {
+    if (
+      providerData.success !==
+      true
+    ) {
       const providerMessage =
         providerData.message ||
         "NIN verification failed.";
 
-      const refunded = await refundFailedTransaction({
-        transactionId: transaction.id,
-        userId,
-        amount,
-      });
+      const refunded =
+        await refundFailedTransaction(
+          {
+            transactionId:
+              transaction.id,
+
+            userId,
+
+            amount,
+          }
+        );
 
       return NextResponse.json(
         {
           success: false,
-          message: refunded
-            ? `${providerMessage} Your wallet has been refunded.`
-            : `${providerMessage} Please contact support with your transaction reference.`,
-          error: providerMessage,
+
+          message:
+            refunded
+              ? `${providerMessage} Your wallet has been refunded.`
+              : `${providerMessage} Please contact support.`,
+
+          error:
+            providerMessage,
+
           refunded,
+
           reference,
-          transactionId: transaction.id,
+
+          transactionId:
+            transaction.id,
         },
-        { status: 400 }
+        {
+          status: 400,
+        }
       );
     }
 
-    // ============================================================
-    // 13. EXTRACT PROVIDER RESULT
-    // ============================================================
+    // ========================================================
+    // 15. PROVIDER DATA
+    // ========================================================
 
     const verificationData =
       providerData.data || {};
 
     const details =
-      verificationData.details || {};
+      verificationData.details ||
+      {};
 
-    const providerReference =
-      verificationData.reference ?? null;
+    // ========================================================
+    // 16. EXTRACT PDF
+    // ========================================================
 
-    const providerTransactionId =
-      verificationData.transaction_id ?? null;
-
-    const providerAmount =
-      toPositiveNumber(
-        verificationData.amount
+    const pdfBase64 =
+      extractPdf(
+        verificationData
       );
 
-    // ============================================================
-    // 14. PDF
-    //
-    // We ONLY save a PDF if NetworkDataSub actually returns one.
-    // We DO NOT automatically call the separate slip endpoint.
-    //
-    // extractProviderPdf() checks every plausible field name/
-    // location so we don't miss a PDF that's just under a
-    // different key than we originally assumed.
-    // ============================================================
+    const hasPdf =
+      Boolean(pdfBase64);
 
-    const pdfBase64 = extractProviderPdf(
-      verificationData as Record<string, unknown>,
-      details as Record<string, unknown>
-    );
-
-    const hasPdf = Boolean(pdfBase64);
-
-    // TEMPORARY DIAGNOSTIC — remove once the PDF issue is confirmed
-    // resolved. Shows every key the provider actually returned, so
-    // if a PDF is still missing we can see whether it's absent
-    // entirely or hiding under a field name we haven't added above.
-    console.log("NIN RAW PROVIDER DATA KEYS:", {
-      topLevelKeys: Object.keys(verificationData as object),
-      detailsKeys: Object.keys(details as object),
-    });
-
-    // ============================================================
-    // 15. PROVIDER COST / PROFIT
-    // ============================================================
+    // ========================================================
+    // 17. PROVIDER COST
+    // ========================================================
 
     const providerCost =
-      providerAmount ?? amount;
+      extractProviderCost(
+        verificationData
+      ) ?? amount;
 
-    const profit = Number(
-      Math.max(
-        0,
-        amount - providerCost
-      ).toFixed(2)
+    console.log(
+      "========== NIN PDF RESULT =========="
     );
 
-    // ============================================================
-    // 16. EXTRACT NIN DETAILS
-    // ============================================================
+    console.log({
+      cardType,
+
+      endpoint,
+
+      providerCardType:
+        verificationData
+          .card_type ??
+        null,
+
+      providerHasPdf:
+        verificationData
+          .has_pdf === true,
+
+      extractedHasPdf:
+        hasPdf,
+
+      pdfLength:
+        pdfBase64?.length ||
+        0,
+
+      providerCost,
+    });
+
+    console.log(
+      "===================================="
+    );
+
+    // ========================================================
+    // 18. PROFIT
+    // ========================================================
+
+    const profit =
+      Number(
+        Math.max(
+          0,
+          amount -
+            providerCost
+        ).toFixed(2)
+      );
+
+    // ========================================================
+    // 19. NORMALIZE DETAILS
+    // ========================================================
 
     const firstName =
-      typeof details.firstName === "string"
+      typeof details.firstName ===
+      "string"
         ? details.firstName
         : null;
 
     const middleName =
-      typeof details.middleName === "string"
+      typeof details.middleName ===
+      "string"
         ? details.middleName
         : null;
 
     const surname =
-      typeof details.lastName === "string"
-        ? details.lastName
-        : typeof details.surname === "string"
+      typeof details.surname ===
+      "string"
         ? details.surname
+        : typeof details.lastName ===
+          "string"
+        ? details.lastName
         : null;
 
     const gender =
-      typeof details.gender === "string"
+      typeof details.gender ===
+      "string"
         ? details.gender
         : null;
 
     const birthDate =
-      typeof details.dateOfBirth === "string"
-        ? details.dateOfBirth
-        : typeof details.birthDate === "string"
+      typeof details.birthDate ===
+      "string"
         ? details.birthDate
+        : typeof details.dateOfBirth ===
+          "string"
+        ? details.dateOfBirth
         : null;
 
     const telephone =
-      typeof details.telephone === "string"
+      typeof details.telephoneNo ===
+      "string"
+        ? details.telephoneNo
+        : typeof details.telephone ===
+          "string"
         ? details.telephone
-        : typeof details.phone === "string"
+        : typeof details.phone ===
+          "string"
         ? details.phone
-        : typeof details.mobile === "string"
+        : typeof details.mobile ===
+          "string"
         ? details.mobile
         : null;
 
     const photo =
-      typeof details.photo === "string"
+      typeof details.photo ===
+      "string"
         ? details.photo
         : null;
 
-    console.log("NIN PROVIDER RESULT:", {
-      providerAmount,
-      providerCost,
-      customerPrice: amount,
-      profit,
-      providerReference,
-      providerTransactionId,
-      providerHasPdf:
-        verificationData.has_pdf === true,
-      hasPdf,
-      pdfLength:
-        pdfBase64?.length || 0,
-      firstName,
-      middleName,
-      surname,
-      gender,
-      birthDate,
-      telephone,
-      hasPhoto: Boolean(photo),
-    });
+    const returnedNin =
+      typeof details.nin ===
+      "string"
+        ? details.nin
+        : nin;
 
-    // ============================================================
-    // 17. FINALIZE SUCCESS
-    // ============================================================
+    // ========================================================
+    // 20. FINALIZE DATABASE
+    // ========================================================
 
     let result;
 
     try {
-      result = await prisma.$transaction(
-        async (tx) => {
-          const currentTransaction =
-            await tx.transaction.findUnique({
-              where: {
-                id: transaction.id,
-              },
-            });
+      result =
+        await prisma.$transaction(
+          async (tx) => {
+            const currentTransaction =
+              await tx.transaction.findUnique(
+                {
+                  where: {
+                    id: transaction.id,
+                  },
+                }
+              );
 
-          if (!currentTransaction) {
-            throw new Error(
-              "Transaction could not be found."
-            );
-          }
+            if (
+              !currentTransaction
+            ) {
+              throw new Error(
+                "Transaction could not be found."
+              );
+            }
 
-          if (
-            currentTransaction.status !==
-            "PENDING"
-          ) {
-            throw new Error(
-              "Transaction is no longer pending."
-            );
-          }
+            if (
+              currentTransaction.status !==
+              "PENDING"
+            ) {
+              throw new Error(
+                "Transaction is no longer pending."
+              );
+            }
 
-          // ------------------------------------------------------
-          // BUSINESS WALLET
-          // ------------------------------------------------------
+            let businessWallet =
+              await tx.businessWallet.findUnique(
+                {
+                  where: {
+                    name:
+                      "Brainfriend Tech",
+                  },
+                }
+              );
 
-          let businessWallet =
-            await tx.businessWallet.findUnique({
-              where: {
-                name: "Brainfriend Tech",
-              },
-            });
+            if (
+              !businessWallet
+            ) {
+              businessWallet =
+                await tx.businessWallet.create(
+                  {
+                    data: {
+                      name:
+                        "Brainfriend Tech",
 
-          if (!businessWallet) {
-            businessWallet =
-              await tx.businessWallet.create({
+                      balance: 0,
+
+                      totalRevenue: 0,
+
+                      totalCost: 0,
+
+                      totalProfit: 0,
+
+                      withdrawnProfit:
+                        0,
+
+                      availableProfit:
+                        0,
+                    },
+                  }
+                );
+            }
+
+            const freshUser =
+              await tx.user.findUnique(
+                {
+                  where: {
+                    id: userId,
+                  },
+                }
+              );
+
+            if (!freshUser) {
+              throw new Error(
+                "User account could not be found."
+              );
+            }
+
+            await tx.transaction.update(
+              {
+                where: {
+                  id: transaction.id,
+                },
+
                 data: {
-                  name: "Brainfriend Tech",
-                  balance: 0,
-                  totalRevenue: 0,
-                  totalCost: 0,
-                  totalProfit: 0,
-                  withdrawnProfit: 0,
-                  availableProfit: 0,
+                  status:
+                    "SUCCESS",
+
+                  cost:
+                    providerCost,
+
+                  profit,
                 },
-              });
-          }
-
-          // ------------------------------------------------------
-          // FRESH USER BALANCE
-          // ------------------------------------------------------
-
-          const freshUser =
-            await tx.user.findUnique({
-              where: {
-                id: userId,
-              },
-            });
-
-          if (!freshUser) {
-            throw new Error(
-              "User account could not be found."
-            );
-          }
-
-          const freshBalance =
-            Number(
-              freshUser.walletBalance
+              }
             );
 
-          // ------------------------------------------------------
-          // UPDATE TRANSACTION
-          // ------------------------------------------------------
+            const updatedBusinessWallet =
+              await tx.businessWallet.update(
+                {
+                  where: {
+                    id:
+                      businessWallet.id,
+                  },
 
-          await tx.transaction.update({
-            where: {
-              id: transaction.id,
-            },
-            data: {
-              status: "SUCCESS",
-              cost: providerCost,
+                  data: {
+                    balance: {
+                      increment:
+                        amount,
+                    },
+
+                    totalRevenue: {
+                      increment:
+                        amount,
+                    },
+
+                    totalCost: {
+                      increment:
+                        providerCost,
+                    },
+
+                    totalProfit: {
+                      increment:
+                        profit,
+                    },
+
+                    availableProfit: {
+                      increment:
+                        profit,
+                    },
+                  },
+                }
+              );
+
+            await tx.businessRevenue.create(
+              {
+                data: {
+                  transactionId:
+                    transaction.id,
+
+                  type: "NIN",
+
+                  provider:
+                    "NetworkDataSub",
+
+                  amount,
+
+                  cost:
+                    providerCost,
+
+                  profit,
+
+                  reference,
+
+                  description:
+                    `NIN verification (${cardType})`,
+
+                  businessWalletId:
+                    businessWallet.id,
+                },
+              }
+            );
+
+            const ninVerification =
+              await tx.ninVerification.create(
+                {
+                  data: {
+                    userId:
+                      user.id,
+
+                    nin:
+                      returnedNin,
+
+                    cardType,
+
+                    amount,
+
+                    status:
+                      "SUCCESS",
+
+                    reference,
+
+                    transactionId:
+                      transaction.id,
+
+                    firstName,
+
+                    middleName,
+
+                    surname,
+
+                    gender,
+
+                    birthDate,
+
+                    telephone,
+
+                    photo,
+
+                    hasPdf,
+
+                    pdfBase64:
+                      hasPdf
+                        ? pdfBase64
+                        : null,
+                  },
+                }
+              );
+
+            return {
+              ninVerification,
+
+              walletBalance:
+                Number(
+                  freshUser.walletBalance
+                ),
+
+              businessBalance:
+                Number(
+                  updatedBusinessWallet.balance
+                ),
+
               profit,
-            },
-          });
 
-          // ------------------------------------------------------
-          // UPDATE BUSINESS WALLET
-          // ------------------------------------------------------
-
-          const updatedBusinessWallet =
-            await tx.businessWallet.update({
-              where: {
-                id: businessWallet.id,
-              },
-              data: {
-                balance: {
-                  increment: amount,
-                },
-
-                totalRevenue: {
-                  increment: amount,
-                },
-
-                totalCost: {
-                  increment: providerCost,
-                },
-
-                totalProfit: {
-                  increment: profit,
-                },
-
-                availableProfit: {
-                  increment: profit,
-                },
-              },
-            });
-
-          // ------------------------------------------------------
-          // BUSINESS REVENUE
-          // ------------------------------------------------------
-
-          await tx.businessRevenue.create({
-            data: {
-              transactionId:
-                transaction.id,
-
-              type: "NIN",
-
-              provider:
-                "NetworkDataSub",
-
-              amount,
-
-              cost:
-                providerCost,
-
-              profit,
-
-              reference,
-
-              description:
-                `NIN verification (${cardType})`,
-
-              businessWalletId:
-                businessWallet.id,
-            },
-          });
-
-          // ------------------------------------------------------
-          // SAVE NIN VERIFICATION
-          // ------------------------------------------------------
-
-          const ninVerification =
-            await tx.ninVerification.create({
-              data: {
-                userId: user.id,
-
-                nin,
-
-                cardType,
-
-                amount,
-
-                status: "SUCCESS",
-
-                reference,
-
-                transactionId:
-                  transaction.id,
-
-                firstName,
-
-                middleName,
-
-                surname,
-
-                gender,
-
-                birthDate,
-
-                telephone,
-
-                photo,
-
-                hasPdf,
-
-                pdfBase64:
-                  hasPdf
-                    ? pdfBase64
-                    : null,
-              },
-            });
-
-          return {
-            ninVerification,
-
-            walletBalance:
-              freshBalance,
-
-            businessBalance:
-              Number(
-                updatedBusinessWallet.balance
-              ),
-
-            profit,
-          };
-        },
-        {
-          maxWait: 10000,
-          timeout: 20000,
-        }
-      );
+              providerCost,
+            };
+          },
+          {
+            maxWait: 10000,
+            timeout: 20000,
+          }
+        );
     } catch (error: any) {
       console.error(
         "========== NIN FINALIZATION ERROR =========="
@@ -904,11 +1278,6 @@ export async function POST(request: NextRequest) {
       console.error(
         "META:",
         error?.meta
-      );
-
-      console.error(
-        "STACK:",
-        error?.stack
       );
 
       console.error(
@@ -940,9 +1309,15 @@ export async function POST(request: NextRequest) {
           transactionId:
             transaction.id,
 
-          providerReference,
+          providerReference:
+            verificationData
+              .reference ??
+            null,
 
-          providerTransactionId,
+          providerTransactionId:
+            verificationData
+              .transaction_id ??
+            null,
 
           status:
             "PENDING_REVIEW",
@@ -965,19 +1340,23 @@ export async function POST(request: NextRequest) {
                 }
               : undefined,
         },
-        { status: 500 }
+        {
+          status: 500,
+        }
       );
     }
 
-    // ============================================================
-    // 18. SUCCESS RESPONSE
-    // ============================================================
+    // ========================================================
+    // 21. SUCCESS RESPONSE
+    // ========================================================
 
     console.log(
       "NIN VERIFICATION SUCCESS:",
       {
         verificationId:
-          result.ninVerification.id,
+          result
+            .ninVerification
+            .id,
 
         transactionId:
           transaction.id,
@@ -986,17 +1365,25 @@ export async function POST(request: NextRequest) {
 
         cardType,
 
+        endpoint,
+
         amount,
 
-        providerCost,
+        providerCost:
+          result.providerCost,
 
         profit,
 
         hasPdf:
-          result.ninVerification.hasPdf,
+          result
+            .ninVerification
+            .hasPdf,
 
         pdfLength:
-          result.ninVerification.pdfBase64?.length ||
+          result
+            .ninVerification
+            .pdfBase64
+            ?.length ||
           0,
       }
     );
@@ -1011,25 +1398,35 @@ export async function POST(request: NextRequest) {
 
         data: {
           verification_id:
-            result.ninVerification.id,
+            result
+              .ninVerification
+              .id,
 
           transaction_id:
             transaction.id,
 
           provider_transaction_id:
-            providerTransactionId,
+            verificationData
+              .transaction_id ??
+            null,
 
           reference,
 
           provider_reference:
-            providerReference,
+            verificationData
+              .reference ??
+            null,
 
           amount,
 
           provider_cost:
-            providerCost,
+            result.providerCost,
 
-          profit,
+          verification_cost:
+            result.providerCost,
+
+          profit:
+            result.profit,
 
           card_type:
             cardType,
@@ -1038,6 +1435,9 @@ export async function POST(request: NextRequest) {
             "SUCCESS",
 
           details: {
+            nin:
+              returnedNin,
+
             firstName,
 
             middleName,
@@ -1055,10 +1455,23 @@ export async function POST(request: NextRequest) {
           },
 
           has_pdf:
-            result.ninVerification.hasPdf,
+            result
+              .ninVerification
+              .hasPdf,
+
+          pdf_base64:
+            result
+              .ninVerification
+              .hasPdf
+              ? result
+                  .ninVerification
+                  .pdfBase64
+              : null,
 
           pdf_url:
-            result.ninVerification.hasPdf
+            result
+              .ninVerification
+              .hasPdf
               ? `/api/verification/nin/${result.ninVerification.id}/pdf`
               : null,
 
@@ -1069,13 +1482,15 @@ export async function POST(request: NextRequest) {
             amount,
 
           business_cost:
-            providerCost,
+            result.providerCost,
 
           business_profit:
             result.profit,
         },
       },
-      { status: 200 }
+      {
+        status: 200,
+      }
     );
   } catch (error: any) {
     console.error(
@@ -1152,7 +1567,10 @@ export async function POST(request: NextRequest) {
               }
             : undefined,
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
+

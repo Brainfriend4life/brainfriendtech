@@ -62,10 +62,10 @@ const NIN_BASE_PRICES: Record<
   AllowedCardType,
   number
 > = {
-  standard: 200,
-  regular: 150,
-  premium: 250,
-  vnin_slip: 150,
+  standard: 250,
+  regular: 300,
+  premium: 350,
+  vnin_slip: 200,
 };
 
 let pricingCache: {

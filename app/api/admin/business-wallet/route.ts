@@ -15,24 +15,29 @@ export async function GET() {
       return NextResponse.json(
         {
           success: false,
-          error: "Unauthorized",
+          message: "Unauthorized",
         },
         { status: 403 }
       );
     }
 
-    const wallet =
-      await prisma.businessWallet.findUnique({
-        where: {
-          name: "Brainfriend Tech",
-        },
-      });
-
-    const transactions =
+    /*
+     * ============================================================
+     * REAL BUSINESS MONEY
+     * ============================================================
+     *
+     * We calculate the business profit directly from successful,
+     * non-test transactions.
+     *
+     * FUND_WALLET is user's money, not business profit.
+     * WITHDRAWAL is user's withdrawal, not business profit.
+     */
+    const transactionTotals =
       await prisma.transaction.aggregate({
         where: {
           status: "SUCCESS",
           isTest: false,
+
           type: {
             notIn: [
               "FUND_WALLET",
@@ -48,7 +53,29 @@ export async function GET() {
         },
       });
 
-    const withdrawals =
+    const totalRevenue = Number(
+      transactionTotals._sum.amount ?? 0
+    );
+
+    const totalCost = Number(
+      transactionTotals._sum.cost ?? 0
+    );
+
+    const totalProfit = Number(
+      transactionTotals._sum.profit ?? 0
+    );
+
+    /*
+     * ============================================================
+     * BUSINESS WITHDRAWALS
+     * ============================================================
+     *
+     * Pending, processing and successful withdrawals are already
+     * reserved from the available business profit.
+     *
+     * Failed and reversed withdrawals are NOT deducted.
+     */
+    const withdrawalTotals =
       await prisma.businessWithdrawal.aggregate({
         where: {
           status: {
@@ -65,37 +92,91 @@ export async function GET() {
         },
       });
 
-    const totalRevenue = Number(
-      transactions._sum.amount ?? 0
-    );
-
-    const totalCost = Number(
-      transactions._sum.cost ?? 0
-    );
-
-    const totalProfit = Number(
-      transactions._sum.profit ?? 0
-    );
-
     const withdrawnAmount = Number(
-      withdrawals._sum.amount ?? 0
+      withdrawalTotals._sum.amount ?? 0
     );
 
-    const availableBalance = Math.max(
+    /*
+     * ============================================================
+     * AVAILABLE PROFIT
+     * ============================================================
+     */
+    const availableProfit = Math.max(
       0,
-      totalRevenue - withdrawnAmount
+      totalProfit - withdrawnAmount
     );
 
+    /*
+     * ============================================================
+     * BUSINESS WALLET
+     * ============================================================
+     *
+     * We still read the wallet for the connected Paystack
+     * recipient code, but the money displayed is calculated
+     * from the real transaction records above.
+     */
+    const wallet =
+      await prisma.businessWallet.findUnique({
+        where: {
+          name: "Brainfriend Tech",
+        },
+      });
+
+    /*
+     * ============================================================
+     * WITHDRAWAL HISTORY
+     * ============================================================
+     *
+     * Your BusinessWithdrawal model does NOT have description.
+     * We return adminNote instead.
+     */
+    const withdrawalsList =
+      await prisma.businessWithdrawal.findMany({
+        orderBy: {
+          createdAt: "desc",
+        },
+
+        take: 100,
+
+        select: {
+          id: true,
+          amount: true,
+          status: true,
+          reference: true,
+          adminNote: true,
+          createdAt: true,
+          updatedAt: true,
+          processedAt: true,
+          method: true,
+          accountName: true,
+          accountNumber: true,
+          bankName: true,
+          recipientCode: true,
+          transferCode: true,
+          paystackReference: true,
+        },
+      });
+
+    /*
+     * ============================================================
+     * RETURN
+     * ============================================================
+     */
     return NextResponse.json({
       success: true,
 
       wallet: {
         id: wallet?.id ?? null,
+
         name:
           wallet?.name ||
           "Brainfriend Tech",
 
-        balance: availableBalance,
+        /*
+         * This is the REAL amount currently available
+         * for business withdrawal.
+         */
+        balance: availableProfit,
 
         totalRevenue,
 
@@ -104,36 +185,74 @@ export async function GET() {
         totalProfit,
 
         withdrawnProfit:
-          Number(
-            wallet?.withdrawnProfit ?? 0
-          ),
+          withdrawnAmount,
 
-        availableProfit:
-          Math.max(
-            0,
-            totalProfit -
-              Number(
-                wallet?.withdrawnProfit ?? 0
-              )
-          ),
+        availableProfit,
+
+        recipientCode:
+          wallet?.recipientCode ?? null,
       },
 
       withdrawals: {
-        total:
-          withdrawnAmount,
-        pending:
-          await getWithdrawalTotal(
-            "PENDING"
-          ),
-        processing:
-          await getWithdrawalTotal(
-            "PROCESSING"
-          ),
-        successful:
-          await getWithdrawalTotal(
-            "SUCCESS"
-          ),
+        total: withdrawnAmount,
+
+        count:
+          withdrawalsList.length,
       },
+
+      withdrawalsList:
+        withdrawalsList.map(
+          (withdrawal) => ({
+            id: withdrawal.id,
+
+            amount: Number(
+              withdrawal.amount
+            ),
+
+            status:
+              withdrawal.status,
+
+            reference:
+              withdrawal.reference,
+
+            /*
+             * Your schema has adminNote,
+             * not description.
+             */
+            description:
+              withdrawal.adminNote,
+
+            createdAt:
+              withdrawal.createdAt,
+
+            updatedAt:
+              withdrawal.updatedAt,
+
+            processedAt:
+              withdrawal.processedAt,
+
+            method:
+              withdrawal.method,
+
+            accountName:
+              withdrawal.accountName,
+
+            accountNumber:
+              withdrawal.accountNumber,
+
+            bankName:
+              withdrawal.bankName,
+
+            recipientCode:
+              withdrawal.recipientCode,
+
+            transferCode:
+              withdrawal.transferCode,
+
+            paystackReference:
+              withdrawal.paystackReference,
+          })
+        ),
     });
   } catch (error) {
     console.error(
@@ -144,32 +263,10 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        error:
+        message:
           "Unable to load business wallet.",
       },
       { status: 500 }
     );
   }
-}
-
-async function getWithdrawalTotal(
-  status:
-    | "PENDING"
-    | "PROCESSING"
-    | "SUCCESS"
-) {
-  const result =
-    await prisma.businessWithdrawal.aggregate({
-      where: {
-        status,
-      },
-
-      _sum: {
-        amount: true,
-      },
-    });
-
-  return Number(
-    result._sum.amount ?? 0
-  );
 }

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -38,17 +39,21 @@ type BusinessWithdrawal = {
 
 type RevenueData = {
   totalRevenue: number;
+  totalProfit: number;
   reservedAmount: number;
   availableRevenue: number;
 };
 
+const DEFAULT_REVENUE: RevenueData = {
+  totalRevenue: 0,
+  totalProfit: 0,
+  reservedAmount: 0,
+  availableRevenue: 0,
+};
+
 export default function AdminRevenueWithdrawPage() {
   const [revenue, setRevenue] =
-    useState<RevenueData>({
-      totalRevenue: 0,
-      reservedAmount: 0,
-      availableRevenue: 0,
-    });
+    useState<RevenueData>(DEFAULT_REVENUE);
 
   const [withdrawals, setWithdrawals] =
     useState<BusinessWithdrawal[]>([]);
@@ -57,29 +62,34 @@ export default function AdminRevenueWithdrawPage() {
     useState<WithdrawalMethod>("MANUAL");
 
   const [amount, setAmount] = useState("");
-  const [accountName, setAccountName] =
-    useState("");
-  const [accountNumber, setAccountNumber] =
-    useState("");
-  const [bankName, setBankName] =
-    useState("");
-  const [adminNote, setAdminNote] =
-    useState("");
+  const [accountName, setAccountName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [adminNote, setAdminNote] = useState("");
 
-  const [loading, setLoading] =
-    useState(true);
-
-  const [submitting, setSubmitting] =
-    useState(false);
-
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [actionId, setActionId] =
     useState<string | null>(null);
 
-  const [message, setMessage] =
-    useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  const [error, setError] =
-    useState("");
+  function formatMoney(value: number) {
+    return new Intl.NumberFormat("en-NG", {
+      style: "currency",
+      currency: "NGN",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(Number(value) || 0);
+  }
+
+  function formatDate(date: string) {
+    return new Date(date).toLocaleString("en-NG", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }
 
   async function loadWithdrawals() {
     setLoading(true);
@@ -94,25 +104,45 @@ export default function AdminRevenueWithdrawPage() {
         }
       );
 
-      const data = await response.json();
+      const text = await response.text();
 
-      if (!response.ok) {
+      let data: any;
+
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(
+          "Revenue withdrawal API returned an invalid response."
+        );
+      }
+
+      if (!response.ok || !data.success) {
         throw new Error(
           data.error ||
+            data.message ||
             "Failed to load withdrawal data."
         );
       }
 
-      setRevenue(
-        data.revenue || {
-          totalRevenue: 0,
-          reservedAmount: 0,
-          availableRevenue: 0,
-        }
-      );
+      setRevenue({
+        totalRevenue: Number(
+          data.revenue?.totalRevenue ?? 0
+        ),
+        totalProfit: Number(
+          data.revenue?.totalProfit ?? 0
+        ),
+        reservedAmount: Number(
+          data.revenue?.reservedAmount ?? 0
+        ),
+        availableRevenue: Number(
+          data.revenue?.availableRevenue ?? 0
+        ),
+      });
 
       setWithdrawals(
-        data.withdrawals || []
+        Array.isArray(data.withdrawals)
+          ? data.withdrawals
+          : []
       );
     } catch (err) {
       setError(
@@ -128,27 +158,6 @@ export default function AdminRevenueWithdrawPage() {
   useEffect(() => {
     loadWithdrawals();
   }, []);
-
-  function formatMoney(value: number) {
-    return new Intl.NumberFormat(
-      "en-NG",
-      {
-        style: "currency",
-        currency: "NGN",
-        minimumFractionDigits: 2,
-      }
-    ).format(value);
-  }
-
-  function formatDate(date: string) {
-    return new Date(date).toLocaleString(
-      "en-NG",
-      {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }
-    );
-  }
 
   function getStatusClass(
     status: WithdrawalStatus
@@ -202,8 +211,7 @@ export default function AdminRevenueWithdrawPage() {
     setMessage("");
     setError("");
 
-    const numericAmount =
-      Number(amount);
+    const numericAmount = Number(amount);
 
     if (
       !Number.isFinite(numericAmount) ||
@@ -220,29 +228,46 @@ export default function AdminRevenueWithdrawPage() {
       revenue.availableRevenue
     ) {
       setError(
-        "Withdrawal amount is greater than your available revenue."
+        `You can only withdraw up to ${formatMoney(
+          revenue.availableRevenue
+        )}.`
       );
       return;
     }
 
     if (!accountName.trim()) {
-      setError(
-        "Enter the account name."
-      );
+      setError("Enter the account name.");
       return;
     }
 
     if (!accountNumber.trim()) {
-      setError(
-        "Enter the account number."
-      );
+      setError("Enter the account number.");
       return;
     }
 
     if (!bankName.trim()) {
+      setError("Enter the bank name.");
+      return;
+    }
+
+    if (
+      !/^\d{10}$/.test(
+        accountNumber.trim()
+      )
+    ) {
       setError(
-        "Enter the bank name."
+        "Account number must be 10 digits."
       );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Create a ${formatMoney(
+        numericAmount
+      )} business profit withdrawal?`
+    );
+
+    if (!confirmed) {
       return;
     }
 
@@ -272,18 +297,29 @@ export default function AdminRevenueWithdrawPage() {
         }
       );
 
-      const data =
-        await response.json();
+      const text = await response.text();
 
-      if (!response.ok) {
+      let data: any;
+
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(
+          "Withdrawal API returned an invalid response."
+        );
+      }
+
+      if (!response.ok || !data.success) {
         throw new Error(
           data.error ||
+            data.message ||
             "Failed to create withdrawal."
         );
       }
 
       setMessage(
-        "Withdrawal request created successfully."
+        data.message ||
+          "Profit withdrawal request created successfully."
       );
 
       setAmount("");
@@ -328,12 +364,22 @@ export default function AdminRevenueWithdrawPage() {
         }
       );
 
-      const data =
-        await response.json();
+      const text = await response.text();
 
-      if (!response.ok) {
+      let data: any;
+
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(
+          "Withdrawal update API returned an invalid response."
+        );
+      }
+
+      if (!response.ok || !data.success) {
         throw new Error(
           data.error ||
+            data.message ||
             "Failed to update withdrawal."
         );
       }
@@ -374,12 +420,12 @@ export default function AdminRevenueWithdrawPage() {
             </Link>
 
             <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-              Withdraw Revenue
+              Withdraw Business Profit
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Withdraw Brainfriend Tech business
-              revenue to your bank account.
+              Withdraw profit generated by successful
+              Brainfriend Tech transactions.
             </p>
           </div>
 
@@ -391,9 +437,7 @@ export default function AdminRevenueWithdrawPage() {
           >
             <RefreshCw
               className={`h-4 w-4 ${
-                loading
-                  ? "animate-spin"
-                  : ""
+                loading ? "animate-spin" : ""
               }`}
             />
             Refresh
@@ -413,9 +457,10 @@ export default function AdminRevenueWithdrawPage() {
           </div>
         )}
 
-        {/* REVENUE CARDS */}
+        {/* PROFIT CARDS */}
         <div className="mb-8 grid gap-4 md:grid-cols-3">
 
+          {/* TOTAL REVENUE */}
           <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
             <p className="text-sm font-medium text-gray-500">
               Total Revenue
@@ -426,29 +471,47 @@ export default function AdminRevenueWithdrawPage() {
                 revenue.totalRevenue
               )}
             </p>
+
+            <p className="mt-2 text-xs text-gray-400">
+              Total customer payments from
+              successful transactions.
+            </p>
           </div>
 
+          {/* TOTAL PROFIT */}
           <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
             <p className="text-sm font-medium text-gray-500">
-              Reserved / Withdrawn
+              Total Profit
             </p>
 
-            <p className="mt-2 text-2xl font-bold text-orange-600">
+            <p className="mt-2 text-2xl font-bold text-green-600">
               {formatMoney(
-                revenue.reservedAmount
+                revenue.totalProfit
               )}
+            </p>
+
+            <p className="mt-2 text-xs text-gray-400">
+              Revenue after provider/service
+              costs.
             </p>
           </div>
 
+          {/* AVAILABLE PROFIT */}
           <div className="rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white shadow-lg">
             <p className="text-sm font-medium text-indigo-100">
-              Available to Withdraw
+              Profit Available to Withdraw
             </p>
 
             <p className="mt-2 text-3xl font-bold">
               {formatMoney(
                 revenue.availableRevenue
               )}
+            </p>
+
+            <p className="mt-2 text-xs text-indigo-200">
+              Total profit minus pending,
+              processing and successful
+              business withdrawals.
             </p>
           </div>
         </div>
@@ -463,11 +526,12 @@ export default function AdminRevenueWithdrawPage() {
 
             <div>
               <h2 className="text-lg font-bold text-gray-900">
-                New Withdrawal
+                New Profit Withdrawal
               </h2>
 
               <p className="text-sm text-gray-500">
-                Choose how you want to withdraw.
+                Withdraw only the profit generated
+                by your successful transactions.
               </p>
             </div>
           </div>
@@ -491,7 +555,8 @@ export default function AdminRevenueWithdrawPage() {
               </p>
 
               <p className="mt-1 text-xs text-gray-500">
-                You make the bank transfer yourself.
+                Record a manual transfer from your
+                business funds.
               </p>
             </button>
 
@@ -517,7 +582,8 @@ export default function AdminRevenueWithdrawPage() {
               </div>
 
               <p className="mt-1 text-xs text-gray-500">
-                Available after Paystack enables payouts.
+                Available after Paystack enables
+                payouts.
               </p>
             </button>
           </div>
@@ -525,6 +591,7 @@ export default function AdminRevenueWithdrawPage() {
           {/* FORM */}
           <div className="grid gap-5 md:grid-cols-2">
 
+            {/* AMOUNT */}
             <div>
               <label className="mb-2 block text-sm font-semibold text-gray-700">
                 Amount
@@ -536,15 +603,15 @@ export default function AdminRevenueWithdrawPage() {
                 step="0.01"
                 value={amount}
                 onChange={(e) =>
-                  setAmount(
-                    e.target.value
-                  )
+                  setAmount(e.target.value)
                 }
-                placeholder="Enter amount"
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                placeholder="Enter profit amount"
+                disabled={submitting}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
               />
             </div>
 
+            {/* BANK */}
             <div>
               <label className="mb-2 block text-sm font-semibold text-gray-700">
                 Bank Name
@@ -554,15 +621,15 @@ export default function AdminRevenueWithdrawPage() {
                 type="text"
                 value={bankName}
                 onChange={(e) =>
-                  setBankName(
-                    e.target.value
-                  )
+                  setBankName(e.target.value)
                 }
                 placeholder="e.g. GTBank"
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                disabled={submitting}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
               />
             </div>
 
+            {/* ACCOUNT NAME */}
             <div>
               <label className="mb-2 block text-sm font-semibold text-gray-700">
                 Account Name
@@ -572,15 +639,15 @@ export default function AdminRevenueWithdrawPage() {
                 type="text"
                 value={accountName}
                 onChange={(e) =>
-                  setAccountName(
-                    e.target.value
-                  )
+                  setAccountName(e.target.value)
                 }
                 placeholder="Account name"
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                disabled={submitting}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
               />
             </div>
 
+            {/* ACCOUNT NUMBER */}
             <div>
               <label className="mb-2 block text-sm font-semibold text-gray-700">
                 Account Number
@@ -589,17 +656,23 @@ export default function AdminRevenueWithdrawPage() {
               <input
                 type="text"
                 inputMode="numeric"
+                maxLength={10}
                 value={accountNumber}
                 onChange={(e) =>
                   setAccountNumber(
-                    e.target.value
+                    e.target.value.replace(
+                      /\D/g,
+                      ""
+                    )
                   )
                 }
                 placeholder="10-digit account number"
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                disabled={submitting}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
               />
             </div>
 
+            {/* NOTE */}
             <div className="md:col-span-2">
               <label className="mb-2 block text-sm font-semibold text-gray-700">
                 Admin Note
@@ -608,22 +681,21 @@ export default function AdminRevenueWithdrawPage() {
               <textarea
                 value={adminNote}
                 onChange={(e) =>
-                  setAdminNote(
-                    e.target.value
-                  )
+                  setAdminNote(e.target.value)
                 }
                 rows={3}
                 placeholder="Optional note..."
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                disabled={submitting}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
               />
             </div>
-
           </div>
 
+          {/* WITHDRAW ACTION */}
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
             <p className="text-sm text-gray-500">
-              Available:{" "}
+              Profit available:{" "}
               <span className="font-bold text-gray-900">
                 {formatMoney(
                   revenue.availableRevenue
@@ -636,7 +708,8 @@ export default function AdminRevenueWithdrawPage() {
               onClick={createWithdrawal}
               disabled={
                 submitting ||
-                method === "PAYSTACK"
+                method === "PAYSTACK" ||
+                revenue.availableRevenue <= 0
               }
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -648,7 +721,7 @@ export default function AdminRevenueWithdrawPage() {
                 ? "Paystack Unavailable"
                 : submitting
                 ? "Creating..."
-                : "Request Withdrawal"}
+                : "Request Profit Withdrawal"}
             </button>
           </div>
         </div>
@@ -658,11 +731,11 @@ export default function AdminRevenueWithdrawPage() {
 
           <div className="border-b border-gray-100 p-6">
             <h2 className="text-lg font-bold text-gray-900">
-              Withdrawal History
+              Profit Withdrawal History
             </h2>
 
             <p className="mt-1 text-sm text-gray-500">
-              Manage your business revenue withdrawals.
+              Manage your business profit withdrawals.
             </p>
           </div>
 
@@ -672,7 +745,7 @@ export default function AdminRevenueWithdrawPage() {
             </div>
           ) : withdrawals.length === 0 ? (
             <div className="p-12 text-center text-sm text-gray-500">
-              No business withdrawals yet.
+              No business profit withdrawals yet.
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
@@ -683,7 +756,6 @@ export default function AdminRevenueWithdrawPage() {
                     key={withdrawal.id}
                     className="p-5"
                   >
-
                     <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
 
                       {/* DETAILS */}
@@ -712,7 +784,6 @@ export default function AdminRevenueWithdrawPage() {
                           <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">
                             {withdrawal.method}
                           </span>
-
                         </div>
 
                         <p className="mt-2 text-sm text-gray-600">
@@ -742,7 +813,6 @@ export default function AdminRevenueWithdrawPage() {
                             {withdrawal.adminNote}
                           </p>
                         )}
-
                       </div>
 
                       {/* ACTIONS */}
@@ -812,21 +882,16 @@ export default function AdminRevenueWithdrawPage() {
                               : "Mark as Paid"}
                           </button>
                         )}
-
                       </div>
-
                     </div>
-
                   </div>
                 )
               )}
-
             </div>
           )}
-
         </div>
-
       </div>
     </div>
   );
 }
+
