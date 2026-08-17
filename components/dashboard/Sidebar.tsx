@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -26,6 +27,7 @@ import {
   Settings,
   CreditCard,
   ShoppingBag,
+  SearchCheck,
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -101,13 +103,9 @@ export default function Sidebar({
             : "font-semibold text-indigo-100 hover:bg-indigo-600 hover:text-white"
         }`}
       >
-        {/* ACTIVE INDICATOR */}
-
         {active && (
           <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-indigo-700" />
         )}
-
-        {/* ICON */}
 
         <span
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition ${
@@ -118,8 +116,6 @@ export default function Sidebar({
         >
           {icon}
         </span>
-
-        {/* LABEL */}
 
         <span className="truncate">
           {label}
@@ -162,9 +158,7 @@ export default function Sidebar({
 
   return (
     <>
-      {/* ================================================== */}
       {/* MOBILE OVERLAY */}
-      {/* ================================================== */}
 
       {isOpen && (
         <button
@@ -175,9 +169,7 @@ export default function Sidebar({
         />
       )}
 
-      {/* ================================================== */}
       {/* SIDEBAR */}
-      {/* ================================================== */}
 
       <aside
         className={`fixed inset-y-0 left-0 z-50 flex w-[270px] flex-col border-r border-indigo-600 bg-indigo-700 text-white shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 lg:shadow-none ${
@@ -186,9 +178,7 @@ export default function Sidebar({
             : "-translate-x-full"
         }`}
       >
-        {/* ================================================== */}
         {/* BRAND HEADER */}
-        {/* ================================================== */}
 
         <div className="shrink-0 border-b border-indigo-600 px-5 py-5">
           <div className="flex items-center justify-between">
@@ -236,15 +226,11 @@ export default function Sidebar({
           </div>
         </div>
 
-        {/* ================================================== */}
         {/* NAVIGATION */}
-        {/* ================================================== */}
 
         <nav className="flex-1 overflow-y-auto px-3 py-5">
 
-          {/* ================================================== */}
           {/* OVERVIEW */}
-          {/* ================================================== */}
 
           <div className="mb-6">
             <div className="mb-2 px-2">
@@ -274,9 +260,7 @@ export default function Sidebar({
             </div>
           </div>
 
-          {/* ================================================== */}
           {/* VTU SERVICES */}
-          {/* ================================================== */}
 
           <div className="mb-4">
             {groupButton(
@@ -329,9 +313,7 @@ export default function Sidebar({
             )}
           </div>
 
-          {/* ================================================== */}
           {/* EDUCATION */}
-          {/* ================================================== */}
 
           <div className="mb-4">
             {groupButton(
@@ -366,9 +348,7 @@ export default function Sidebar({
             )}
           </div>
 
-          {/* ================================================== */}
           {/* VERIFICATION */}
-          {/* ================================================== */}
 
           <div className="mb-4">
             {groupButton(
@@ -394,9 +374,7 @@ export default function Sidebar({
             )}
           </div>
 
-          {/* ================================================== */}
           {/* ACCOUNT */}
-          {/* ================================================== */}
 
           <div className="mb-4">
             {groupButton(
@@ -417,6 +395,17 @@ export default function Sidebar({
                   "/dashboard/purchases",
                   "Purchases History",
                   <ShoppingBag
+                    size={17}
+                    strokeWidth={2.5}
+                  />
+                )}
+
+                {/* TRANSACTION STATUS */}
+
+                {navItem(
+                  "/dashboard/transaction-status",
+                  "Transaction Status",
+                  <SearchCheck
                     size={17}
                     strokeWidth={2.5}
                   />
@@ -454,13 +443,12 @@ export default function Sidebar({
                     strokeWidth={2.5}
                   />
                 )}
+
               </div>
             )}
           </div>
 
-          {/* ================================================== */}
           {/* ADMINISTRATION */}
-          {/* ================================================== */}
 
           {session?.user?.role === "ADMIN" && (
             <div className="mt-6 border-t border-indigo-600 pt-5">
@@ -482,9 +470,7 @@ export default function Sidebar({
           )}
         </nav>
 
-        {/* ================================================== */}
         {/* ACCOUNT FOOTER */}
-        {/* ================================================== */}
 
         <div className="shrink-0 border-t border-indigo-600 p-3">
 
@@ -530,3 +516,6 @@ export default function Sidebar({
     </>
   );
 }
+
+
+

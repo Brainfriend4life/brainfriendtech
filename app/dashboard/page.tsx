@@ -11,7 +11,7 @@ export default function DashboardPage() {
 
       {/* WhatsApp Group Banner */}
       <a
-        href="https://chat.whatsapp.com/HOEQ11RvZ034U4FhX0GvU"
+        href="https://chat.whatsapp.com/HOEQ11RzvZ034U4FhX0GvU"
         target="_blank"
         rel="noopener noreferrer"
         className="block w-full"
