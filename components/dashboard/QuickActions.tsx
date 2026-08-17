@@ -44,9 +44,9 @@ const actions = [
   },
 
   {
-    title: "Fund Wallet",
-    icon: CreditCard,
-    href: "/dashboard/wallet",
+   title: "NIN Verification",
+  icon: CreditCard,
+  href: "/dashboard/nin",
   },
 
 ];
