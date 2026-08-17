@@ -1351,6 +1351,8 @@ export default function NinVerificationPage() {
                 NIN associated with an 11-digit
                 Nigerian phone number.
               </p>
+               <h1 className="mt-3 text-sm leading-8 text-green-700">
+                Check purchaes history to retrieve the pdf</h1>
             </div>
 
           </div>
