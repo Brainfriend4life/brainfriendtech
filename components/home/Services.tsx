@@ -81,7 +81,7 @@ export default function Services() {
             id="services-heading"
             className="text-2xl font-bold text-gray-900 sm:text-3xl lg:text-4xl"
           >
-            Our VTU Services in Nigeria
+            Our Services in Nigeria
           </h2>
 
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-gray-600 sm:text-base">

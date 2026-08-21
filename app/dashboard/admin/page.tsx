@@ -273,7 +273,7 @@ export default async function AdminDashboardPage() {
         </h1>
 
         <p className="mt-2 text-sm text-gray-500 sm:text-base">
-          Manage Brainfriend Tech and monitor platform activity.
+          Manage Brainfriend Global Tech and monitor platform activity.
         </p>
       </div>
 

@@ -71,7 +71,7 @@ export default function EducationPage() {
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-indigo-100 sm:text-base">
               Choose an examination category below and start practicing with
-              Brainfriend Tech's CBT platform.
+              Brainfriend Global Tech's CBT platform.
             </p>
           </div>
         </div>

@@ -72,7 +72,7 @@ export default async function AdminTransactionsPage() {
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              View and monitor all transactions on Brainfriend Tech.
+              View and monitor all transactions on Brainfriend Global Tech.
             </p>
           </div>
         </div>

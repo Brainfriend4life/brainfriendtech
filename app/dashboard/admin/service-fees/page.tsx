@@ -321,7 +321,7 @@ export default function ServiceFeePage() {
             <p className="mt-1 text-sm leading-6 text-indigo-800">
               Provider cost + service fee =
               customer payment. The service fee
-              becomes Brainfriend Tech profit and
+              becomes Brainfriend Global Tech profit and
               is recorded in the business revenue
               and business wallet.
             </p>

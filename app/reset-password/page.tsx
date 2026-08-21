@@ -140,7 +140,7 @@ function ResetPasswordContent() {
 
           <p className="mt-2 text-gray-500">
             Create a new password for your
-            Brainfriend Tech account.
+            Brainfriend Global Tech account.
           </p>
 
         </div>

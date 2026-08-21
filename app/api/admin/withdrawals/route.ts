@@ -572,7 +572,7 @@ export async function POST(
             reference,
 
             reason:
-              "Brainfriend Tech business profit withdrawal",
+              "Brainfriend Global Tech business profit withdrawal",
 
             currency: "NGN",
           }),

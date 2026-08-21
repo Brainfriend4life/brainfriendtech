@@ -12,7 +12,7 @@ const REVENUE_TYPES: TransactionType[] = [
 
 async function main() {
   console.log("========================================");
-  console.log("BRAINFRIEND TECH BUSINESS WALLET REBUILD");
+  console.log("Brainfriend Global Tech BUSINESS WALLET REBUILD");
   console.log("========================================\n");
 
   /*
@@ -54,16 +54,16 @@ async function main() {
    */
   let businessWallet = await prisma.businessWallet.findUnique({
     where: {
-      name: "Brainfriend Tech",
+      name: "Brainfriend Global Tech",
     },
   });
 
   if (!businessWallet) {
-    console.log("Creating Brainfriend Tech business wallet...");
+    console.log("Creating Brainfriend Global Tech business wallet...");
 
     businessWallet = await prisma.businessWallet.create({
       data: {
-        name: "Brainfriend Tech",
+        name: "Brainfriend Global Tech",
       },
     });
   }

@@ -250,7 +250,7 @@ export default function AdminRevenuePage() {
           <RefreshCw className="h-5 w-5 animate-spin" />
 
           <span>
-            Loading Brainfriend Tech revenue...
+            Loading Brainfriend Global Tech revenue...
           </span>
         </div>
       </div>
@@ -266,7 +266,7 @@ export default function AdminRevenuePage() {
           </h1>
 
           <p className="mt-1 text-sm text-gray-500">
-            Monitor Brainfriend Tech&apos;s
+            Monitor Brainfriend Global Tech&apos;s
             service revenue and profit.
           </p>
         </div>
@@ -296,7 +296,7 @@ export default function AdminRevenuePage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-indigo-600">
-            Brainfriend Tech
+            Brainfriend Global Tech
           </p>
 
           <h1 className="mt-1 text-2xl font-bold text-gray-900 sm:text-3xl">
@@ -331,7 +331,7 @@ export default function AdminRevenuePage() {
       <section>
         <div className="mb-4">
           <h2 className="text-xl font-bold text-gray-900">
-            Brainfriend Tech Business Wallet
+            Brainfriend Global Tech Business Wallet
           </h2>
 
           <p className="mt-1 text-sm text-gray-500">
@@ -619,7 +619,7 @@ export default function AdminRevenuePage() {
         </h2>
 
         <p className="mt-1 text-sm text-gray-500">
-          This is separate from Brainfriend Tech profit.
+          This is separate from Brainfriend Global Tech profit.
         </p>
 
         <div className="mt-4 grid gap-5 sm:grid-cols-2">

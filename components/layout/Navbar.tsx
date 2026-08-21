@@ -22,7 +22,7 @@ export default function Navbar() {
         >
           <Image
             src="/logo.png"
-            alt="Brainfriend Tech Logo"
+            alt="Brainfriend Global Tech Logo"
             width={44}
             height={44}
             className="h-10 w-10 rounded-full object-cover sm:h-11 sm:w-11"

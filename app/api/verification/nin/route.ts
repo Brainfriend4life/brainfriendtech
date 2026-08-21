@@ -1054,7 +1054,7 @@ export async function POST(
                 {
                   where: {
                     name:
-                      "Brainfriend Tech",
+                      "Brainfriend Global Tech",
                   },
                 }
               );
@@ -1067,7 +1067,7 @@ export async function POST(
                   {
                     data: {
                       name:
-                        "Brainfriend Tech",
+                        "Brainfriend Global Tech",
 
                       balance: 0,
 

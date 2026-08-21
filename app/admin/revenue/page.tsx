@@ -53,7 +53,7 @@ export default function AdminDashboard() {
           </h1>
 
           <p className="mt-2 text-gray-600">
-            Manage Brainfriend Tech VTU services and business operations.
+            Manage Brainfriend Global Tech VTU services and business operations.
           </p>
         </div>
 
@@ -93,7 +93,7 @@ export default function AdminDashboard() {
               </h2>
 
               <p className="text-sm text-green-600">
-                Brainfriend Tech services are active.
+                Brainfriend Global Tech services are active.
               </p>
             </div>
           </div>

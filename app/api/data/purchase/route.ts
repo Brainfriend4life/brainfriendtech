@@ -983,7 +983,7 @@ export async function POST(request: NextRequest) {
               {
                 where: {
                   name:
-                    "Brainfriend Tech",
+                    "Brainfriend Global Tech",
                 },
               }
             );
@@ -994,7 +994,7 @@ export async function POST(request: NextRequest) {
                 {
                   data: {
                     name:
-                      "Brainfriend Tech",
+                      "Brainfriend Global Tech",
 
                     balance: 0,
 

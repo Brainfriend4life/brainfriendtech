@@ -223,7 +223,7 @@ export default function AdminWalletPage() {
         </h1>
 
         <p className="mt-2 text-sm text-gray-500 sm:text-base">
-          Manage your provider balance and Brainfriend Tech
+          Manage your provider balance and Brainfriend Global Tech
           revenue separately.
         </p>
 
@@ -387,7 +387,7 @@ export default function AdminWalletPage() {
               <div>
 
                 <p className="text-sm font-semibold text-green-100">
-                  Brainfriend Tech Revenue Wallet
+                  Brainfriend Global Tech Revenue Wallet
                 </p>
 
                 <p className="text-xs text-green-200">
@@ -461,7 +461,7 @@ export default function AdminWalletPage() {
 
               <p className="text-xs leading-5 text-green-100">
                 This represents successful service revenue
-                recorded by Brainfriend Tech. It is separate
+                recorded by Brainfriend Global Tech. It is separate
                 from the CheapDataHub provider balance.
               </p>
 
@@ -499,7 +499,7 @@ export default function AdminWalletPage() {
               </p>
 
               <p>
-                <strong>Brainfriend Tech Revenue Wallet</strong>
+                <strong>Brainfriend Global Tech Revenue Wallet</strong>
                 {" "}records the money generated from successful
                 transactions on your platform.
               </p>

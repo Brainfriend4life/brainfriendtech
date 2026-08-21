@@ -437,7 +437,7 @@ export default function ProviderWalletPage() {
 
               <div>
                 <p className="text-sm font-semibold text-indigo-100">
-                  Brainfriend Tech
+                  Brainfriend Global Tech
                 </p>
 
                 <p className="text-xs text-indigo-300">
@@ -517,7 +517,7 @@ export default function ProviderWalletPage() {
 
         <div className="mb-4">
           <h2 className="text-xl font-bold text-gray-900">
-            Brainfriend Tech Revenue Breakdown
+            Brainfriend Global Tech Revenue Breakdown
           </h2>
 
           <p className="mt-1 text-sm text-gray-500">
@@ -580,7 +580,7 @@ export default function ProviderWalletPage() {
             <p className="mt-1 text-sm leading-6 text-indigo-700">
               The CheapDataHub balance is the actual money
               available with your service provider. The
-              Brainfriend Tech Revenue figure is calculated
+              Brainfriend Global Tech Revenue figure is calculated
               from successful purchases made by your users.
               Funding a user's wallet does not increase your
               revenue balance.

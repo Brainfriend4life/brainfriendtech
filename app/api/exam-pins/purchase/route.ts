@@ -827,14 +827,14 @@ export async function POST(
             await tx.businessWallet.upsert({
               where: {
                 name:
-                  "Brainfriend Tech",
+                  "Brainfriend Global Tech",
               },
 
               update: {},
 
               create: {
                 name:
-                  "Brainfriend Tech",
+                  "Brainfriend Global Tech",
 
                 balance:
                   0,

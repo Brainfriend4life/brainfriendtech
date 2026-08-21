@@ -154,7 +154,7 @@ export default function WithdrawalForm({
               event.target.value
             )
           }
-          placeholder="Brainfriend Tech"
+          placeholder="Brainfriend Global Tech"
           disabled={loading}
           className="mt-2 w-full rounded-xl border border-gray-200 px-4 py-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-100"
         />

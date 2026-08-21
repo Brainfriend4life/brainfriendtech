@@ -126,7 +126,7 @@ export default function RegisterPage() {
               <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg transition group-hover:scale-105">
                 <Image
                   src="/logo.png"
-                  alt="Brainfriend Tech"
+                  alt="Brainfriend Global Tech"
                   width={48}
                   height={48}
                   priority
@@ -202,7 +202,7 @@ export default function RegisterPage() {
 
             {/* FOOTER */}
             <p className="text-sm text-indigo-200">
-              © {new Date().getFullYear()} Brainfriend Tech
+              © {new Date().getFullYear()} Brainfriend Global Tech
             </p>
           </div>
         </section>
@@ -231,7 +231,7 @@ export default function RegisterPage() {
                 <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-gray-100">
                   <Image
                     src="/logo.png"
-                    alt="Brainfriend Tech"
+                    alt="Brainfriend Global Tech"
                     width={56}
                     height={56}
                     priority
@@ -274,7 +274,7 @@ export default function RegisterPage() {
 
               <p className="mt-3 max-w-md text-sm leading-6 text-gray-500">
                 Sign up in less than a minute and
-                start using Brainfriend Tech services.
+                start using Brainfriend Global Tech services.
               </p>
             </div>
 
@@ -450,7 +450,7 @@ export default function RegisterPage() {
             {/* TERMS */}
             <p className="mx-auto mt-5 max-w-sm text-center text-xs leading-5 text-gray-400">
               By creating an account, you agree to use
-              Brainfriend Tech responsibly and keep your
+              Brainfriend Global Tech responsibly and keep your
               account information secure.
             </p>
 

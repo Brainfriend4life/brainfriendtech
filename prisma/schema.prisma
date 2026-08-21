@@ -104,7 +104,7 @@ model BusinessWithdrawal {
 
 model BusinessWallet {
   id              String            @id @default(cuid())
-  name            String            @unique @default("Brainfriend Tech")
+  name            String            @unique @default("Brainfriend Global Tech")
   totalRevenue    Float             @default(0)
   totalCost       Float             @default(0)
   totalProfit     Float             @default(0)

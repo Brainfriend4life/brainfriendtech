@@ -264,7 +264,7 @@ export default function AdminSidebar() {
 
             <div>
               <h1 className="text-base font-bold">
-                Brainfriend Tech
+                Brainfriend Global Tech
               </h1>
 
               <p className="text-xs text-indigo-200">

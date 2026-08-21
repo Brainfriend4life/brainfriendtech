@@ -100,6 +100,9 @@ export default function TransactionStatusPage() {
   const [error, setError] =
     useState("");
 
+  const [checkingMessage, setCheckingMessage] =
+    useState("");
+
   async function checkTransaction(
     event: FormEvent<HTMLFormElement>
   ) {
@@ -107,6 +110,7 @@ export default function TransactionStatusPage() {
 
     setError("");
     setTransaction(null);
+    setCheckingMessage("");
 
     const cleanReference =
       reference.trim();
@@ -128,29 +132,146 @@ export default function TransactionStatusPage() {
         cleanReference
       );
 
-      const response = await fetch(
-        `/api/transaction-status?${params.toString()}`,
-        {
-          method: "GET",
-          cache: "no-store",
-        }
-      );
+      /*
+       * ==========================================
+       * TRY VERIFICATION
+       * ==========================================
+       *
+       * We try more than once because:
+       *
+       * - Paystack may still be processing
+       * - webhook may still be arriving
+       * - the transaction may need to be recovered
+       * - there may be a short network delay
+       */
 
-      const data =
-        await response.json();
+      const maxAttempts = 3;
 
-      if (
-        !response.ok ||
-        !data.success
+      let lastError =
+        "Unable to verify this transaction.";
+
+      for (
+        let attempt = 1;
+        attempt <= maxAttempts;
+        attempt++
       ) {
-        throw new Error(
-          data.error ||
-            "Unable to find this deposit."
-        );
+        try {
+          setCheckingMessage(
+            attempt === 1
+              ? "Checking your transaction..."
+              : `Still checking your transaction... (${attempt}/${maxAttempts})`
+          );
+
+          const response = await fetch(
+            `/api/transaction-status?${params.toString()}`,
+            {
+              method: "GET",
+              cache: "no-store",
+            }
+          );
+
+          const data =
+            await response.json();
+
+          /*
+           * ========================================
+           * SUCCESS
+           * ========================================
+           */
+
+          if (
+            response.ok &&
+            data.success &&
+            data.transaction
+          ) {
+            setTransaction(
+              data.transaction
+            );
+
+            setError("");
+            setCheckingMessage("");
+
+            return;
+          }
+
+          /*
+           * ========================================
+           * PAYSTACK PAYMENT FOUND BUT NOT SUCCESS
+           * ========================================
+           */
+
+          if (
+            data.found &&
+            data.transaction
+          ) {
+            setTransaction(
+              data.transaction
+            );
+
+            setError("");
+            setCheckingMessage("");
+
+            return;
+          }
+
+          lastError =
+            data.error ||
+            data.message ||
+            "Unable to verify this transaction.";
+
+          /*
+           * If this was the last attempt,
+           * stop here.
+           */
+
+          if (
+            attempt === maxAttempts
+          ) {
+            break;
+          }
+
+          /*
+           * Wait 2 seconds before trying again.
+           */
+
+          await new Promise(
+            (resolve) =>
+              setTimeout(
+                resolve,
+                2000
+              )
+          );
+        } catch (requestError) {
+          lastError =
+            requestError instanceof Error
+              ? requestError.message
+              : "Unable to check transaction.";
+
+          if (
+            attempt === maxAttempts
+          ) {
+            break;
+          }
+
+          await new Promise(
+            (resolve) =>
+              setTimeout(
+                resolve,
+                2000
+              )
+          );
+        }
       }
 
-      setTransaction(
-        data.transaction
+      /*
+       * ==========================================
+       * ALL ATTEMPTS FAILED
+       * ==========================================
+       */
+
+      setError(
+        lastError ||
+          "Unable to verify this transaction. Please try again."
       );
     } catch (err) {
       setError(
@@ -160,6 +281,7 @@ export default function TransactionStatusPage() {
       );
     } finally {
       setLoading(false);
+      setCheckingMessage("");
     }
   }
 
@@ -228,14 +350,19 @@ export default function TransactionStatusPage() {
               <input
                 type="text"
                 value={reference}
-                onChange={(event) =>
+                onChange={(event) => {
                   setReference(
                     event.target.value
-                  )
-                }
+                  );
+
+                  setError("");
+                  setTransaction(null);
+                  setCheckingMessage("");
+                }}
                 placeholder="e.g. BF-FUND-XXXXXXXX"
                 autoComplete="off"
-                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                disabled={loading}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-100"
               />
             </div>
 
@@ -259,20 +386,63 @@ export default function TransactionStatusPage() {
           </form>
         </div>
 
+        {/* CHECKING */}
+
+        {loading && (
+          <div className="mt-6 rounded-2xl border border-indigo-200 bg-indigo-50 p-5">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-600" />
+
+              <div>
+                <p className="font-semibold text-indigo-800">
+                  Verifying transaction
+                </p>
+
+                <p className="mt-1 text-sm text-indigo-700">
+                  {checkingMessage ||
+                    "Please wait while we verify your payment with Paystack."}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ERROR */}
 
-        {error && (
+        {error && !loading && (
           <div className="mt-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
 
             <div>
               <p className="font-semibold">
-                Transaction not found
+                Unable to verify transaction
               </p>
 
               <p className="mt-1">
                 {error}
               </p>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (
+                    reference.trim()
+                  ) {
+                    const fakeEvent =
+                      {
+                        preventDefault:
+                          () => {},
+                      } as FormEvent<HTMLFormElement>;
+
+                    checkTransaction(
+                      fakeEvent
+                    );
+                  }
+                }}
+                className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+              >
+                Try Again
+              </button>
             </div>
           </div>
         )}

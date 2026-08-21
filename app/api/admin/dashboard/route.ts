@@ -80,7 +80,7 @@ export async function GET() {
 
       prisma.businessWallet.findUnique({
         where: {
-          name: "Brainfriend Tech",
+          name: "Brainfriend Global Tech",
         },
       }),
     ]);

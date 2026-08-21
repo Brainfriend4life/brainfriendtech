@@ -197,7 +197,7 @@ export default function Sidebar({
 
               <div>
                 <p className="text-[16px] font-extrabold tracking-tight text-white">
-                  Brainfriend Tech
+                  Brainfriend Global Tech
                 </p>
 
                 <div className="mt-1 flex items-center gap-1.5">

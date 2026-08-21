@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     const businessWallet =
       await prisma.businessWallet.findUnique({
         where: {
-          name: "Brainfriend Tech",
+          name: "Brainfriend Global Tech",
         },
       });
 
@@ -94,7 +94,7 @@ export async function POST(request: Request) {
         {
           success: false,
           message:
-            "Brainfriend Tech business wallet was not found.",
+            "Brainfriend Global Tech business wallet was not found.",
         },
         { status: 404 }
       );
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
           amount: roundedAmount,
 
           accountName:
-            "Brainfriend Tech",
+            "Brainfriend Global Tech",
 
           accountNumber:
             "PAYSTACK_RECIPIENT",
@@ -214,7 +214,7 @@ export async function POST(request: Request) {
             reference,
 
             reason:
-              "Brainfriend Tech business profit withdrawal",
+              "Brainfriend Global Tech business profit withdrawal",
 
             currency: "NGN",
           }),

@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   
   title: {
     default:
-      "Brainfriend Global Tech | Fast & Reliable VTU Platform",
+      "Brainfriend Global Tech | Fast & Reliable NIN Verification/VTU Platform",
     template: "%s | Brainfriend Global Tech",
   },
 
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
 
   keywords: [
     "Brainfriend Global Tech",
-    "Brainfriend Tech",
+    "Brainfriend Global Tech",
     "VTU Nigeria",
     "VTU platform Nigeria",
     "buy data Nigeria",
@@ -79,7 +79,7 @@ export const metadata: Metadata = {
     siteName: "Brainfriend Global Tech",
 
     title:
-      "Brainfriend Global Tech | Fast & Reliable VTU Platform",
+      "Brainfriend Global Tech | Fast & Reliable NIN Verification/VTU Platform",
 
     description:
       "Buy airtime and data, verify NIN, pay electricity bills, renew cable TV subscriptions and access WAEC, NECO, JAMB and CBT services on Brainfriend Global Tech.",
@@ -89,7 +89,7 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Brainfriend Global Tech - Fast and Reliable VTU Platform",
+        alt: "Brainfriend Global Tech - Fast and Reliable NIN Verification/VTU Platform",
       },
     ],
   },
@@ -98,10 +98,10 @@ export const metadata: Metadata = {
     card: "summary_large_image",
 
     title:
-      "Brainfriend Global Tech | Fast & Reliable VTU Platform",
+      "Brainfriend Global Tech | Fast & Reliable NIN Verification/VTU Platform",
 
     description:
-      "Fast and reliable VTU services in Nigeria including airtime, data, NIN verification, electricity, cable TV and examination services.",
+      "Fast and reliable NIN Verification/VTU services in Nigeria including airtime, data, NIN verification, electricity, cable TV and examination services.",
 
     images: ["/og-image.png"],
   },

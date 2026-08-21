@@ -21,7 +21,7 @@ export async function getBusinessWallet() {
   if (!wallet) {
     wallet = await prisma.businessWallet.create({
       data: {
-        name: "Brainfriend Tech",
+        name: "Brainfriend Global Tech",
         balance: 0,
         totalRevenue: 0,
         totalCost: 0,
@@ -70,7 +70,7 @@ export async function recordBusinessRevenue({
     if (!wallet) {
       wallet = await tx.businessWallet.create({
         data: {
-          name: "Brainfriend Tech",
+          name: "Brainfriend Global Tech",
           balance: 0,
           totalRevenue: 0,
           totalCost: 0,

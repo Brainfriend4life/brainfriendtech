@@ -16,7 +16,7 @@ export default function Hero() {
             id="hero-heading"
             className="mb-6 text-5xl font-bold text-white"
           >
-            Fast & Reliable VTU Services in Nigeria
+            Fast & Reliable NIN Verification/VTU Services in Nigeria
           </h1>
 
           <p className="mb-8 text-lg text-indigo-100">

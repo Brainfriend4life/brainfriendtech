@@ -118,7 +118,7 @@ export async function GET() {
     const wallet =
       await prisma.businessWallet.findUnique({
         where: {
-          name: "Brainfriend Tech",
+          name: "Brainfriend Global Tech",
         },
       });
 
@@ -170,7 +170,7 @@ export async function GET() {
 
         name:
           wallet?.name ||
-          "Brainfriend Tech",
+          "Brainfriend Global Tech",
 
         /*
          * This is the REAL amount currently available

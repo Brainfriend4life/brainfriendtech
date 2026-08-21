@@ -43,7 +43,7 @@ export default async function AdminUsersPage() {
         </h1>
 
         <p className="mt-1 text-sm text-gray-500">
-          Manage Brainfriend Tech user accounts.
+          Manage Brainfriend Global Tech user accounts.
         </p>
       </div>
 

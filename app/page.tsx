@@ -14,10 +14,10 @@ import Footer from "@/components/layout/Footer";
 
 export const metadata: Metadata = {
   title:
-    "Brainfriend Global Tech | Fast & Reliable VTU Services in Nigeria",
+    "Brainfriend Global Tech | Fast & Reliable NIN verification/ VTU Services in Nigeria",
 
   description:
-    "Brainfriend Global Tech provides fast and reliable VTU services in Nigeria, including data, airtime, NIN verification, electricity bill payment, cable TV subscriptions and examination services.",
+    "Brainfriend Global Tech provides fast and reliable NIN verification/VTU services in Nigeria, including data, airtime, NIN verification, electricity bill payment, cable TV subscriptions and examination services.",
 
   keywords: [
     "Brainfriend Global Tech",
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
 
   openGraph: {
     title:
-      "Brainfriend Global Tech | Fast & Reliable VTU Services in Nigeria",
+      "Brainfriend Global Tech | Fast & Reliable NIN Verification/VTU Services in Nigeria",
 
     description:
       "Access fast and reliable data, airtime, NIN verification, electricity, cable TV and examination services in Nigeria.",
@@ -69,10 +69,10 @@ export const metadata: Metadata = {
     card: "summary_large_image",
 
     title:
-      "Brainfriend Global Tech | Fast & Reliable VTU Services in Nigeria",
+      "Brainfriend Global Tech | Fast & Reliable NIN verification/VTU Services in Nigeria",
 
     description:
-      "Fast and reliable VTU services in Nigeria including data, airtime, NIN verification, electricity, cable TV and examination services.",
+      "Fast and reliable NIN verification/VTU services in Nigeria including data, airtime, NIN verification, electricity, cable TV and examination services.",
 
     images: ["/og-image.png"],
   },

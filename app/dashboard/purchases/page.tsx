@@ -425,7 +425,7 @@ export default function PurchasesHistoryPage() {
                     onClick={() =>
                       downloadText(
                         `exam-pin-${selectedPurchase.reference}.txt`,
-                        `Brainfriend Tech - Exam PIN\n\nProvider: ${selectedPurchase.provider}\nPIN: ${selectedPurchase.details.pin}\nSerial: ${selectedPurchase.details.serial}\nReference: ${selectedPurchase.reference}\nDate: ${formatDate(selectedPurchase.createdAt)}`
+                        `Brainfriend Global Tech - Exam PIN\n\nProvider: ${selectedPurchase.provider}\nPIN: ${selectedPurchase.details.pin}\nSerial: ${selectedPurchase.details.serial}\nReference: ${selectedPurchase.reference}\nDate: ${formatDate(selectedPurchase.createdAt)}`
                       )
                     }
                     className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-indigo-700"
@@ -513,7 +513,7 @@ export default function PurchasesHistoryPage() {
                     onClick={() =>
                       downloadText(
                         `nin-verification-${selectedPurchase.reference}.txt`,
-                        `Brainfriend Tech - NIN Verification\n\nNIN: ${selectedPurchase.details.nin}\nCard Type: ${selectedPurchase.details.cardType}\nName: ${[
+                        `Brainfriend Global Tech - NIN Verification\n\nNIN: ${selectedPurchase.details.nin}\nCard Type: ${selectedPurchase.details.cardType}\nName: ${[
                           selectedPurchase.details.firstName,
                           selectedPurchase.details.middleName,
                           selectedPurchase.details.surname,

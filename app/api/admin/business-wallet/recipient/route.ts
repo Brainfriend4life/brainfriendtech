@@ -93,7 +93,7 @@ export async function POST(request: Request) {
 
     const businessWallet = await prisma.businessWallet.findUnique({
       where: {
-        name: "Brainfriend Tech",
+        name: "Brainfriend Global Tech",
       },
     });
 
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          message: "Brainfriend Tech business wallet was not found.",
+          message: "Brainfriend Global Tech business wallet was not found.",
         },
         { status: 404 }
       );

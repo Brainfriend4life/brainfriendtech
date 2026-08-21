@@ -28,12 +28,12 @@ export async function sendVerificationEmail({
     await resend.emails.send({
       from:
         process.env.EMAIL_FROM ||
-        "Brainfriend Tech <onboarding@resend.dev>",
+        "Brainfriend Global Tech <onboarding@resend.dev>",
 
       to: email,
 
       subject:
-        "Verify your Brainfriend Tech account",
+        "Verify your Brainfriend Global Tech account",
 
       html: `
         <div style="
@@ -53,7 +53,7 @@ export async function sendVerificationEmail({
           ">
 
             <h1 style="margin: 0;">
-              Brainfriend Tech
+              Brainfriend Global Tech
             </h1>
 
             <p style="margin: 8px 0 0;">
@@ -73,7 +73,7 @@ export async function sendVerificationEmail({
             </h2>
 
             <p>
-              Thanks for creating your Brainfriend Tech account.
+              Thanks for creating your Brainfriend Global Tech account.
             </p>
 
             <p>

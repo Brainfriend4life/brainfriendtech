@@ -113,7 +113,7 @@ export async function GET() {
       {
         success: false,
         message:
-          "Unable to calculate Brainfriend Tech revenue.",
+          "Unable to calculate Brainfriend Global Tech revenue.",
       },
       {
         status: 500,

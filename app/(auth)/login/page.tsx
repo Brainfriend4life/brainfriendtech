@@ -85,7 +85,7 @@ export default function LoginPage() {
                 <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg">
                   <Image
                     src="/logo.png"
-                    alt="Brainfriend Tech"
+                    alt="Brainfriend Global Tech"
                     width={56}
                     height={56}
                     priority
@@ -122,7 +122,7 @@ export default function LoginPage() {
                 <p className="mt-6 text-base leading-7 text-indigo-100">
                   Buy airtime, data, electricity and
                   other digital services quickly and
-                  securely with Brainfriend Tech.
+                  securely with Brainfriend Global Tech.
                 </p>
 
                 <div className="mt-8 space-y-4">
@@ -154,7 +154,7 @@ export default function LoginPage() {
             {/* FOOTER */}
             <div className="relative z-10">
               <p className="text-sm text-indigo-200">
-                © {new Date().getFullYear()} Brainfriend Tech
+                © {new Date().getFullYear()} Brainfriend Global Tech
               </p>
             </div>
           </div>
@@ -190,7 +190,7 @@ export default function LoginPage() {
                 <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-gray-100">
                   <Image
                     src="/logo.png"
-                    alt="Brainfriend Tech"
+                    alt="Brainfriend Global Tech"
                     width={56}
                     height={56}
                     priority
@@ -226,7 +226,7 @@ export default function LoginPage() {
                 </h1>
 
                 <p className="mt-3 text-sm leading-6 text-gray-500 sm:text-base">
-                  Sign in to your Brainfriend Tech
+                  Sign in to your Brainfriend Global Tech
                   account and continue where you left off.
                 </p>
 
@@ -316,7 +316,7 @@ export default function LoginPage() {
 
               <p className="mt-8 text-center text-xs leading-5 text-gray-400">
                 By signing in, you agree to use
-                Brainfriend Tech responsibly and
+                Brainfriend Global Tech responsibly and
                 securely.
               </p>
 

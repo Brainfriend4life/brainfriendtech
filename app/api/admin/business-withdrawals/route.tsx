@@ -486,7 +486,7 @@ export async function POST(
 
               reason:
                 adminNote ||
-                "Brainfriend Tech business withdrawal",
+                "Brainfriend Global Tech business withdrawal",
 
               reference,
             }),
@@ -999,7 +999,7 @@ async function updateBusinessWallet() {
       {
         where: {
           name:
-            "Brainfriend Tech",
+            "Brainfriend Global Tech",
         },
       }
     );
@@ -1009,7 +1009,7 @@ async function updateBusinessWallet() {
       {
         data: {
           name:
-            "Brainfriend Tech",
+            "Brainfriend Global Tech",
 
           balance:
             walletBalance,

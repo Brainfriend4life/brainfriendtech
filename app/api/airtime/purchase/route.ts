@@ -509,7 +509,7 @@ export async function POST(request: NextRequest) {
           let businessWallet =
             await tx.businessWallet.findUnique({
               where: {
-                name: "Brainfriend Tech",
+                name: "Brainfriend Global Tech",
               },
             });
 
@@ -517,7 +517,7 @@ export async function POST(request: NextRequest) {
             businessWallet =
               await tx.businessWallet.create({
                 data: {
-                  name: "Brainfriend Tech",
+                  name: "Brainfriend Global Tech",
 
                   balance: 0,
 

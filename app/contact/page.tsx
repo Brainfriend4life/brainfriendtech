@@ -82,7 +82,7 @@ export default function ContactPage() {
       <section className="bg-indigo-700 px-4 py-16 text-white sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl text-center">
           <h1 className="text-3xl font-bold sm:text-4xl lg:text-5xl">
-            Contact Brainfriend Tech
+            Contact Brainfriend Global Tech
           </h1>
 
           <p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-indigo-100 sm:text-base">
@@ -107,7 +107,7 @@ export default function ContactPage() {
 
               <p className="mt-2 text-sm leading-6 text-gray-600">
                 Our support team is available to assist you
-                with your Brainfriend Tech account and
+                with your Brainfriend Global Tech account and
                 transactions.
               </p>
             </div>
@@ -383,7 +383,7 @@ export default function ContactPage() {
           <p className="mx-auto mt-2 max-w-xl text-sm text-gray-600">
             Buy airtime, data, pay electricity bills, renew
             cable subscriptions and purchase exam PINs from
-            your Brainfriend Tech account.
+            your Brainfriend Global Tech account.
           </p>
 
           <Link

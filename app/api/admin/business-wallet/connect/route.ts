@@ -206,11 +206,11 @@ export async function POST(request: Request) {
     const businessWallet =
       await prisma.businessWallet.upsert({
         where: {
-          name: "Brainfriend Tech",
+          name: "Brainfriend Global Tech",
         },
 
         create: {
-          name: "Brainfriend Tech",
+          name: "Brainfriend Global Tech",
           recipientCode,
           totalRevenue: 0,
           totalCost: 0,
