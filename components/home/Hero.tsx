@@ -14,7 +14,7 @@ export default function Hero() {
         <div className="max-w-3xl">
           <h1
             id="hero-heading"
-            className="mb-6 text-5xl font-bold text-white"
+            className="mb-6 text-4xl font-bold text-white"
           >
             Fast & Reliable NIN Verification/VTU Services in Nigeria
           </h1>
