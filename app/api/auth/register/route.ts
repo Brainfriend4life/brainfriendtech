@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
@@ -12,11 +13,8 @@ export async function POST(req: Request) {
       email,
       phone,
       password,
+      referralCode,
     } = body;
-
-    // -----------------------------
-    // VALIDATION
-    // -----------------------------
 
     if (
       !fullName ||
@@ -36,11 +34,14 @@ export async function POST(req: Request) {
       .trim()
       .toLowerCase();
 
-    const normalizedFullName =
-      String(fullName).trim();
+    const normalizedFullName = String(fullName).trim();
 
-    const normalizedPhone =
-      String(phone).trim();
+    const normalizedPhone = String(phone).trim();
+
+    const normalizedReferralCode =
+      referralCode
+        ? String(referralCode).trim().toUpperCase()
+        : null;
 
     if (password.length < 6) {
       return NextResponse.json(
@@ -51,10 +52,6 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-
-    // -----------------------------
-    // CHECK EXISTING USER
-    // -----------------------------
 
     const existingUser =
       await prisma.user.findFirst({
@@ -79,51 +76,79 @@ export async function POST(req: Request) {
       );
     }
 
-    // -----------------------------
-    // HASH PASSWORD
-    // -----------------------------
+    // Find referrer if referral code was supplied
+    let referrerId: string | null = null;
+
+    if (normalizedReferralCode) {
+      const referrer =
+        await prisma.user.findUnique({
+          where: {
+            referralCode: normalizedReferralCode,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+      if (!referrer) {
+        return NextResponse.json(
+          {
+            message: "Invalid referral code.",
+          },
+          { status: 400 }
+        );
+      }
+
+      referrerId = referrer.id;
+    }
 
     const hashedPassword =
       await bcrypt.hash(password, 10);
-
-    // -----------------------------
-    // OPTIONAL VERIFICATION TOKEN
-    //
-    // We keep generating these so the
-    // verification system can be enabled
-    // later without changing the database.
-    // -----------------------------
 
     const verificationToken =
       crypto.randomBytes(32).toString("hex");
 
     const verificationExpires =
       new Date(
-        Date.now() +
-          30 * 60 * 1000
+        Date.now() + 30 * 60 * 1000
       );
 
-    // -----------------------------
-    // CREATE USER
-    // -----------------------------
+    // Generate unique referral code
+    let generatedReferralCode = "";
+
+    do {
+      generatedReferralCode =
+        `BF${crypto
+          .randomBytes(5)
+          .toString("hex")
+          .toUpperCase()}`;
+    } while (
+      await prisma.user.findUnique({
+        where: {
+          referralCode: generatedReferralCode,
+        },
+        select: {
+          id: true,
+        },
+      })
+    );
 
     const user =
       await prisma.user.create({
         data: {
-          fullName:
-            normalizedFullName,
+          fullName: normalizedFullName,
+          email: normalizedEmail,
+          phone: normalizedPhone,
+          password: hashedPassword,
 
-          email:
-            normalizedEmail,
+          walletBalance: 0,
+          referralBalance: 0,
 
-          phone:
-            normalizedPhone,
+          referralCode:
+            generatedReferralCode,
 
-          password:
-            hashedPassword,
+          referredById: referrerId,
 
-          // Email verification is
-          // temporarily disabled.
           emailVerified: true,
 
           emailVerificationToken:
@@ -138,37 +163,31 @@ export async function POST(req: Request) {
           fullName: true,
           email: true,
           phone: true,
+          referralCode: true,
+          referredById: true,
           emailVerified: true,
         },
       });
 
-    // -----------------------------
-    // SUCCESS
-    // -----------------------------
-
     return NextResponse.json(
       {
         success: true,
-
         message:
           "Account created successfully. You can now log in.",
-
         email: user.email,
+        referralCode: user.referralCode,
       },
       { status: 201 }
     );
   } catch (error) {
-    console.error(
-      "REGISTER ERROR:",
-      error
-    );
+    console.error("REGISTER ERROR:", error);
 
     return NextResponse.json(
       {
-        message:
-          "Something went wrong",
+        message: "Something went wrong",
       },
       { status: 500 }
     );
   }
 }
+

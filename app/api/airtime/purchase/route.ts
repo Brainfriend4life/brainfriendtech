@@ -8,9 +8,11 @@ const CHEAPDATAHUB_API_URL =
   "https://www.cheapdatahub.ng/api/v1/resellers/airtime/purchase/";
 
 const SERVICE_FEE_SETTING_KEY = "SERVICE_FEE_AIRTIME";
+const REFERRAL_COMMISSION_SETTING_KEY =
+  "REFERRAL_COMMISSION_AIRTIME";
 
-// Airtime service fee is now 0% by default.
 const DEFAULT_SERVICE_FEE_PERCENTAGE = 0;
+const DEFAULT_REFERRAL_COMMISSION_PERCENTAGE = 1;
 
 export async function POST(request: NextRequest) {
   let transactionId: string | null = null;
@@ -71,14 +73,6 @@ export async function POST(request: NextRequest) {
 
     const numericAmount = Number(amount);
 
-    /*
-     * Your website minimum is ₦100.
-     *
-     * NOTE:
-     * CheapDataHub may still require a higher minimum.
-     * If CheapDataHub requires ₦100, a ₦50 purchase will
-     * still be rejected by their API.
-     */
     if (
       !Number.isFinite(numericAmount) ||
       numericAmount < 100
@@ -86,13 +80,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Minimum airtime purchase is ₦50.",
+          error: "Minimum airtime purchase is ₦100.",
         },
         { status: 400 }
       );
     }
 
-    // Airtime should be sent as a whole naira amount.
+    if (numericAmount > 50000) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Maximum airtime purchase is ₦50,000.",
+        },
+        { status: 400 }
+      );
+    }
+
     const airtimeAmount = Math.round(numericAmount);
 
     if (airtimeAmount <= 0) {
@@ -112,7 +116,8 @@ export async function POST(request: NextRequest) {
     const cleanedPhone = String(phoneNumber)
       .trim()
       .replace(/\s+/g, "")
-      .replace(/^\+234/, "0");
+      .replace(/^\+234/, "0")
+      .replace(/^234/, "0");
 
     if (!/^0\d{10}$/.test(cleanedPhone)) {
       return NextResponse.json(
@@ -126,12 +131,22 @@ export async function POST(request: NextRequest) {
     }
 
     // =====================================================
-    // 5. FIND USER
+    // 5. FIND USER + REFERRER
     // =====================================================
 
     const user = await prisma.user.findUnique({
       where: {
         id: userId,
+      },
+      include: {
+        referredBy: {
+          select: {
+            id: true,
+            fullName: true,
+            referralCode: true,
+            referralBalance: true,
+          },
+        },
       },
     });
 
@@ -205,18 +220,50 @@ export async function POST(request: NextRequest) {
         DEFAULT_SERVICE_FEE_PERCENTAGE;
     }
 
-    // Prevent unreasonable settings.
     if (feePercentage > 100) {
       feePercentage = 100;
     }
 
+    // =====================================================
+    // 9. GET REFERRAL COMMISSION
+    // =====================================================
+
+    const referralSetting =
+      await prisma.systemSetting.findUnique({
+        where: {
+          key: REFERRAL_COMMISSION_SETTING_KEY,
+        },
+      });
+
+    let referralPercentage =
+      referralSetting?.value !== undefined
+        ? Number(referralSetting.value)
+        : DEFAULT_REFERRAL_COMMISSION_PERCENTAGE;
+
+    if (
+      !Number.isFinite(referralPercentage) ||
+      referralPercentage < 0
+    ) {
+      referralPercentage =
+        DEFAULT_REFERRAL_COMMISSION_PERCENTAGE;
+    }
+
+    if (referralPercentage > 100) {
+      referralPercentage = 100;
+    }
+
     console.log(
       "AIRTIME SERVICE FEE:",
-      feePercentage + "%"
+      `${feePercentage}%`
+    );
+
+    console.log(
+      "AIRTIME REFERRAL COMMISSION:",
+      `${referralPercentage}%`
     );
 
     // =====================================================
-    // 9. CALCULATE CUSTOMER CHARGE
+    // 10. CALCULATE CUSTOMER CHARGE
     // =====================================================
 
     const serviceFee =
@@ -229,23 +276,13 @@ export async function POST(request: NextRequest) {
 
     chargedAmount = totalAmount;
 
-    /*
-     * With 0% service fee:
-     *
-     * Airtime = ₦100
-     * Service fee = ₦0
-     * Customer pays = ₦100
-     *
-     * CheapDataHub receives = ₦100
-     */
-
     const expectedProfit =
       Math.round(
         (totalAmount - airtimeAmount) * 100
       ) / 100;
 
     // =====================================================
-    // 10. CREATE PENDING TRANSACTION
+    // 11. CREATE PENDING TRANSACTION
     // =====================================================
 
     const reference =
@@ -258,22 +295,14 @@ export async function POST(request: NextRequest) {
       await prisma.transaction.create({
         data: {
           userId: user.id,
-
           type: "AIRTIME",
-
           amount: totalAmount,
-
           description:
             `Airtime purchase of ₦${airtimeAmount} for ${cleanedPhone}`,
-
           status: "PENDING",
-
           reference,
-
           provider: "CheapDataHub",
-
           cost: airtimeAmount,
-
           profit: expectedProfit,
         },
       });
@@ -281,21 +310,18 @@ export async function POST(request: NextRequest) {
     transactionId = transaction.id;
 
     // =====================================================
-    // 11. ATOMICALLY DEDUCT USER WALLET
+    // 12. ATOMICALLY DEDUCT USER WALLET
     // =====================================================
 
     const walletDebit =
       await prisma.user.updateMany({
         where: {
           id: user.id,
-
           status: "ACTIVE",
-
           walletBalance: {
             gte: totalAmount,
           },
         },
-
         data: {
           walletBalance: {
             decrement: totalAmount,
@@ -308,7 +334,6 @@ export async function POST(request: NextRequest) {
         where: {
           id: transaction.id,
         },
-
         data: {
           status: "FAILED",
         },
@@ -324,21 +349,8 @@ export async function POST(request: NextRequest) {
     }
 
     // =====================================================
-    // 12. CALL CHEAPDATAHUB
+    // 13. CALL CHEAPDATAHUB
     // =====================================================
-
-    /*
-     * IMPORTANT:
-     *
-     * We send ONLY the airtime amount to CheapDataHub.
-     *
-     * Example:
-     *
-     * Customer requests ₦100
-     * Fee = 0%
-     * Customer pays ₦100
-     * CheapDataHub receives ₦100
-     */
 
     const providerRequestBody = {
       provider_id: Number(providerId),
@@ -366,22 +378,14 @@ export async function POST(request: NextRequest) {
         CHEAPDATAHUB_API_URL,
         {
           method: "POST",
-
           headers: {
-            Authorization:
-              `Bearer ${apiKey}`,
-
-            "Content-Type":
-              "application/json",
-
-            Accept:
-              "application/json",
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
           },
-
           body: JSON.stringify(
             providerRequestBody
           ),
-
           cache: "no-store",
         }
       );
@@ -404,22 +408,21 @@ export async function POST(request: NextRequest) {
     );
 
     // =====================================================
-    // 13. PARSE PROVIDER RESPONSE
+    // 14. PARSE PROVIDER RESPONSE
     // =====================================================
 
     let providerResult: any = null;
 
     try {
-      providerResult =
-        responseText.trim()
-          ? JSON.parse(responseText)
-          : null;
+      providerResult = responseText.trim()
+        ? JSON.parse(responseText)
+        : null;
     } catch {
       providerResult = null;
     }
 
     // =====================================================
-    // 14. HANDLE INVALID RESPONSE
+    // 15. INVALID PROVIDER RESPONSE
     // =====================================================
 
     if (!providerResult) {
@@ -428,7 +431,6 @@ export async function POST(request: NextRequest) {
           where: {
             id: user.id,
           },
-
           data: {
             walletBalance: {
               increment: totalAmount,
@@ -440,12 +442,9 @@ export async function POST(request: NextRequest) {
           where: {
             id: transaction.id,
           },
-
           data: {
             status: "FAILED",
-
             cost: 0,
-
             profit: 0,
           },
         }),
@@ -454,10 +453,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-
           error:
             "CheapDataHub returned an invalid response.",
-
           providerStatus:
             providerResponse.status,
         },
@@ -466,7 +463,7 @@ export async function POST(request: NextRequest) {
     }
 
     // =====================================================
-    // 15. DETERMINE PROVIDER SUCCESS
+    // 16. DETERMINE PROVIDER SUCCESS
     // =====================================================
 
     const providerStatus =
@@ -474,17 +471,13 @@ export async function POST(request: NextRequest) {
 
     const providerSuccess =
       providerResult.success === true ||
-
       providerStatus === true ||
-
       providerStatus === "true" ||
-
       providerStatus === "success" ||
-
       providerStatus === "successful";
 
     // =====================================================
-    // 16. PROVIDER FAILED
+    // 17. PROVIDER FAILED
     // =====================================================
 
     if (
@@ -496,25 +489,16 @@ export async function POST(request: NextRequest) {
         {
           httpStatus:
             providerResponse.status,
-
-          response:
-            providerResult,
-
-          request:
-            providerRequestBody,
+          response: providerResult,
+          request: providerRequestBody,
         }
       );
-
-      /*
-       * Refund the FULL amount charged.
-       */
 
       await prisma.$transaction([
         prisma.user.update({
           where: {
             id: user.id,
           },
-
           data: {
             walletBalance: {
               increment: totalAmount,
@@ -526,12 +510,9 @@ export async function POST(request: NextRequest) {
           where: {
             id: transaction.id,
           },
-
           data: {
             status: "FAILED",
-
             cost: 0,
-
             profit: 0,
           },
         }),
@@ -540,15 +521,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-
           error:
             providerResult.message ||
             providerResult.error ||
             "Airtime purchase failed.",
-
-          providerResponse:
-            providerResult,
-
+          providerResponse: providerResult,
           providerStatus:
             providerResponse.status,
         },
@@ -557,43 +534,74 @@ export async function POST(request: NextRequest) {
     }
 
     // =====================================================
-    // 17. PROVIDER SUCCESS
+    // 18. PROVIDER SUCCESS
     // =====================================================
 
-    /*
-     * CheapDataHub does not provide a separate
-     * provider cost for airtime.
-     *
-     * Therefore:
-     *
-     * Customer pays:
-     * airtime + service fee
-     *
-     * Provider receives:
-     * airtime
-     *
-     * Business profit:
-     * service fee
-     *
-     * Since fee is currently 0%:
-     * business profit = ₦0
-     */
+    const actualCost = airtimeAmount;
 
-    const actualCost =
-      airtimeAmount;
-
-    const actualProfit =
+    const grossProfit =
       Math.round(
         (totalAmount - actualCost) * 100
       ) / 100;
 
     // =====================================================
-    // 18. GET / CREATE BUSINESS WALLET
+    // 19. CALCULATE REFERRAL COMMISSION
+    // =====================================================
+
+    let referralCommission = 0;
+
+    if (
+      user.referredBy &&
+      grossProfit > 0 &&
+      referralPercentage > 0
+    ) {
+      const calculatedCommission =
+        Math.round(
+          (
+            airtimeAmount *
+            (referralPercentage / 100)
+          ) * 100
+        ) / 100;
+
+      // Never allow referral commission
+      // to exceed the business profit.
+      referralCommission =
+        Math.min(
+          calculatedCommission,
+          grossProfit
+        );
+    }
+
+    // Business profit after referral commission.
+    const actualProfit =
+      Math.round(
+        (grossProfit - referralCommission) * 100
+      ) / 100;
+
+    console.log(
+      "AIRTIME REFERRAL:",
+      {
+        referredUser: user.id,
+        referrer:
+          user.referredBy?.id ?? null,
+        grossProfit,
+        referralPercentage,
+        referralCommission,
+        businessProfit: actualProfit,
+      }
+    );
+
+    // =====================================================
+    // 20. BUSINESS WALLET + REFERRAL
     // =====================================================
 
     const result =
       await prisma.$transaction(
         async (tx) => {
+          // -----------------------------------------------
+          // GET / CREATE BUSINESS WALLET
+          // -----------------------------------------------
+
           let businessWallet =
             await tx.businessWallet.findUnique({
               where: {
@@ -608,30 +616,23 @@ export async function POST(request: NextRequest) {
                 data: {
                   name:
                     "Brainfriend Global Tech",
-
                   balance: 0,
-
                   totalRevenue: 0,
-
                   totalCost: 0,
-
                   totalProfit: 0,
-
                   withdrawnProfit: 0,
-
                   availableProfit: 0,
                 },
               });
           }
 
-          // =================================================
-          // BUSINESS WALLET
-          // =================================================
+          // -----------------------------------------------
+          // BUSINESS WALLET VALUES
+          // -----------------------------------------------
 
           const newBusinessBalance =
-            Number(
-              businessWallet.balance
-            ) + actualProfit;
+            Number(businessWallet.balance) +
+            actualProfit;
 
           const newTotalRevenue =
             Number(
@@ -653,122 +654,154 @@ export async function POST(request: NextRequest) {
               businessWallet.availableProfit
             ) + actualProfit;
 
-          // =================================================
+          // -----------------------------------------------
           // UPDATE TRANSACTION
-          // =================================================
+          // -----------------------------------------------
 
           await tx.transaction.update({
             where: {
               id: transaction.id,
             },
-
             data: {
               status: "SUCCESS",
-
               cost: actualCost,
-
               profit: actualProfit,
-
               description:
                 `Airtime purchase of ₦${airtimeAmount} + ${feePercentage}% service fee for ${cleanedPhone}`,
             },
           });
 
-          // =================================================
+          // -----------------------------------------------
           // UPDATE BUSINESS WALLET
-          // =================================================
+          // -----------------------------------------------
 
           await tx.businessWallet.update({
             where: {
-              id:
-                businessWallet.id,
+              id: businessWallet.id,
             },
-
             data: {
-              balance:
-                newBusinessBalance,
-
-              totalRevenue:
-                newTotalRevenue,
-
-              totalCost:
-                newTotalCost,
-
-              totalProfit:
-                newTotalProfit,
-
+              balance: newBusinessBalance,
+              totalRevenue: newTotalRevenue,
+              totalCost: newTotalCost,
+              totalProfit: newTotalProfit,
               availableProfit:
                 newAvailableProfit,
             },
           });
 
-          // =================================================
+          // -----------------------------------------------
           // CREATE BUSINESS REVENUE
-          // =================================================
+          // -----------------------------------------------
 
           await tx.businessRevenue.create({
             data: {
-              transactionId:
-                transaction.id,
-
-              type:
-                "AIRTIME",
-
-              provider:
-                "CheapDataHub",
-
-              amount:
-                totalAmount,
-
-              cost:
-                actualCost,
-
-              profit:
-                actualProfit,
-
+              transactionId: transaction.id,
+              type: "AIRTIME",
+              provider: "CheapDataHub",
+              amount: totalAmount,
+              cost: actualCost,
+              profit: actualProfit,
               reference,
-
               description:
                 `Airtime ₦${airtimeAmount} for ${cleanedPhone} + ${feePercentage}% service fee`,
-
               businessWalletId:
                 businessWallet.id,
             },
           });
 
-          // =================================================
+          // -----------------------------------------------
+          // PAY REFERRER
+          // -----------------------------------------------
+
+          if (
+            user.referredBy &&
+            referralCommission > 0
+          ) {
+            await tx.user.update({
+              where: {
+                id: user.referredBy.id,
+              },
+              data: {
+                referralBalance: {
+                  increment:
+                    referralCommission,
+                },
+              },
+            });
+
+            await tx.referralEarning.create({
+              data: {
+                referrerId:
+                  user.referredBy.id,
+
+                referredUserId:
+                  user.id,
+
+                transactionId:
+                  transaction.id,
+
+                amount:
+                  referralCommission,
+
+                percentage:
+                  referralPercentage,
+
+                transactionAmount:
+                  airtimeAmount,
+
+                type: "AIRTIME",
+
+                status: "SUCCESS",
+
+                description:
+                  `Referral earning from ${user.fullName}'s airtime purchase of ₦${airtimeAmount}`,
+
+                reference:
+                  `REF-${reference}`,
+              },
+            });
+          }
+
+          // -----------------------------------------------
           // GET UPDATED USER BALANCE
-          // =================================================
+          // -----------------------------------------------
 
           const updatedUser =
             await tx.user.findUnique({
               where: {
                 id: user.id,
               },
-
               select: {
                 walletBalance: true,
+                referralBalance: true,
               },
             });
 
           return {
             walletBalance:
               Number(
-                updatedUser?.walletBalance ??
-                  0
+                updatedUser?.walletBalance ?? 0
+              ),
+
+            referralBalance:
+              Number(
+                updatedUser?.referralBalance ?? 0
               ),
 
             businessBalance:
               newBusinessBalance,
 
-            profit:
-              actualProfit,
+            grossProfit,
+
+            referralCommission,
+
+            profit: actualProfit,
           };
         }
       );
 
     // =====================================================
-    // 19. SUCCESS RESPONSE
+    // 21. SUCCESS RESPONSE
     // =====================================================
 
     return NextResponse.json({
@@ -786,33 +819,34 @@ export async function POST(request: NextRequest) {
         providerResult.transactionId ||
         null,
 
-      phoneNumber:
-        cleanedPhone,
+      phoneNumber: cleanedPhone,
 
-      // Airtime value
-      amount:
-        airtimeAmount,
+      amount: airtimeAmount,
 
-      // Service fee
       serviceFee:
         Math.round(
-          (totalAmount -
-            airtimeAmount) * 100
+          (totalAmount - airtimeAmount) * 100
         ) / 100,
 
       feePercentage,
 
-      // What customer actually paid
       totalAmount,
 
-      providerCost:
-        actualCost,
+      providerCost: actualCost,
 
-      profit:
-        result.profit,
+      grossProfit:
+        result.grossProfit,
+
+      referralCommission:
+        result.referralCommission,
+
+      profit: result.profit,
 
       walletBalance:
         result.walletBalance,
+
+      referralBalance:
+        result.referralBalance,
     });
   } catch (error: any) {
     console.error(
@@ -821,7 +855,7 @@ export async function POST(request: NextRequest) {
     );
 
     // =====================================================
-    // 20. ERROR RECOVERY
+    // 22. ERROR RECOVERY
     // =====================================================
 
     if (transactionId) {
@@ -833,15 +867,9 @@ export async function POST(request: NextRequest) {
             },
           });
 
-        /*
-         * If transaction is still pending,
-         * refund the wallet.
-         */
-
         if (
           transaction &&
-          transaction.status ===
-            "PENDING" &&
+          transaction.status === "PENDING" &&
           userId &&
           chargedAmount > 0
         ) {
@@ -850,11 +878,9 @@ export async function POST(request: NextRequest) {
               where: {
                 id: userId,
               },
-
               data: {
                 walletBalance: {
-                  increment:
-                    chargedAmount,
+                  increment: chargedAmount,
                 },
               },
             }),
@@ -863,12 +889,9 @@ export async function POST(request: NextRequest) {
               where: {
                 id: transactionId,
               },
-
               data: {
                 status: "FAILED",
-
                 cost: 0,
-
                 profit: 0,
               },
             }),
@@ -885,7 +908,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-
         error:
           error?.message ||
           "Airtime purchase failed.",

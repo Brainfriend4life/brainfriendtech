@@ -15,10 +15,13 @@ import {
   prisma,
 } from "@/lib/prisma";
 
+import {
+  getServiceFeePercent,
+  calculateServiceFee,
+} from "@/lib/service-fee";
+
 const CHEAPDATAHUB_EXAM_PIN_URL =
   "https://www.cheapdatahub.ng/api/v1/resellers/exam-pin/purchase/";
-
-const DEFAULT_SERVICE_FEE_PERCENTAGE = 5;
 
 function generateReference() {
   return `EXAMPIN-${Date.now()}-${Math.random()
@@ -49,7 +52,9 @@ const EXAM_PRODUCTS: Record<number, ExamProduct> = {
   },
 };
 
-function isProviderSuccessful(result: any): boolean {
+function isProviderSuccessful(
+  result: any
+): boolean {
   return (
     result?.status === true ||
     result?.status === "true" ||
@@ -103,70 +108,8 @@ function extractPins(
       };
     })
     .filter(
-      (item: {
-        pin: string;
-        serial: string;
-      }) => Boolean(item.pin)
+      (item) => Boolean(item.pin)
     );
-}
-
-/*
- * ============================================================
- * GET SERVICE FEE
- * ============================================================
- *
- * The admin service-fee setting is now used here.
- *
- * Supported database keys:
- *
- * SERVICE_FEE_PERCENT
- * DATA_SERVICE_FEE_PERCENTAGE
- * SERVICE_FEE_PERCENTAGE
- * SERVICE_FEE
- *
- * SERVICE_FEE_PERCENT is checked first because that is the
- * setting currently being created by your admin service-fees
- * page.
- */
-async function getServiceFeePercentage(): Promise<number> {
-  try {
-    const setting =
-      await prisma.systemSetting.findFirst({
-        where: {
-          key: {
-            in: [
-              "SERVICE_FEE_PERCENT",
-              "DATA_SERVICE_FEE_PERCENTAGE",
-              "SERVICE_FEE_PERCENTAGE",
-              "SERVICE_FEE",
-            ],
-          },
-        },
-
-        orderBy: {
-          updatedAt: "desc",
-        },
-      });
-
-    if (setting) {
-      const parsedFee = Number(setting.value);
-
-      if (
-        Number.isFinite(parsedFee) &&
-        parsedFee >= 0 &&
-        parsedFee <= 100
-      ) {
-        return parsedFee;
-      }
-    }
-  } catch (error) {
-    console.error(
-      "EXAM PIN SERVICE FEE SETTING ERROR:",
-      error
-    );
-  }
-
-  return DEFAULT_SERVICE_FEE_PERCENTAGE;
 }
 
 export async function POST(
@@ -214,7 +157,9 @@ export async function POST(
 
     if (
       productId === undefined ||
-      quantity === undefined
+      productId === null ||
+      quantity === undefined ||
+      quantity === null
     ) {
       return NextResponse.json(
         {
@@ -229,14 +174,11 @@ export async function POST(
     }
 
     // ========================================================
-    // VALIDATION
+    // VALIDATE PRODUCT ID
     // ========================================================
 
     const numericProductId =
       Number(productId);
-
-    const numericQuantity =
-      Number(quantity);
 
     if (
       !Number.isInteger(
@@ -255,6 +197,13 @@ export async function POST(
         }
       );
     }
+
+    // ========================================================
+    // VALIDATE QUANTITY
+    // ========================================================
+
+    const numericQuantity =
+      Number(quantity);
 
     if (
       !Number.isInteger(
@@ -277,7 +226,7 @@ export async function POST(
     }
 
     // ========================================================
-    // PRODUCT
+    // FIND EXAM PRODUCT
     // ========================================================
 
     const product =
@@ -317,28 +266,9 @@ export async function POST(
       );
     }
 
-    /*
-     * ========================================================
-     * SERVICE FEE
-     * ========================================================
-     *
-     * Example:
-     *
-     * WAEC = ₦6,000
-     * Service fee = 5%
-     *
-     * Fee = ₦300
-     * Customer pays = ₦6,300
-     *
-     * For quantity 2:
-     *
-     * Base = ₦12,000
-     * Fee = ₦600
-     * Customer pays = ₦12,600
-     */
-
-    const serviceFeePercentage =
-      await getServiceFeePercentage();
+    // ========================================================
+    // BASE AMOUNT
+    // ========================================================
 
     const baseAmount =
       Number(
@@ -348,21 +278,49 @@ export async function POST(
         ).toFixed(2)
       );
 
-    const serviceFee =
-      Number(
-        (
-          baseAmount *
-          (serviceFeePercentage / 100)
-        ).toFixed(2)
+    // ========================================================
+    // CONFIGURABLE SERVICE FEE
+    // ========================================================
+    //
+    // This gets the percentage configured from the
+    // admin service-fee setting.
+    //
+    // Example:
+    //
+    // Admin setting = 5%
+    // WAEC = ₦6,000
+    //
+    // Provider cost = ₦6,000
+    // Service fee = ₦300
+    // Customer pays = ₦6,300
+    //
+    // If admin changes it to 10%:
+    //
+    // Provider cost = ₦6,000
+    // Service fee = ₦600
+    // Customer pays = ₦6,600
+    //
+
+    const serviceFeePercent =
+      await getServiceFeePercent();
+
+    const pricing =
+      calculateServiceFee(
+        baseAmount,
+        serviceFeePercent
       );
 
+    const providerCost =
+      pricing.providerCost;
+
+    const serviceFee =
+      pricing.serviceFee;
+
     const totalAmount =
-      Number(
-        (
-          baseAmount +
-          serviceFee
-        ).toFixed(2)
-      );
+      pricing.totalAmount;
+
+    const profit =
+      pricing.profit;
 
     // ========================================================
     // FIND USER
@@ -388,6 +346,10 @@ export async function POST(
       );
     }
 
+    // ========================================================
+    // ACCOUNT STATUS
+    // ========================================================
+
     if (
       user.status !== "ACTIVE"
     ) {
@@ -402,6 +364,10 @@ export async function POST(
         }
       );
     }
+
+    // ========================================================
+    // WALLET BALANCE
+    // ========================================================
 
     const walletBalance =
       Number(
@@ -444,9 +410,13 @@ export async function POST(
 
           baseAmount,
 
-          serviceFeePercentage,
+          providerCost,
+
+          serviceFeePercent,
 
           serviceFee,
+
+          totalAmount,
         },
         {
           status: 400,
@@ -476,7 +446,7 @@ export async function POST(
     }
 
     // ========================================================
-    // REFERENCE
+    // GENERATE REFERENCE
     // ========================================================
 
     const reference =
@@ -495,6 +465,10 @@ export async function POST(
           type:
             "EXAM_PIN",
 
+          /*
+           * Amount is what the customer pays,
+           * including the service fee.
+           */
           amount:
             totalAmount,
 
@@ -510,15 +484,15 @@ export async function POST(
             "CheapDataHub",
 
           /*
-           * Provider cost is kept as the actual base amount.
-           * The service fee increases customer payment and
-           * therefore increases business profit.
+           * Actual amount paid to provider.
            */
           cost:
-            baseAmount,
+            providerCost,
 
-          profit:
-            serviceFee,
+          /*
+           * Our profit is the service fee.
+           */
+          profit,
 
           isTest:
             false,
@@ -533,10 +507,11 @@ export async function POST(
     // ========================================================
     //
     // IMPORTANT:
+    //
     // The service fee is NOT sent to CheapDataHub.
     //
-    // CheapDataHub receives the original product quantity.
-    // The customer pays totalAmount from the wallet.
+    // CheapDataHub receives only the actual product
+    // request.
     //
 
     const requestBody = {
@@ -566,13 +541,28 @@ export async function POST(
     );
 
     console.log(
+      "EXAM:",
+      product.examName
+    );
+
+    console.log(
+      "QUANTITY:",
+      numericQuantity
+    );
+
+    console.log(
       "BASE AMOUNT:",
       baseAmount
     );
 
     console.log(
-      "SERVICE FEE PERCENTAGE:",
-      serviceFeePercentage
+      "PROVIDER COST:",
+      providerCost
+    );
+
+    console.log(
+      "SERVICE FEE PERCENT:",
+      serviceFeePercent
     );
 
     console.log(
@@ -586,6 +576,11 @@ export async function POST(
     );
 
     console.log(
+      "EXPECTED PROFIT:",
+      profit
+    );
+
+    console.log(
       "API KEY EXISTS:",
       Boolean(apiKey)
     );
@@ -593,6 +588,10 @@ export async function POST(
     console.log(
       "=========================================="
     );
+
+    // ========================================================
+    // CALL CHEAPDATAHUB
+    // ========================================================
 
     const providerResponse =
       await fetch(
@@ -635,7 +634,7 @@ export async function POST(
     );
 
     // ========================================================
-    // PARSE RESPONSE
+    // PARSE PROVIDER RESPONSE
     // ========================================================
 
     let providerResult:
@@ -674,6 +673,12 @@ export async function POST(
 
           providerStatus:
             providerResponse.status,
+
+          providerResponse:
+            responseText.substring(
+              0,
+              500
+            ),
         },
         {
           status: 502,
@@ -682,7 +687,7 @@ export async function POST(
     }
 
     // ========================================================
-    // PROVIDER SUCCESS
+    // PROVIDER SUCCESS CHECK
     // ========================================================
 
     const providerSuccess =
@@ -744,7 +749,7 @@ export async function POST(
       );
 
     // ========================================================
-    // VERIFY DELIVERY
+    // VERIFY PIN DELIVERY
     // ========================================================
 
     if (
@@ -786,17 +791,28 @@ export async function POST(
     }
 
     // ========================================================
-    // ATOMIC PAYMENT
+    // ATOMIC ACCOUNTING
     // ========================================================
 
     const finalResult =
       await prisma.$transaction(
         async (tx) => {
+          // ==================================================
+          // GET FRESH USER
+          // ==================================================
+
           const freshUser =
             await tx.user.findUnique({
               where: {
                 id:
                   user.id,
+              },
+
+              select: {
+                id: true,
+
+                walletBalance:
+                  true,
               },
             });
 
@@ -814,14 +830,25 @@ export async function POST(
           if (
             !Number.isFinite(
               freshBalance
-            ) ||
+            )
+          ) {
+            throw new Error(
+              "Invalid wallet balance."
+            );
+          }
+
+          if (
             freshBalance <
-              totalAmount
+            totalAmount
           ) {
             throw new Error(
               "Insufficient wallet balance."
             );
           }
+
+          // ==================================================
+          // BUSINESS WALLET
+          // ==================================================
 
           const businessWallet =
             await tx.businessWallet.upsert({
@@ -856,7 +883,11 @@ export async function POST(
               },
             });
 
-          const newBalance =
+          // ==================================================
+          // CALCULATE NEW USER BALANCE
+          // ==================================================
+
+          const newUserBalance =
             Number(
               (
                 freshBalance -
@@ -864,20 +895,24 @@ export async function POST(
               ).toFixed(2)
             );
 
-          /*
-           * Revenue = what customer actually paid.
-           *
-           * Cost = original exam PIN price.
-           *
-           * Profit = service fee.
-           */
+          // ==================================================
+          // BUSINESS ACCOUNTING
+          // ==================================================
+          //
+          // Revenue = customer payment
+          //
+          // Cost = provider cost
+          //
+          // Profit = service fee
+          //
+
           const revenue =
             totalAmount;
 
           const cost =
-            baseAmount;
+            providerCost;
 
-          const profit =
+          const businessProfit =
             Number(
               (
                 revenue -
@@ -885,39 +920,9 @@ export async function POST(
               ).toFixed(2)
             );
 
-          await tx.user.update({
-            where: {
-              id:
-                user.id,
-            },
-
-            data: {
-              walletBalance:
-                newBalance,
-            },
-          });
-
-          await tx.transaction.update({
-            where: {
-              id:
-                transaction.id,
-            },
-
-            data: {
-              status:
-                "SUCCESS",
-
-              amount:
-                revenue,
-
-              cost,
-
-              profit,
-
-              isTest:
-                false,
-            },
-          });
+          // ==================================================
+          // NEW BUSINESS VALUES
+          // ==================================================
 
           const newBusinessBalance =
             Number(
@@ -955,7 +960,7 @@ export async function POST(
                 Number(
                   businessWallet.totalProfit
                 ) +
-                profit
+                businessProfit
               ).toFixed(2)
             );
 
@@ -965,9 +970,56 @@ export async function POST(
                 Number(
                   businessWallet.availableProfit
                 ) +
-                profit
+                businessProfit
               ).toFixed(2)
             );
+
+          // ==================================================
+          // UPDATE USER WALLET
+          // ==================================================
+
+          await tx.user.update({
+            where: {
+              id:
+                user.id,
+            },
+
+            data: {
+              walletBalance:
+                newUserBalance,
+            },
+          });
+
+          // ==================================================
+          // UPDATE TRANSACTION
+          // ==================================================
+
+          await tx.transaction.update({
+            where: {
+              id:
+                transaction.id,
+            },
+
+            data: {
+              status:
+                "SUCCESS",
+
+              amount:
+                revenue,
+
+              cost,
+
+              profit:
+                businessProfit,
+
+              isTest:
+                false,
+            },
+          });
+
+          // ==================================================
+          // UPDATE BUSINESS WALLET
+          // ==================================================
 
           await tx.businessWallet.update({
             where: {
@@ -993,6 +1045,10 @@ export async function POST(
             },
           });
 
+          // ==================================================
+          // CREATE BUSINESS REVENUE
+          // ==================================================
+
           await tx.businessRevenue.create({
             data: {
               transactionId:
@@ -1009,7 +1065,8 @@ export async function POST(
 
               cost,
 
-              profit,
+              profit:
+                businessProfit,
 
               reference,
 
@@ -1021,9 +1078,9 @@ export async function POST(
             },
           });
 
-          // ====================================================
-          // SAVE PINS
-          // ====================================================
+          // ==================================================
+          // SAVE EXAM PINS
+          // ==================================================
 
           for (
             const pin of pins.slice(
@@ -1031,6 +1088,37 @@ export async function POST(
               numericQuantity
             )
           ) {
+            const pinReference =
+              `${reference}-${Math.random()
+                .toString(36)
+                .substring(2, 8)
+                .toUpperCase()}`;
+
+            /*
+             * Each PIN receives its own customer price:
+             *
+             * Unit provider cost:
+             * ₦6,000
+             *
+             * 5% fee:
+             * ₦300
+             *
+             * Customer price:
+             * ₦6,300
+             */
+
+            const pinCustomerAmount =
+              Number(
+                (
+                  unitPrice +
+                  unitPrice *
+                    (
+                      serviceFeePercent /
+                      100
+                    )
+                ).toFixed(2)
+              );
+
             await tx.examPin.create({
               data: {
                 userId:
@@ -1046,31 +1134,17 @@ export async function POST(
                   pin.serial,
 
                 amount:
-                  Number(
-                    (
-                      unitPrice +
-                      (
-                        unitPrice *
-                        (
-                          serviceFeePercentage /
-                          100
-                        )
-                      )
-                    ).toFixed(2)
-                  ),
+                  pinCustomerAmount,
 
                 reference:
-                  `${reference}-${Math.random()
-                    .toString(36)
-                    .substring(2, 8)
-                    .toUpperCase()}`,
+                  pinReference,
               },
             });
           }
 
           return {
             walletBalance:
-              newBalance,
+              newUserBalance,
 
             businessBalance:
               newBusinessBalance,
@@ -1079,13 +1153,14 @@ export async function POST(
 
             cost,
 
-            profit,
+            profit:
+              businessProfit,
           };
         }
       );
 
     // ========================================================
-    // SUCCESS
+    // SUCCESS RESPONSE
     // ========================================================
 
     return NextResponse.json({
@@ -1110,11 +1185,16 @@ export async function POST(
 
       baseAmount,
 
-      serviceFeePercentage,
+      providerCost,
+
+      serviceFeePercent,
 
       serviceFee,
 
       totalAmount,
+
+      profit:
+        finalResult.profit,
 
       pins,
 
@@ -1130,6 +1210,19 @@ export async function POST(
       businessProfit:
         finalResult.profit,
 
+      plan: {
+        id:
+          numericProductId,
+
+        examName:
+          product.examName,
+
+        unitPrice,
+
+        quantity:
+          numericQuantity,
+      },
+
       providerResponse:
         providerResult,
     });
@@ -1138,6 +1231,10 @@ export async function POST(
       "EXAM PIN PURCHASE ERROR:",
       error
     );
+
+    // ========================================================
+    // MARK TRANSACTION FAILED
+    // ========================================================
 
     if (transactionId) {
       try {

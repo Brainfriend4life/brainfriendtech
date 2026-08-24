@@ -2,11 +2,12 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import axios from "axios";
 import Link from "next/link";
+import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import axios from "axios";
 import toast from "react-hot-toast";
+
 import {
   ArrowLeft,
   Check,
@@ -16,13 +17,17 @@ import {
   Mail,
   Phone,
   User,
-  Zap,
+  Gift,
 } from "lucide-react";
 
 import AuthButton from "@/components/auth/AuthButton";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const referralCode =
+    searchParams.get("ref")?.trim().toUpperCase() || "";
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -32,14 +37,20 @@ export default function RegisterPage() {
     email: "",
     phone: "",
     password: "",
+    referralCode,
   });
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
+    const { name, value } = e.target;
+
     setForm((current) => ({
       ...current,
-      [e.target.name]: e.target.value,
+      [name]:
+        name === "referralCode"
+          ? value.toUpperCase()
+          : value,
     }));
   };
 
@@ -75,6 +86,8 @@ export default function RegisterPage() {
           email: form.email.trim(),
           phone: form.phone.trim(),
           password: form.password,
+          referralCode:
+            form.referralCode.trim() || null,
         }
       );
 
@@ -102,23 +115,22 @@ export default function RegisterPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen flex-col lg:flex-row">
 
         {/* ================================================= */}
-        {/* LEFT BRAND PANEL - DESKTOP */}
+        {/* LEFT BRAND PANEL */}
         {/* ================================================= */}
 
-        <section className="relative hidden overflow-hidden bg-indigo-700 lg:flex lg:w-[44%]">
-          {/* Decorative circles */}
+        <section className="relative hidden overflow-hidden bg-indigo-700 lg:flex lg:w-[40%] xl:w-[42%]">
           <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-white/10" />
 
           <div className="absolute -bottom-40 -right-32 h-[30rem] w-[30rem] rounded-full bg-blue-400/20" />
 
           <div className="absolute right-20 top-1/3 h-32 w-32 rounded-full border border-white/10" />
 
-          <div className="relative z-10 flex w-full flex-col justify-between p-12 xl:p-16">
+          <div className="relative z-10 flex w-full flex-col justify-between p-10 xl:p-14">
 
-            {/* DESKTOP LOGO */}
+            {/* LOGO */}
             <Link
               href="/"
               className="group flex w-fit items-center gap-3"
@@ -146,7 +158,7 @@ export default function RegisterPage() {
             </Link>
 
             {/* BRAND CONTENT */}
-            <div className="max-w-md">
+            <div className="my-12 max-w-md">
               <p className="mb-5 text-sm font-semibold uppercase tracking-[0.2em] text-indigo-200">
                 Join Brainfriend
               </p>
@@ -164,7 +176,6 @@ export default function RegisterPage() {
                 services.
               </p>
 
-              {/* BENEFITS */}
               <div className="mt-9 space-y-4">
 
                 <div className="flex items-center gap-3">
@@ -197,10 +208,19 @@ export default function RegisterPage() {
                   </p>
                 </div>
 
+                <div className="flex items-center gap-3">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
+                    <Gift className="h-4 w-4 text-indigo-600" />
+                  </div>
+
+                  <p className="text-sm font-medium text-white">
+                    Earn rewards when friends use the platform
+                  </p>
+                </div>
+
               </div>
             </div>
 
-            {/* FOOTER */}
             <p className="text-sm text-indigo-200">
               © {new Date().getFullYear()} Brainfriend Global Tech
             </p>
@@ -208,16 +228,16 @@ export default function RegisterPage() {
         </section>
 
         {/* ================================================= */}
-        {/* RIGHT REGISTER AREA */}
+        {/* REGISTER AREA */}
         {/* ================================================= */}
 
-        <section className="flex w-full items-center justify-center px-4 py-8 sm:px-6 lg:w-[56%] lg:px-10 xl:px-16">
-          <div className="w-full max-w-lg">
+        <section className="flex w-full flex-1 items-center justify-center px-4 py-8 sm:px-6 md:px-8 lg:w-[60%] lg:px-10 xl:px-14 2xl:px-20">
 
-            {/* MOBILE TOP AREA */}
+          <div className="w-full max-w-2xl">
+
+            {/* MOBILE TOP */}
             <div className="mb-7 lg:hidden">
 
-              {/* BACK TO HOME */}
               <Link
                 href="/"
                 className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 transition hover:text-indigo-800"
@@ -226,8 +246,8 @@ export default function RegisterPage() {
                 Back to Home
               </Link>
 
-              {/* MOBILE LOGO */}
               <div className="mt-7 flex items-center gap-3">
+
                 <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-gray-100">
                   <Image
                     src="/logo.png"
@@ -248,11 +268,13 @@ export default function RegisterPage() {
                     TECH SERVICES
                   </p>
                 </div>
+
               </div>
             </div>
 
-            {/* DESKTOP BACK TO HOME */}
+            {/* DESKTOP BACK */}
             <div className="mb-7 hidden lg:block">
+
               <Link
                 href="/"
                 className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 transition hover:text-indigo-800"
@@ -260,10 +282,12 @@ export default function RegisterPage() {
                 <ArrowLeft className="h-4 w-4" />
                 Back to Home
               </Link>
+
             </div>
 
             {/* HEADING */}
             <div className="mb-7">
+
               <p className="mb-2 text-sm font-semibold text-indigo-600">
                 Get started
               </p>
@@ -272,18 +296,43 @@ export default function RegisterPage() {
                 Create your account
               </h2>
 
-              <p className="mt-3 max-w-md text-sm leading-6 text-gray-500">
-                Sign up in less than a minute and
-                start using Brainfriend Global Tech services.
+              <p className="mt-3 max-w-xl text-sm leading-6 text-gray-500 sm:text-base">
+                Sign up in less than a minute and start
+                using Brainfriend Global Tech services.
               </p>
+
+              {/* REFERRAL NOTICE */}
+              {form.referralCode && (
+                <div className="mt-4 flex items-start gap-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white">
+                    <Gift className="h-4 w-4 text-indigo-600" />
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-semibold text-indigo-700">
+                      You were invited to Brainfriend
+                    </p>
+
+                    <p className="mt-1 text-xs text-indigo-500">
+                      Referral code:{" "}
+                      <span className="font-bold">
+                        {form.referralCode}
+                      </span>
+                    </p>
+                  </div>
+
+                </div>
+              )}
+
             </div>
 
             {/* FORM CARD */}
-            <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-7">
+            <div className="w-full rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-7 lg:p-8">
 
               <form
                 onSubmit={handleSubmit}
-                className="space-y-4"
+                className="space-y-5"
               >
 
                 {/* FULL NAME */}
@@ -296,6 +345,7 @@ export default function RegisterPage() {
                   </label>
 
                   <div className="relative">
+
                     <User className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
 
                     <input
@@ -309,6 +359,7 @@ export default function RegisterPage() {
                       disabled={loading}
                       className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                     />
+
                   </div>
                 </div>
 
@@ -322,6 +373,7 @@ export default function RegisterPage() {
                   </label>
 
                   <div className="relative">
+
                     <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
 
                     <input
@@ -335,6 +387,7 @@ export default function RegisterPage() {
                       disabled={loading}
                       className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                     />
+
                   </div>
                 </div>
 
@@ -348,6 +401,7 @@ export default function RegisterPage() {
                   </label>
 
                   <div className="relative">
+
                     <Phone className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
 
                     <input
@@ -362,7 +416,43 @@ export default function RegisterPage() {
                       disabled={loading}
                       className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                     />
+
                   </div>
+                </div>
+
+                {/* REFERRAL CODE */}
+                <div>
+                  <label
+                    htmlFor="referralCode"
+                    className="mb-2 block text-sm font-semibold text-gray-700"
+                  >
+                    Referral code{" "}
+                    <span className="font-normal text-gray-400">
+                      (optional)
+                    </span>
+                  </label>
+
+                  <div className="relative">
+
+                    <Gift className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+
+                    <input
+                      id="referralCode"
+                      name="referralCode"
+                      type="text"
+                      autoComplete="off"
+                      placeholder="e.g. BF8EFB5DC7"
+                      value={form.referralCode}
+                      onChange={handleChange}
+                      disabled={loading}
+                      className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm uppercase text-gray-900 outline-none transition placeholder:normal-case placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+
+                  </div>
+
+                  <p className="mt-2 text-xs text-gray-400">
+                    Enter a referral code if someone invited you.
+                  </p>
                 </div>
 
                 {/* PASSWORD */}
@@ -375,6 +465,7 @@ export default function RegisterPage() {
                   </label>
 
                   <div className="relative">
+
                     <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
 
                     <input
@@ -414,6 +505,7 @@ export default function RegisterPage() {
                         <Eye className="h-5 w-5" />
                       )}
                     </button>
+
                   </div>
 
                   <p className="mt-2 text-xs text-gray-400">
@@ -431,12 +523,15 @@ export default function RegisterPage() {
                     }
                   />
                 </div>
+
               </form>
 
               {/* LOGIN */}
-              <div className="mt-6 border-t border-gray-100 pt-6 text-center">
+              <div className="mt-7 border-t border-gray-100 pt-6 text-center">
+
                 <p className="text-sm text-gray-500">
                   Already have an account?{" "}
+
                   <Link
                     href="/login"
                     className="font-semibold text-indigo-600 transition hover:text-indigo-700"
@@ -444,18 +539,21 @@ export default function RegisterPage() {
                     Sign in
                   </Link>
                 </p>
+
               </div>
+
             </div>
 
             {/* TERMS */}
-            <p className="mx-auto mt-5 max-w-sm text-center text-xs leading-5 text-gray-400">
+            <p className="mx-auto mt-5 max-w-lg text-center text-xs leading-5 text-gray-400">
               By creating an account, you agree to use
-              Brainfriend Global Tech responsibly and keep your
-              account information secure.
+              Brainfriend Global Tech responsibly and keep
+              your account information secure.
             </p>
 
           </div>
         </section>
+
       </div>
     </main>
   );

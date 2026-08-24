@@ -3,17 +3,11 @@ import {
   NextResponse,
 } from "next/server";
 
-import {
-  getServerSession,
-} from "next-auth";
+import { getServerSession } from "next-auth";
 
-import {
-  authOptions,
-} from "@/lib/auth";
+import { authOptions } from "@/lib/auth";
 
-import {
-  prisma,
-} from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 import {
   getServiceFeePercent,
@@ -23,21 +17,37 @@ import {
 const CHEAPDATAHUB_ELECTRICITY_URL =
   "https://www.cheapdatahub.ng/api/v1/resellers/electricity/purchase/";
 
-function generateReference() {
+const REFERRAL_COMMISSION_SETTING_KEY =
+  "REFERRAL_COMMISSION_ELECTRICITY";
+
+const DEFAULT_REFERRAL_COMMISSION_PERCENTAGE = 1;
+
+function generateReference(): string {
   return `ELEC-${Date.now()}-${Math.random()
     .toString(36)
     .substring(2, 8)
     .toUpperCase()}`;
 }
 
-export async function POST(
-  request: NextRequest
-) {
+function isProviderSuccessful(result: any): boolean {
+  return (
+    result?.status === true ||
+    result?.status === "true" ||
+    result?.status === "success" ||
+    result?.status === "successful" ||
+    result?.success === true
+  );
+}
+
+export async function POST(request: NextRequest) {
   let transactionId: string | null = null;
 
   try {
-    const session =
-      await getServerSession(authOptions);
+    // ============================================================
+    // 1. AUTHENTICATION
+    // ============================================================
+
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -50,6 +60,10 @@ export async function POST(
     }
 
     const userId = session.user.id;
+
+    // ============================================================
+    // 2. REQUEST BODY
+    // ============================================================
 
     const body = await request.json();
 
@@ -70,12 +84,21 @@ export async function POST(
 
     const cleanedPhone = String(
       phone || ""
-    ).replace(/\s+/g, "");
+    )
+      .trim()
+      .replace(/\s+/g, "")
+      .replace(/^\+234/, "0")
+      .replace(/^234/, "0");
 
-    const normalizedMeterType =
-      String(meterType || "PREPAID")
-        .trim()
-        .toUpperCase();
+    const normalizedMeterType = String(
+      meterType || "PREPAID"
+    )
+      .trim()
+      .toUpperCase();
+
+    // ============================================================
+    // 3. VALIDATION
+    // ============================================================
 
     if (
       !Number.isInteger(numericDiscoId) ||
@@ -84,8 +107,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Invalid electricity provider.",
+          error: "Invalid electricity provider.",
         },
         { status: 400 }
       );
@@ -98,8 +120,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Invalid electricity amount.",
+          error: "Invalid electricity amount.",
         },
         { status: 400 }
       );
@@ -109,8 +130,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Meter number is required.",
+          error: "Meter number is required.",
         },
         { status: 400 }
       );
@@ -120,8 +140,18 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
+          error: "Phone number is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!/^0\d{10}$/.test(cleanedPhone)) {
+      return NextResponse.json(
+        {
+          success: false,
           error:
-            "Phone number is required.",
+            "Please enter a valid Nigerian phone number.",
         },
         { status: 400 }
       );
@@ -142,19 +172,32 @@ export async function POST(
       );
     }
 
-    const user =
-      await prisma.user.findUnique({
-        where: {
-          id: userId,
+    // ============================================================
+    // 4. FIND USER + REFERRER
+    // ============================================================
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+
+      include: {
+        referredBy: {
+          select: {
+            id: true,
+            fullName: true,
+            referralCode: true,
+            referralBalance: true,
+          },
         },
-      });
+      },
+    });
 
     if (!user) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "User account not found.",
+          error: "User account not found.",
         },
         { status: 404 }
       );
@@ -164,33 +207,130 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Your account is not active.",
+          error: "Your account is not active.",
         },
         { status: 403 }
       );
     }
 
+    // ============================================================
+    // 5. SERVICE FEE
+    // ============================================================
+
     const serviceFeePercent =
       await getServiceFeePercent();
 
-    const pricing =
-      calculateServiceFee(
-        numericAmount,
-        serviceFeePercent
+    const pricing = calculateServiceFee(
+      numericAmount,
+      serviceFeePercent
+    );
+
+    const providerCost = pricing.providerCost;
+    const serviceFee = pricing.serviceFee;
+    const totalAmount = pricing.totalAmount;
+
+    // ============================================================
+    // 6. GROSS PROFIT
+    // ============================================================
+
+    const grossProfit = Number(
+      (
+        totalAmount -
+        providerCost
+      ).toFixed(2)
+    );
+
+    // ============================================================
+    // 7. REFERRAL COMMISSION SETTING
+    // ============================================================
+
+    let referralPercentage =
+      DEFAULT_REFERRAL_COMMISSION_PERCENTAGE;
+
+    try {
+      const referralSetting =
+        await prisma.systemSetting.findUnique({
+          where: {
+            key:
+              REFERRAL_COMMISSION_SETTING_KEY,
+          },
+        });
+
+      if (referralSetting) {
+        const parsedReferral = Number(
+          referralSetting.value
+        );
+
+        if (
+          Number.isFinite(parsedReferral) &&
+          parsedReferral >= 0 &&
+          parsedReferral <= 100
+        ) {
+          referralPercentage = parsedReferral;
+        }
+      }
+    } catch (error) {
+      console.error(
+        "ELECTRICITY REFERRAL SETTING ERROR:",
+        error
+      );
+    }
+
+    // ============================================================
+    // 8. REFERRAL COMMISSION
+    // ============================================================
+
+    let referralCommission = 0;
+
+    if (
+      user.referredBy &&
+      grossProfit > 0 &&
+      referralPercentage > 0
+    ) {
+      const calculatedCommission = Number(
+        (
+          numericAmount *
+          (referralPercentage / 100)
+        ).toFixed(2)
       );
 
-    const providerCost =
-      pricing.providerCost;
+      referralCommission = Math.min(
+        calculatedCommission,
+        grossProfit
+      );
+    }
 
-    const serviceFee =
-      pricing.serviceFee;
+    // ============================================================
+    // 9. FINAL BUSINESS PROFIT
+    // ============================================================
 
-    const totalAmount =
-      pricing.totalAmount;
+    const profit = Number(
+      (
+        grossProfit -
+        referralCommission
+      ).toFixed(2)
+    );
 
-    const profit =
-      pricing.profit;
+    console.log(
+      "ELECTRICITY FINANCIAL BREAKDOWN:",
+      {
+        providerAmount: numericAmount,
+        serviceFeePercent,
+        serviceFee,
+        totalAmount,
+        providerCost,
+        grossProfit,
+        referralPercentage,
+        referralCommission,
+        businessProfit: profit,
+        referrer:
+          user.referredBy?.id ?? null,
+      }
+    );
+
+    // ============================================================
+    // 10. WALLET CHECK
+    // ============================================================
 
     const walletBalance =
       Number(user.walletBalance);
@@ -206,6 +346,7 @@ export async function POST(
             "Insufficient wallet balance.",
           balance: walletBalance,
           required: totalAmount,
+          providerAmount: numericAmount,
           providerCost,
           serviceFee,
           serviceFeePercent,
@@ -214,6 +355,10 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    // ============================================================
+    // 11. API KEY
+    // ============================================================
 
     const apiKey =
       process.env.CHEAPDATAHUB_API_KEY;
@@ -229,18 +374,28 @@ export async function POST(
       );
     }
 
+    // ============================================================
+    // 12. TRANSACTION REFERENCE
+    // ============================================================
+
     const reference =
       generateReference();
+
+    // ============================================================
+    // 13. CREATE PENDING TRANSACTION
+    // ============================================================
 
     const transaction =
       await prisma.transaction.create({
         data: {
           userId: user.id,
+
           type: "ELECTRICITY",
+
           amount: totalAmount,
 
           description:
-            `Electricity payment for meter ${cleanedMeter}`,
+            `Electricity payment of ₦${numericAmount} + ${serviceFeePercent}% service fee for meter ${cleanedMeter}`,
 
           status: "PENDING",
 
@@ -250,37 +405,42 @@ export async function POST(
             "CheapDataHub",
 
           cost: providerCost,
+
           profit,
+
           isTest: false,
         },
       });
 
-    transactionId =
-      transaction.id;
+    transactionId = transaction.id;
+
+    // ============================================================
+    // 14. PROVIDER REQUEST
+    // ============================================================
 
     const providerBody = {
-      disco_id:
-        numericDiscoId,
+      disco_id: numericDiscoId,
 
-      meter_number:
-        cleanedMeter,
+      meter_number: cleanedMeter,
 
-      amount:
-        providerCost,
+      amount: providerCost,
 
       meter_type:
         normalizedMeterType.toLowerCase(),
 
-      phone:
-        cleanedPhone,
+      phone: cleanedPhone,
     };
+
+    console.log(
+      "=========================================="
+    );
 
     console.log(
       "CHEAPDATAHUB ELECTRICITY PURCHASE"
     );
 
     console.log(
-      "BODY:",
+      "REQUEST:",
       providerBody
     );
 
@@ -304,6 +464,34 @@ export async function POST(
       totalAmount
     );
 
+    console.log(
+      "GROSS PROFIT:",
+      grossProfit
+    );
+
+    console.log(
+      "REFERRAL PERCENTAGE:",
+      referralPercentage
+    );
+
+    console.log(
+      "REFERRAL COMMISSION:",
+      referralCommission
+    );
+
+    console.log(
+      "BUSINESS PROFIT:",
+      profit
+    );
+
+    console.log(
+      "=========================================="
+    );
+
+    // ============================================================
+    // 15. CALL CHEAPDATAHUB
+    // ============================================================
+
     const providerResponse =
       await fetch(
         CHEAPDATAHUB_ELECTRICITY_URL,
@@ -321,14 +509,17 @@ export async function POST(
               "application/json",
           },
 
-          body:
-            JSON.stringify(
-              providerBody
-            ),
+          body: JSON.stringify(
+            providerBody
+          ),
 
           cache: "no-store",
         }
       );
+
+    // ============================================================
+    // 16. PROVIDER RESPONSE
+    // ============================================================
 
     const responseText =
       await providerResponse.text();
@@ -354,6 +545,10 @@ export async function POST(
       providerResult = null;
     }
 
+    // ============================================================
+    // 17. INVALID PROVIDER RESPONSE
+    // ============================================================
+
     if (!providerResult) {
       await prisma.transaction.update({
         where: {
@@ -362,19 +557,18 @@ export async function POST(
 
         data: {
           status: "FAILED",
+          cost: 0,
+          profit: 0,
         },
       });
 
       return NextResponse.json(
         {
           success: false,
-
           error:
             "CheapDataHub returned an invalid response.",
-
           providerStatus:
             providerResponse.status,
-
           providerResponse:
             responseText.substring(
               0,
@@ -385,11 +579,14 @@ export async function POST(
       );
     }
 
+    // ============================================================
+    // 18. PROVIDER SUCCESS
+    // ============================================================
+
     const providerSuccess =
-      providerResult?.status === true ||
-      providerResult?.status === "true" ||
-      providerResult?.success === true ||
-      providerResult?.status === "success";
+      isProviderSuccessful(
+        providerResult
+      );
 
     if (
       !providerResponse.ok ||
@@ -402,6 +599,8 @@ export async function POST(
 
         data: {
           status: "FAILED",
+          cost: 0,
+          profit: 0,
         },
       });
 
@@ -424,6 +623,10 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    // ============================================================
+    // 19. PROVIDER DATA
+    // ============================================================
 
     const providerData =
       providerResult?.data || {};
@@ -449,13 +652,31 @@ export async function POST(
       providerData?.units ||
       null;
 
+    // ============================================================
+    // 20. ATOMIC ACCOUNTING
+    // ============================================================
+
     const result =
       await prisma.$transaction(
         async (tx) => {
+          // ------------------------------------------------------
+          // FRESH USER
+          // ------------------------------------------------------
+
           const freshUser =
             await tx.user.findUnique({
               where: {
                 id: user.id,
+              },
+
+              include: {
+                referredBy: {
+                  select: {
+                    id: true,
+                    fullName: true,
+                    referralCode: true,
+                  },
+                },
               },
             });
 
@@ -465,22 +686,39 @@ export async function POST(
             );
           }
 
-          const freshBalance =
-            Number(
-              freshUser.walletBalance
-            );
+          // ------------------------------------------------------
+          // ATOMIC WALLET DEDUCTION
+          // ------------------------------------------------------
 
-          if (
-            !Number.isFinite(
-              freshBalance
-            ) ||
-            freshBalance <
-              totalAmount
-          ) {
+          const walletDebit =
+            await tx.user.updateMany({
+              where: {
+                id: freshUser.id,
+
+                status: "ACTIVE",
+
+                walletBalance: {
+                  gte: totalAmount,
+                },
+              },
+
+              data: {
+                walletBalance: {
+                  decrement:
+                    totalAmount,
+                },
+              },
+            });
+
+          if (walletDebit.count !== 1) {
             throw new Error(
               "Insufficient wallet balance."
             );
           }
+
+          // ------------------------------------------------------
+          // BUSINESS WALLET
+          // ------------------------------------------------------
 
           const businessWallet =
             await tx.businessWallet.upsert({
@@ -509,21 +747,16 @@ export async function POST(
               },
             });
 
-          const newUserBalance =
-            Number(
-              (
-                freshBalance -
-                totalAmount
-              ).toFixed(2)
-            );
+          // ------------------------------------------------------
+          // BUSINESS WALLET VALUES
+          // ------------------------------------------------------
 
           const newBusinessBalance =
             Number(
               (
                 Number(
                   businessWallet.balance
-                ) +
-                totalAmount
+                ) + profit
               ).toFixed(2)
             );
 
@@ -532,8 +765,7 @@ export async function POST(
               (
                 Number(
                   businessWallet.totalRevenue
-                ) +
-                totalAmount
+                ) + totalAmount
               ).toFixed(2)
             );
 
@@ -542,8 +774,7 @@ export async function POST(
               (
                 Number(
                   businessWallet.totalCost
-                ) +
-                providerCost
+                ) + providerCost
               ).toFixed(2)
             );
 
@@ -552,8 +783,7 @@ export async function POST(
               (
                 Number(
                   businessWallet.totalProfit
-                ) +
-                profit
+                ) + profit
               ).toFixed(2)
             );
 
@@ -562,21 +792,29 @@ export async function POST(
               (
                 Number(
                   businessWallet.availableProfit
-                ) +
-                profit
+                ) + profit
               ).toFixed(2)
             );
 
+          // ------------------------------------------------------
+          // UPDATE USER
+          // ------------------------------------------------------
+
           await tx.user.update({
             where: {
-              id: user.id,
+              id: freshUser.id,
             },
 
             data: {
-              walletBalance:
-                newUserBalance,
+              walletBalance: {
+                decrement: 0,
+              },
             },
           });
+
+          // ------------------------------------------------------
+          // UPDATE TRANSACTION
+          // ------------------------------------------------------
 
           await tx.transaction.update({
             where: {
@@ -585,12 +823,21 @@ export async function POST(
 
             data: {
               status: "SUCCESS",
+
               amount: totalAmount,
+
               cost: providerCost,
+
               profit,
-              isTest: false,
+
+              description:
+                `Electricity payment of ₦${numericAmount} + ${serviceFeePercent}% service fee for meter ${cleanedMeter}`,
             },
           });
+
+          // ------------------------------------------------------
+          // UPDATE BUSINESS WALLET
+          // ------------------------------------------------------
 
           await tx.businessWallet.update({
             where: {
@@ -616,6 +863,10 @@ export async function POST(
             },
           });
 
+          // ------------------------------------------------------
+          // BUSINESS REVENUE
+          // ------------------------------------------------------
+
           await tx.businessRevenue.create({
             data: {
               transactionId:
@@ -638,16 +889,98 @@ export async function POST(
               reference,
 
               description:
-                `Electricity payment for meter ${cleanedMeter}`,
+                `Electricity ₦${numericAmount} for meter ${cleanedMeter} + ${serviceFeePercent}% service fee`,
 
               businessWalletId:
                 businessWallet.id,
             },
           });
 
+          // ------------------------------------------------------
+          // PAY REFERRER
+          // ------------------------------------------------------
+
+          if (
+            freshUser.referredBy &&
+            referralCommission > 0
+          ) {
+            await tx.user.update({
+              where: {
+                id:
+                  freshUser.referredBy.id,
+              },
+
+              data: {
+                referralBalance: {
+                  increment:
+                    referralCommission,
+                },
+              },
+            });
+
+            await tx.referralEarning.create({
+              data: {
+                referrerId:
+                  freshUser.referredBy.id,
+
+                referredUserId:
+                  freshUser.id,
+
+                transactionId:
+                  transaction.id,
+
+                amount:
+                  referralCommission,
+
+                percentage:
+                  referralPercentage,
+
+                transactionAmount:
+                  numericAmount,
+
+                type:
+                  "ELECTRICITY",
+
+                status:
+                  "SUCCESS",
+
+                description:
+                  `Referral earning from ${freshUser.fullName}'s electricity payment of ₦${numericAmount}`,
+
+                reference:
+                  `REF-${reference}`,
+              },
+            });
+          }
+
+          // ------------------------------------------------------
+          // FINAL USER BALANCES
+          // ------------------------------------------------------
+
+          const finalUser =
+            await tx.user.findUnique({
+              where: {
+                id: freshUser.id,
+              },
+
+              select: {
+                walletBalance: true,
+                referralBalance: true,
+              },
+            });
+
           return {
             walletBalance:
-              newUserBalance,
+              Number(
+                finalUser?.walletBalance ??
+                  0
+              ),
+
+            referralBalance:
+              Number(
+                finalUser?.referralBalance ??
+                  0
+              ),
 
             businessBalance:
               newBusinessBalance,
@@ -663,9 +996,19 @@ export async function POST(
 
             availableProfit:
               newAvailableProfit,
+
+            grossProfit,
+
+            referralCommission,
+
+            profit,
           };
         }
       );
+
+    // ============================================================
+    // 21. SUCCESS RESPONSE
+    // ============================================================
 
     return NextResponse.json({
       success: true,
@@ -691,7 +1034,7 @@ export async function POST(
         cleanedPhone,
 
       providerAmount:
-        providerCost,
+        numericAmount,
 
       serviceFeePercent,
 
@@ -700,16 +1043,26 @@ export async function POST(
       amount:
         totalAmount,
 
+      totalAmount,
+
       providerCost,
 
-      profit,
+      grossProfit:
+        result.grossProfit,
 
-      token,
+      referralPercentage,
 
-      units,
+      referralCommission:
+        result.referralCommission,
+
+      profit:
+        result.profit,
 
       walletBalance:
         result.walletBalance,
+
+      referralBalance:
+        result.referralBalance,
 
       businessRevenue:
         totalAmount,
@@ -718,12 +1071,20 @@ export async function POST(
         providerCost,
 
       businessProfit:
-        profit,
+        result.profit,
+
+      token,
+
+      units,
 
       providerResponse:
         providerResult,
     });
   } catch (error: any) {
+    // ============================================================
+    // 22. ERROR HANDLING
+    // ============================================================
+
     console.error(
       "ELECTRICITY PURCHASE ERROR:",
       error
@@ -731,15 +1092,35 @@ export async function POST(
 
     if (transactionId) {
       try {
-        await prisma.transaction.update({
-          where: {
-            id: transactionId,
-          },
+        const existingTransaction =
+          await prisma.transaction.findUnique({
+            where: {
+              id: transactionId,
+            },
 
-          data: {
-            status: "FAILED",
-          },
-        });
+            select: {
+              status: true,
+            },
+          });
+
+        if (
+          existingTransaction?.status ===
+          "PENDING"
+        ) {
+          await prisma.transaction.update({
+            where: {
+              id: transactionId,
+            },
+
+            data: {
+              status: "FAILED",
+
+              cost: 0,
+
+              profit: 0,
+            },
+          });
+        }
       } catch (updateError) {
         console.error(
           "FAILED TO UPDATE ELECTRICITY TRANSACTION:",

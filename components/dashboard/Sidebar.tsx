@@ -6,6 +6,7 @@ import {
   signOut,
   useSession,
 } from "next-auth/react";
+
 import {
   LayoutDashboard,
   Smartphone,
@@ -28,7 +29,11 @@ import {
   CreditCard,
   ShoppingBag,
   SearchCheck,
+  Gift,
+  Sparkles,
+  Users,
 } from "lucide-react";
+
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
@@ -99,19 +104,19 @@ export default function Sidebar({
         onClick={onClose}
         className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 ${
           active
-            ? "bg-white font-bold text-indigo-700 shadow-md"
-            : "font-semibold text-indigo-100 hover:bg-indigo-600 hover:text-white"
+            ? "bg-white font-bold text-indigo-700 shadow-sm"
+            : "font-semibold text-indigo-100 hover:bg-white/10 hover:text-white"
         }`}
       >
         {active && (
-          <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-indigo-700" />
+          <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-indigo-600" />
         )}
 
         <span
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition ${
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all ${
             active
               ? "bg-indigo-100 text-indigo-700"
-              : "bg-indigo-600/60 text-indigo-200 group-hover:bg-indigo-500 group-hover:text-white"
+              : "bg-indigo-600/50 text-indigo-200 group-hover:bg-indigo-500 group-hover:text-white"
           }`}
         >
           {icon}
@@ -135,14 +140,14 @@ export default function Sidebar({
       <button
         type="button"
         onClick={() => toggleGroup(group)}
-        className="group flex w-full items-center justify-between rounded-lg px-2 py-2 text-left transition hover:bg-indigo-600/50"
+        className="group flex w-full items-center justify-between rounded-lg px-2 py-2 transition hover:bg-white/5"
       >
         <span className="flex items-center gap-2.5">
           <span className="text-indigo-300 transition group-hover:text-white">
             {icon}
           </span>
 
-          <span className="text-[11px] font-bold uppercase tracking-[0.13em] text-indigo-300 group-hover:text-white">
+          <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-indigo-300 group-hover:text-white">
             {label}
           </span>
         </span>
@@ -158,55 +163,61 @@ export default function Sidebar({
 
   return (
     <>
-      {/* MOBILE OVERLAY */}
+      {/* =========================================================
+          MOBILE OVERLAY
+      ========================================================= */}
 
       {isOpen && (
         <button
           type="button"
           onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
           aria-label="Close sidebar"
         />
       )}
 
-      {/* SIDEBAR */}
+      {/* =========================================================
+          SIDEBAR
+      ========================================================= */}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[270px] flex-col border-r border-indigo-600 bg-indigo-700 text-white shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 lg:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col overflow-hidden border-r border-indigo-500/30 bg-gradient-to-b from-indigo-700 via-indigo-700 to-indigo-800 text-white shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 lg:shadow-none ${
           isOpen
             ? "translate-x-0"
             : "-translate-x-full"
         }`}
       >
-        {/* BRAND HEADER */}
 
-        <div className="shrink-0 border-b border-indigo-600 px-5 py-5">
+        {/* =======================================================
+            BRAND HEADER
+        ======================================================= */}
+
+        <div className="shrink-0 border-b border-white/10 px-5 py-5">
           <div className="flex items-center justify-between">
+
             <Link
               href="/dashboard"
               onClick={onClose}
-              className="flex items-center gap-3"
+              className="group flex min-w-0 items-center gap-3"
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white shadow-md">
+              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white shadow-lg transition-transform duration-200 group-hover:scale-105">
                 <GraduationCap
                   size={23}
                   strokeWidth={2.5}
                   className="text-indigo-700"
                 />
+
+                <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-indigo-700 bg-emerald-400" />
               </div>
 
-              <div>
-                <p className="text-[16px] font-extrabold tracking-tight text-white">
-                  Brainfriend Global Tech
+              <div className="min-w-0">
+                <p className="truncate text-[15px] font-extrabold tracking-tight text-white">
+                  Brainfriend
                 </p>
 
-                <div className="mt-1 flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-
-                  <p className="text-[11px] font-semibold text-indigo-200">
-                    User Dashboard
-                  </p>
-                </div>
+                <p className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-200">
+                  Global Tech
+                </p>
               </div>
             </Link>
 
@@ -215,7 +226,7 @@ export default function Sidebar({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg p-2 text-indigo-200 transition hover:bg-indigo-600 hover:text-white lg:hidden"
+              className="rounded-lg p-2 text-indigo-200 transition hover:bg-white/10 hover:text-white lg:hidden"
               aria-label="Close menu"
             >
               <X
@@ -224,17 +235,44 @@ export default function Sidebar({
               />
             </button>
           </div>
+
+          {/* USER STATUS */}
+
+          <div className="mt-5 flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-400/15">
+              <Sparkles
+                size={14}
+                className="text-emerald-300"
+              />
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">
+                Account
+              </p>
+
+              <p className="truncate text-xs font-semibold text-white">
+                {session?.user?.email || "Welcome back"}
+              </p>
+            </div>
+
+            <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+          </div>
         </div>
 
-        {/* NAVIGATION */}
+        {/* =======================================================
+            NAVIGATION
+        ======================================================= */}
 
-        <nav className="flex-1 overflow-y-auto px-3 py-5">
+        <nav className="flex-1 overflow-y-auto px-3 py-5 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-indigo-500">
 
-          {/* OVERVIEW */}
+          {/* =====================================================
+              OVERVIEW
+          ===================================================== */}
 
           <div className="mb-6">
             <div className="mb-2 px-2">
-              <span className="text-[11px] font-bold uppercase tracking-[0.13em] text-indigo-300">
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-indigo-300">
                 Overview
               </span>
             </div>
@@ -257,10 +295,23 @@ export default function Sidebar({
                   strokeWidth={2.5}
                 />
               )}
+
+              {/* REFERRAL PAGE */}
+
+              {navItem(
+                "/dashboard/referral",
+                "Referral & Rewards",
+                <Gift
+                  size={17}
+                  strokeWidth={2.5}
+                />
+              )}
             </div>
           </div>
 
-          {/* VTU SERVICES */}
+          {/* =====================================================
+              VTU SERVICES
+          ===================================================== */}
 
           <div className="mb-4">
             {groupButton(
@@ -313,7 +364,9 @@ export default function Sidebar({
             )}
           </div>
 
-          {/* EDUCATION */}
+          {/* =====================================================
+              EDUCATION
+          ===================================================== */}
 
           <div className="mb-4">
             {groupButton(
@@ -348,7 +401,9 @@ export default function Sidebar({
             )}
           </div>
 
-          {/* VERIFICATION */}
+          {/* =====================================================
+              VERIFICATION
+          ===================================================== */}
 
           <div className="mb-4">
             {groupButton(
@@ -374,7 +429,9 @@ export default function Sidebar({
             )}
           </div>
 
-          {/* ACCOUNT */}
+          {/* =====================================================
+              ACCOUNT
+          ===================================================== */}
 
           <div className="mb-4">
             {groupButton(
@@ -389,8 +446,6 @@ export default function Sidebar({
             {openGroups.account && (
               <div className="mt-1 space-y-1 pl-1">
 
-                {/* PURCHASES HISTORY */}
-
                 {navItem(
                   "/dashboard/purchases",
                   "Purchases History",
@@ -399,8 +454,6 @@ export default function Sidebar({
                     strokeWidth={2.5}
                   />
                 )}
-
-                {/* TRANSACTION STATUS */}
 
                 {navItem(
                   "/dashboard/transaction-status",
@@ -411,8 +464,6 @@ export default function Sidebar({
                   />
                 )}
 
-                {/* TRANSACTIONS */}
-
                 {navItem(
                   "/dashboard/transactions",
                   "Transactions",
@@ -421,8 +472,6 @@ export default function Sidebar({
                     strokeWidth={2.5}
                   />
                 )}
-
-                {/* PROFILE */}
 
                 {navItem(
                   "/dashboard/profile",
@@ -433,8 +482,6 @@ export default function Sidebar({
                   />
                 )}
 
-                {/* CHANGE PASSWORD */}
-
                 {navItem(
                   "/dashboard/profile/change-password",
                   "Change Password",
@@ -443,17 +490,59 @@ export default function Sidebar({
                     strokeWidth={2.5}
                   />
                 )}
-
               </div>
             )}
           </div>
 
-          {/* ADMINISTRATION */}
+          {/* =====================================================
+              REFERRAL PROMO
+          ===================================================== */}
+
+          <div className="mt-6 px-1">
+            <Link
+              href="/dashboard/referral"
+              onClick={onClose}
+              className="group block overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-indigo-500/70 to-purple-600/70 p-4 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl"
+            >
+              <div className="flex items-start gap-3">
+
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15">
+                  <Users
+                    size={19}
+                    className="text-white"
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-sm font-extrabold text-white">
+                    Earn with referral
+                  </p>
+
+                  <p className="mt-1 text-[11px] leading-4 text-indigo-100">
+                    Invite friends and earn rewards from their transactions.
+                  </p>
+
+                  <div className="mt-3 flex items-center gap-1 text-[11px] font-bold text-white">
+                    View referral dashboard
+                    <ChevronRight
+                      size={13}
+                      className="transition-transform group-hover:translate-x-1"
+                    />
+                  </div>
+                </div>
+
+              </div>
+            </Link>
+          </div>
+
+          {/* =====================================================
+              ADMINISTRATION
+          ===================================================== */}
 
           {session?.user?.role === "ADMIN" && (
-            <div className="mt-6 border-t border-indigo-600 pt-5">
+            <div className="mt-7 border-t border-white/10 pt-5">
               <div className="mb-2 px-2">
-                <span className="text-[11px] font-bold uppercase tracking-[0.13em] text-indigo-300">
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-indigo-300">
                   Administration
                 </span>
               </div>
@@ -470,22 +559,29 @@ export default function Sidebar({
           )}
         </nav>
 
-        {/* ACCOUNT FOOTER */}
+        {/* =======================================================
+            FOOTER
+        ======================================================= */}
 
-        <div className="shrink-0 border-t border-indigo-600 p-3">
+        <div className="shrink-0 border-t border-white/10 bg-indigo-800/60 p-3">
 
-          {/* USER INFO */}
+          {/* SECURITY STATUS */}
 
-          <div className="mb-2 rounded-xl border border-indigo-500/50 bg-indigo-600/50 px-3 py-2.5">
-            <p className="truncate text-xs font-bold text-white">
-              {session?.user?.email || "Account"}
-            </p>
+          <div className="mb-2 flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400/10">
+              <ShieldCheck
+                size={16}
+                className="text-emerald-300"
+              />
+            </div>
 
-            <div className="mt-1 flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-
-              <p className="text-[10px] font-medium text-indigo-200">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-white">
                 Account secured
+              </p>
+
+              <p className="text-[10px] text-indigo-300">
+                Your session is protected
               </p>
             </div>
           </div>
@@ -496,9 +592,9 @@ export default function Sidebar({
             type="button"
             onClick={handleLogout}
             disabled={loading}
-            className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold text-indigo-100 transition-all duration-200 hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold text-indigo-100 transition-all duration-200 hover:bg-red-500/90 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600/60 transition group-hover:bg-red-500">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 transition group-hover:bg-red-400">
               <LogOut
                 size={17}
                 strokeWidth={2.5}
@@ -516,6 +612,4 @@ export default function Sidebar({
     </>
   );
 }
-
-
 
