@@ -107,9 +107,10 @@ function extractPins(
         ).trim(),
       };
     })
-    .filter(
-      (item) => Boolean(item.pin)
-    );
+ .filter(
+  (item: { pin: string; serial: string }) =>
+    Boolean(item.pin)
+);
 }
 
 export async function POST(

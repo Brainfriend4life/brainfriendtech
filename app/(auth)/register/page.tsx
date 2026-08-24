@@ -1,9 +1,8 @@
-
 "use client";
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -22,7 +21,7 @@ import {
 
 import AuthButton from "@/components/auth/AuthButton";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -117,10 +116,7 @@ export default function RegisterPage() {
     <main className="min-h-screen bg-slate-50">
       <div className="flex min-h-screen flex-col lg:flex-row">
 
-        {/* ================================================= */}
         {/* LEFT BRAND PANEL */}
-        {/* ================================================= */}
-
         <section className="relative hidden overflow-hidden bg-indigo-700 lg:flex lg:w-[40%] xl:w-[42%]">
           <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-white/10" />
 
@@ -227,10 +223,7 @@ export default function RegisterPage() {
           </div>
         </section>
 
-        {/* ================================================= */}
         {/* REGISTER AREA */}
-        {/* ================================================= */}
-
         <section className="flex w-full flex-1 items-center justify-center px-4 py-8 sm:px-6 md:px-8 lg:w-[60%] lg:px-10 xl:px-14 2xl:px-20">
 
           <div className="w-full max-w-2xl">
@@ -345,7 +338,6 @@ export default function RegisterPage() {
                   </label>
 
                   <div className="relative">
-
                     <User className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
 
                     <input
@@ -359,7 +351,6 @@ export default function RegisterPage() {
                       disabled={loading}
                       className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                     />
-
                   </div>
                 </div>
 
@@ -373,7 +364,6 @@ export default function RegisterPage() {
                   </label>
 
                   <div className="relative">
-
                     <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
 
                     <input
@@ -387,7 +377,6 @@ export default function RegisterPage() {
                       disabled={loading}
                       className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                     />
-
                   </div>
                 </div>
 
@@ -401,7 +390,6 @@ export default function RegisterPage() {
                   </label>
 
                   <div className="relative">
-
                     <Phone className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
 
                     <input
@@ -416,7 +404,6 @@ export default function RegisterPage() {
                       disabled={loading}
                       className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                     />
-
                   </div>
                 </div>
 
@@ -433,7 +420,6 @@ export default function RegisterPage() {
                   </label>
 
                   <div className="relative">
-
                     <Gift className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
 
                     <input
@@ -447,7 +433,6 @@ export default function RegisterPage() {
                       disabled={loading}
                       className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm uppercase text-gray-900 outline-none transition placeholder:normal-case placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
                     />
-
                   </div>
 
                   <p className="mt-2 text-xs text-gray-400">
@@ -465,7 +450,6 @@ export default function RegisterPage() {
                   </label>
 
                   <div className="relative">
-
                     <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
 
                     <input
@@ -505,7 +489,6 @@ export default function RegisterPage() {
                         <Eye className="h-5 w-5" />
                       )}
                     </button>
-
                   </div>
 
                   <p className="mt-2 text-xs text-gray-400">
@@ -523,12 +506,10 @@ export default function RegisterPage() {
                     }
                   />
                 </div>
-
               </form>
 
               {/* LOGIN */}
               <div className="mt-7 border-t border-gray-100 pt-6 text-center">
-
                 <p className="text-sm text-gray-500">
                   Already have an account?{" "}
 
@@ -539,9 +520,7 @@ export default function RegisterPage() {
                     Sign in
                   </Link>
                 </p>
-
               </div>
-
             </div>
 
             {/* TERMS */}
@@ -553,9 +532,23 @@ export default function RegisterPage() {
 
           </div>
         </section>
-
       </div>
     </main>
   );
 }
 
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-slate-50">
+          <div className="text-sm font-medium text-gray-500">
+            Loading registration...
+          </div>
+        </main>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
+  );
+}

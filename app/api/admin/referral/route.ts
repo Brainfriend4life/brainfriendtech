@@ -21,118 +21,211 @@ export async function GET() {
       );
     }
 
-    const referrals = await prisma.referral.findMany({
+    const referrals = await prisma.referralEarning.findMany({
       orderBy: {
         createdAt: "desc",
       },
+    });
 
-      include: {
-        referrer: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-            phone: true,
-            referralCode: true,
-            walletBalance: true,
-          },
-        },
+    const userIds = Array.from(
+      new Set(
+        referrals.flatMap((referral) => [
+          referral.referrerId,
+          referral.referredUserId,
+        ])
+      )
+    );
 
-        referred: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-            phone: true,
-          },
+    const users = await prisma.user.findMany({
+      where: {
+        id: {
+          in: userIds,
         },
+      },
+
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        referralCode: true,
+        walletBalance: true,
       },
     });
 
-    const totalReferrals = referrals.length;
-
-    const totalEarned = referrals.reduce(
-      (total, referral) =>
-        total + Number(referral.amount || 0),
-      0
+    const userMap = new Map(
+      users.map((user) => [user.id, user])
     );
 
-    const pendingEarned = referrals
-      .filter(
-        (referral) =>
-          referral.status === "PENDING"
-      )
-      .reduce(
-        (total, referral) =>
-          total + Number(referral.amount || 0),
-        0
-      );
+    const formattedReferrals = referrals.map(
+      (referral) => {
+        const referrer = userMap.get(
+          referral.referrerId
+        );
 
-    const paidEarned = referrals
-      .filter(
-        (referral) =>
-          referral.status === "PAID" ||
-          referral.status === "CREDITED" ||
-          referral.status === "COMPLETED"
-      )
-      .reduce(
-        (total, referral) =>
-          total + Number(referral.amount || 0),
-        0
-      );
+        const referred = userMap.get(
+          referral.referredUserId
+        );
 
-    const referrerMap = new Map<
-      string,
-      {
-        userId: string;
-        name: string;
-        email: string;
-        referralCode: string | null;
-        referrals: number;
-        earnings: number;
-        walletBalance: number;
+        return {
+          ...referral,
+
+          referrer: referrer
+            ? {
+                id: referrer.id,
+                fullName: referrer.fullName,
+                email: referrer.email,
+                phone: referrer.phone,
+                referralCode:
+                  referrer.referralCode,
+                walletBalance:
+                  referrer.walletBalance,
+              }
+            : null,
+
+          referred: referred
+            ? {
+                id: referred.id,
+                fullName: referred.fullName,
+                email: referred.email,
+                phone: referred.phone,
+              }
+            : null,
+        };
       }
-    >();
+    );
 
-    for (const referral of referrals) {
-      const user = referral.referrer;
+    const totalReferrals =
+      formattedReferrals.length;
 
-      if (!user) continue;
-
-      const amount = Number(
-        referral.amount || 0
+    const totalEarned =
+      formattedReferrals.reduce(
+        (
+          total: number,
+          referral
+        ) =>
+          total +
+          Number(
+            referral.amount || 0
+          ),
+        0
       );
+
+    const pendingEarned =
+      formattedReferrals
+        .filter(
+          (referral) =>
+            referral.status ===
+            "PENDING"
+        )
+        .reduce(
+          (
+            total: number,
+            referral
+          ) =>
+            total +
+            Number(
+              referral.amount || 0
+            ),
+          0
+        );
+
+    const paidEarned =
+      formattedReferrals
+        .filter(
+          (referral) =>
+            referral.status ===
+              "PAID" ||
+            referral.status ===
+              "CREDITED" ||
+            referral.status ===
+              "COMPLETED"
+        )
+        .reduce(
+          (
+            total: number,
+            referral
+          ) =>
+            total +
+            Number(
+              referral.amount || 0
+            ),
+          0
+        );
+
+    const referrerMap =
+      new Map<
+        string,
+        {
+          userId: string;
+          name: string;
+          email: string;
+          referralCode: string | null;
+          referrals: number;
+          earnings: number;
+          walletBalance: number;
+        }
+      >();
+
+    for (
+      const referral of formattedReferrals
+    ) {
+      const user =
+        referral.referrer;
+
+      if (!user) {
+        continue;
+      }
+
+      const amount =
+        Number(
+          referral.amount || 0
+        );
 
       const existing =
-        referrerMap.get(user.id);
+        referrerMap.get(
+          user.id
+        );
 
       if (existing) {
         existing.referrals += 1;
-        existing.earnings += amount;
+        existing.earnings +=
+          amount;
       } else {
-        referrerMap.set(user.id, {
-          userId: user.id,
-          name: user.fullName,
-          email: user.email,
-          referralCode:
-            user.referralCode || null,
-          referrals: 1,
-          earnings: amount,
-          walletBalance: Number(
-            user.walletBalance || 0
-          ),
-        });
+        referrerMap.set(
+          user.id,
+          {
+            userId: user.id,
+            name:
+              user.fullName,
+            email:
+              user.email,
+            referralCode:
+              user.referralCode ||
+              null,
+            referrals: 1,
+            earnings:
+              amount,
+            walletBalance:
+              Number(
+                user.walletBalance ||
+                  0
+              ),
+          }
+        );
       }
     }
 
-    const topReferrers = Array.from(
-      referrerMap.values()
-    )
-      .sort(
-        (a, b) =>
-          b.earnings - a.earnings
+    const topReferrers =
+      Array.from(
+        referrerMap.values()
       )
-      .slice(0, 10);
+        .sort(
+          (a, b) =>
+            b.earnings -
+            a.earnings
+        )
+        .slice(0, 10);
 
     return NextResponse.json({
       success: true,
@@ -144,7 +237,8 @@ export async function GET() {
         paidEarned,
       },
 
-      referrals,
+      referrals:
+        formattedReferrals,
 
       topReferrers,
     });
@@ -160,7 +254,9 @@ export async function GET() {
         message:
           "Failed to load referral data.",
       },
-      { status: 500 }
+      {
+        status: 500,
+      }
     );
   }
 }
