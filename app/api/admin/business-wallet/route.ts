@@ -23,15 +23,21 @@ export async function GET() {
 
     /*
      * ============================================================
-     * REAL BUSINESS MONEY
+     * 1. CALCULATE REAL BUSINESS MONEY
      * ============================================================
      *
-     * We calculate the business profit directly from successful,
-     * non-test transactions.
+     * Transaction is the source of truth.
      *
-     * FUND_WALLET is user's money, not business profit.
-     * WITHDRAWAL is user's withdrawal, not business profit.
+     * We only count:
+     * - SUCCESS transactions
+     * - non-test transactions
+     * - actual business services
+     *
+     * We exclude:
+     * - FUND_WALLET
+     * - WITHDRAWAL
      */
+
     const transactionTotals =
       await prisma.transaction.aggregate({
         where: {
@@ -67,14 +73,18 @@ export async function GET() {
 
     /*
      * ============================================================
-     * BUSINESS WITHDRAWALS
+     * 2. CALCULATE BUSINESS WITHDRAWALS
      * ============================================================
      *
-     * Pending, processing and successful withdrawals are already
-     * reserved from the available business profit.
+     * These statuses are considered money reserved/used:
      *
-     * Failed and reversed withdrawals are NOT deducted.
+     * PENDING
+     * PROCESSING
+     * SUCCESS
+     *
+     * FAILED and REVERSED are returned to available profit.
      */
+
     const withdrawalTotals =
       await prisma.businessWithdrawal.aggregate({
         where: {
@@ -92,29 +102,29 @@ export async function GET() {
         },
       });
 
-    const withdrawnAmount = Number(
+    const reservedWithdrawals = Number(
       withdrawalTotals._sum.amount ?? 0
     );
 
     /*
      * ============================================================
-     * AVAILABLE PROFIT
+     * 3. REAL AVAILABLE PROFIT
      * ============================================================
+     *
+     * This is the amount that can actually be withdrawn.
      */
+
     const availableProfit = Math.max(
       0,
-      totalProfit - withdrawnAmount
+      totalProfit - reservedWithdrawals
     );
 
     /*
      * ============================================================
-     * BUSINESS WALLET
+     * 4. FIND BRAINFRIEND GLOBAL TECH WALLET
      * ============================================================
-     *
-     * We still read the wallet for the connected Paystack
-     * recipient code, but the money displayed is calculated
-     * from the real transaction records above.
      */
+
     const wallet =
       await prisma.businessWallet.findUnique({
         where: {
@@ -124,12 +134,45 @@ export async function GET() {
 
     /*
      * ============================================================
-     * WITHDRAWAL HISTORY
+     * 5. SYNCHRONIZE WALLET
      * ============================================================
      *
-     * Your BusinessWithdrawal model does NOT have description.
-     * We return adminNote instead.
+     * The BusinessWallet values are kept synchronized with the
+     * actual transaction records.
+     *
+     * Transaction data remains the source of truth.
      */
+
+    if (wallet) {
+      await prisma.businessWallet.update({
+        where: {
+          id: wallet.id,
+        },
+
+        data: {
+          totalRevenue,
+          totalCost,
+          totalProfit,
+
+          withdrawnProfit:
+            reservedWithdrawals,
+
+          availableProfit,
+
+          balance: availableProfit,
+        },
+      });
+    }
+
+    /*
+     * ============================================================
+     * 6. WITHDRAWAL HISTORY
+     * ============================================================
+     *
+     * BusinessWithdrawal does NOT have "description".
+     * Therefore we use adminNote.
+     */
+
     const withdrawalsList =
       await prisma.businessWithdrawal.findMany({
         orderBy: {
@@ -144,9 +187,9 @@ export async function GET() {
           status: true,
           reference: true,
           adminNote: true,
+          processedAt: true,
           createdAt: true,
           updatedAt: true,
-          processedAt: true,
           method: true,
           accountName: true,
           accountNumber: true,
@@ -159,9 +202,10 @@ export async function GET() {
 
     /*
      * ============================================================
-     * RETURN
+     * 7. RETURN DATA
      * ============================================================
      */
+
     return NextResponse.json({
       success: true,
 
@@ -169,14 +213,8 @@ export async function GET() {
         id: wallet?.id ?? null,
 
         name:
-          wallet?.name ||
+          wallet?.name ??
           "Brainfriend Global Tech",
-
-        /*
-         * This is the REAL amount currently available
-         * for business withdrawal.
-         */
-        balance: availableProfit,
 
         totalRevenue,
 
@@ -185,16 +223,22 @@ export async function GET() {
         totalProfit,
 
         withdrawnProfit:
-          withdrawnAmount,
+          reservedWithdrawals,
 
         availableProfit,
+
+        /*
+         * Balance represents the same real amount available
+         * for withdrawal.
+         */
+        balance: availableProfit,
 
         recipientCode:
           wallet?.recipientCode ?? null,
       },
 
       withdrawals: {
-        total: withdrawnAmount,
+        total: reservedWithdrawals,
 
         count:
           withdrawalsList.length,
@@ -215,21 +259,20 @@ export async function GET() {
             reference:
               withdrawal.reference,
 
-            /*
-             * Your schema has adminNote,
-             * not description.
-             */
             description:
               withdrawal.adminNote,
+
+            adminNote:
+              withdrawal.adminNote,
+
+            processedAt:
+              withdrawal.processedAt,
 
             createdAt:
               withdrawal.createdAt,
 
             updatedAt:
               withdrawal.updatedAt,
-
-            processedAt:
-              withdrawal.processedAt,
 
             method:
               withdrawal.method,

@@ -8,25 +8,25 @@ const NETWORKS = [
     id: "mtn",
     name: "MTN",
     providerId: 1,
-    minimum: 10,
+    minimum: 100,
   },
   {
     id: "airtel",
     name: "Airtel",
     providerId: 2,
-    minimum: 50,
+    minimum: 100,
   },
   {
     id: "glo",
     name: "GLO",
     providerId: 3,
-    minimum: 50,
+    minimum: 100,
   },
   {
     id: "9mobile",
     name: "9mobile",
     providerId: 4,
-    minimum: 50,
+    minimum: 100,
   },
 ];
 

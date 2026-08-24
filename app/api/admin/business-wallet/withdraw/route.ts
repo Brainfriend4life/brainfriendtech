@@ -1,18 +1,28 @@
-
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request
+) {
   try {
-    // =====================================================
-    // 1. ADMIN AUTHENTICATION
-    // =====================================================
+    /*
+     * ============================================================
+     * 1. ADMIN AUTHENTICATION
+     * ============================================================
+     */
 
-    const session = await getServerSession(authOptions);
+    const session =
+      await getServerSession(
+        authOptions
+      );
 
-    if (!session?.user || session.user.role !== "ADMIN") {
+    if (
+      !session?.user ||
+      session.user.role !== "ADMIN"
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -22,9 +32,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // =====================================================
-    // 2. CHECK PAYSTACK SECRET KEY
-    // =====================================================
+    /*
+     * ============================================================
+     * 2. PAYSTACK CONFIGURATION
+     * ============================================================
+     */
 
     const paystackSecretKey =
       process.env.PAYSTACK_SECRET_KEY;
@@ -44,15 +56,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // =====================================================
-    // 3. READ REQUEST
-    // =====================================================
+    /*
+     * ============================================================
+     * 3. READ REQUEST
+     * ============================================================
+     */
 
-    const body = await request.json();
+    const body =
+      await request.json();
 
-    const amount = Number(body.amount);
+    const amount =
+      Number(body.amount);
 
-    if (!Number.isFinite(amount)) {
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -62,6 +81,10 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    /*
+     * Minimum withdrawal
+     */
 
     if (amount < 100) {
       return NextResponse.json(
@@ -74,20 +97,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // Only allow 2 decimal places.
+    /*
+     * Only allow two decimal places.
+     */
+
     const roundedAmount =
       Math.round(amount * 100) / 100;
 
-    // =====================================================
-    // 4. FIND BUSINESS WALLET
-    // =====================================================
+    /*
+     * ============================================================
+     * 4. FIND BRAINFRIEND GLOBAL TECH WALLET
+     * ============================================================
+     */
 
     const businessWallet =
-      await prisma.businessWallet.findUnique({
-        where: {
-          name: "Brainfriend Global Tech",
-        },
-      });
+      await prisma.businessWallet.findUnique(
+        {
+          where: {
+            name:
+              "Brainfriend Global Tech",
+          },
+        }
+      );
 
     if (!businessWallet) {
       return NextResponse.json(
@@ -100,34 +131,144 @@ export async function POST(request: Request) {
       );
     }
 
-    // =====================================================
-    // 5. CHECK RECIPIENT
-    // =====================================================
+    /*
+     * ============================================================
+     * 5. CHECK PAYSTACK RECIPIENT
+     * ============================================================
+     */
 
-    if (!businessWallet.recipientCode) {
+    if (
+      !businessWallet.recipientCode
+    ) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "No Paystack bank recipient is connected to the business wallet.",
+            "No Paystack bank recipient is connected to Brainfriend Global Tech.",
         },
         { status: 400 }
       );
     }
 
-    // =====================================================
-    // 6. CHECK AVAILABLE PROFIT
-    // =====================================================
+    /*
+     * ============================================================
+     * 6. CALCULATE REAL PROFIT
+     * ============================================================
+     *
+     * IMPORTANT:
+     *
+     * We DO NOT use:
+     *
+     * businessWallet.availableProfit
+     *
+     * as the source of truth.
+     *
+     * We calculate the real amount directly from Transaction.
+     */
 
-    const availableProfit =
+    const transactionTotals =
+      await prisma.transaction.aggregate({
+        where: {
+          status: "SUCCESS",
+          isTest: false,
+
+          type: {
+            notIn: [
+              "FUND_WALLET",
+              "WITHDRAWAL",
+            ],
+          },
+        },
+
+        _sum: {
+          amount: true,
+          cost: true,
+          profit: true,
+        },
+      });
+
+    const totalRevenue =
       Number(
-        businessWallet.availableProfit || 0
+        transactionTotals._sum.amount ??
+          0
       );
 
-    if (roundedAmount > availableProfit) {
+    const totalCost =
+      Number(
+        transactionTotals._sum.cost ??
+          0
+      );
+
+    const totalProfit =
+      Number(
+        transactionTotals._sum.profit ??
+          0
+      );
+
+    /*
+     * ============================================================
+     * 7. CALCULATE EXISTING WITHDRAWALS
+     * ============================================================
+     *
+     * Pending and processing withdrawals reserve money.
+     *
+     * Successful withdrawals have already been paid.
+     *
+     * Failed and reversed withdrawals do not reduce availability.
+     */
+
+    const withdrawalTotals =
+      await prisma.businessWithdrawal.aggregate(
+        {
+          where: {
+            status: {
+              in: [
+                "PENDING",
+                "PROCESSING",
+                "SUCCESS",
+              ],
+            },
+          },
+
+          _sum: {
+            amount: true,
+          },
+        }
+      );
+
+    const reservedWithdrawals =
+      Number(
+        withdrawalTotals._sum.amount ??
+          0
+      );
+
+    /*
+     * ============================================================
+     * 8. CALCULATE REAL AVAILABLE PROFIT
+     * ============================================================
+     */
+
+    const availableProfit =
+      Math.max(
+        0,
+        totalProfit -
+          reservedWithdrawals
+      );
+
+    /*
+     * ============================================================
+     * 9. CHECK WITHDRAWAL AMOUNT
+     * ============================================================
+     */
+
+    if (
+      roundedAmount >
+      availableProfit
+    ) {
       return NextResponse.json(
         {
           success: false,
+
           message: `You can only withdraw up to ₦${availableProfit.toLocaleString(
             "en-NG",
             {
@@ -140,117 +281,239 @@ export async function POST(request: Request) {
       );
     }
 
-    // =====================================================
-    // 7. CREATE UNIQUE REFERENCE
-    // =====================================================
+    /*
+     * ============================================================
+     * 10. UPDATE WALLET CACHE
+     * ============================================================
+     */
+
+    await prisma.businessWallet.update({
+      where: {
+        id: businessWallet.id,
+      },
+
+      data: {
+        totalRevenue,
+
+        totalCost,
+
+        totalProfit,
+
+        withdrawnProfit:
+          reservedWithdrawals,
+
+        availableProfit,
+
+        balance:
+          availableProfit,
+      },
+    });
+
+    /*
+     * ============================================================
+     * 11. CREATE UNIQUE REFERENCE
+     * ============================================================
+     */
 
     const reference =
       `brainfriend-withdrawal-${Date.now()}-${Math.random()
         .toString(36)
         .slice(2, 8)}`;
 
-    // Paystack NGN transfers use kobo.
-    const amountInKobo =
-      Math.round(roundedAmount * 100);
+    /*
+     * Paystack uses kobo.
+     */
 
-    // =====================================================
-    // 8. CREATE PENDING WITHDRAWAL
-    // =====================================================
+    const amountInKobo =
+      Math.round(
+        roundedAmount * 100
+      );
+
+    /*
+     * ============================================================
+     * 12. CREATE PENDING WITHDRAWAL
+     * ============================================================
+     */
 
     const withdrawal =
-      await prisma.businessWithdrawal.create({
-        data: {
-          amount: roundedAmount,
-
-          accountName:
-            "Brainfriend Global Tech",
-
-          accountNumber:
-            "PAYSTACK_RECIPIENT",
-
-          bankName:
-            "Paystack Recipient",
-
-          recipientCode:
-            businessWallet.recipientCode,
-
-          reference,
-
-          status: "PENDING",
-
-          method: "PAYSTACK",
-
-          adminNote:
-            "Paystack business profit withdrawal.",
-        },
-      });
-
-    // =====================================================
-    // 9. SEND TRANSFER TO PAYSTACK
-    // =====================================================
-
-    const paystackResponse =
-      await fetch(
-        "https://api.paystack.co/transfer",
+      await prisma.businessWithdrawal.create(
         {
-          method: "POST",
+          data: {
+            amount:
+              roundedAmount,
 
-          headers: {
-            Authorization:
-              `Bearer ${paystackSecretKey}`,
+            accountName:
+              "Brainfriend Global Tech",
 
-            "Content-Type":
-              "application/json",
-          },
+            accountNumber:
+              "PAYSTACK_RECIPIENT",
 
-          body: JSON.stringify({
-            source: "balance",
+            bankName:
+              "Paystack Recipient",
 
-            amount: amountInKobo,
-
-            recipient:
+            recipientCode:
               businessWallet.recipientCode,
 
             reference,
 
-            reason:
-              "Brainfriend Global Tech business profit withdrawal",
+            status:
+              "PENDING",
 
-            currency: "NGN",
-          }),
+            method:
+              "PAYSTACK",
+
+            adminNote:
+              "Paystack business profit withdrawal.",
+          },
         }
       );
 
-    const paystackData =
-      await paystackResponse.json();
+    /*
+     * ============================================================
+     * 13. SEND TRANSFER TO PAYSTACK
+     * ============================================================
+     */
+
+    let paystackResponse: Response;
+
+    let paystackData: any;
+
+    try {
+      paystackResponse =
+        await fetch(
+          "https://api.paystack.co/transfer",
+          {
+            method: "POST",
+
+            headers: {
+              Authorization:
+                `Bearer ${paystackSecretKey}`,
+
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              source: "balance",
+
+              amount:
+                amountInKobo,
+
+              recipient:
+                businessWallet.recipientCode,
+
+              reference,
+
+              reason:
+                "Brainfriend Global Tech business profit withdrawal",
+
+              currency: "NGN",
+            }),
+          }
+        );
+
+      paystackData =
+        await paystackResponse.json();
+    } catch (paystackError) {
+      console.error(
+        "PAYSTACK REQUEST ERROR:",
+        paystackError
+      );
+
+      /*
+       * Mark as failed because the transfer request
+       * could not be completed.
+       */
+
+      await prisma.businessWithdrawal.update(
+        {
+          where: {
+            id: withdrawal.id,
+          },
+
+          data: {
+            status:
+              "FAILED",
+
+            adminNote:
+              "Unable to communicate with Paystack.",
+
+            processedAt:
+              new Date(),
+          },
+        }
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Unable to communicate with Paystack.",
+          reference,
+        },
+        { status: 502 }
+      );
+    }
 
     console.log(
       "PAYSTACK TRANSFER RESPONSE:",
       paystackData
     );
 
-    // =====================================================
-    // 10. HANDLE PAYSTACK FAILURE
-    // =====================================================
+    /*
+     * ============================================================
+     * 14. PAYSTACK FAILURE
+     * ============================================================
+     */
 
     if (
       !paystackResponse.ok ||
       !paystackData.status
     ) {
-      await prisma.businessWithdrawal.update({
+      await prisma.businessWithdrawal.update(
+        {
+          where: {
+            id: withdrawal.id,
+          },
+
+          data: {
+            status:
+              "FAILED",
+
+            adminNote:
+              paystackData.message ||
+              "Paystack transfer failed.",
+
+            processedAt:
+              new Date(),
+          },
+        }
+      );
+
+      /*
+       * Recalculate wallet because the failed withdrawal
+       * should NOT reserve money.
+       */
+
+      await prisma.businessWallet.update({
         where: {
-          id: withdrawal.id,
+          id: businessWallet.id,
         },
 
         data: {
-          status: "FAILED",
+          totalRevenue,
 
-          adminNote:
-            paystackData.message ||
-            "Paystack transfer failed.",
+          totalCost,
 
-          processedAt:
-            new Date(),
+          totalProfit,
+
+          withdrawnProfit:
+            reservedWithdrawals,
+
+          availableProfit,
+
+          balance:
+            availableProfit,
         },
       });
 
@@ -268,9 +531,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // =====================================================
-    // 11. DETERMINE PAYSTACK STATUS
-    // =====================================================
+    /*
+     * ============================================================
+     * 15. DETERMINE PAYSTACK TRANSFER STATUS
+     * ============================================================
+     */
 
     const transfer =
       paystackData.data;
@@ -288,95 +553,153 @@ export async function POST(request: Request) {
       "PROCESSING";
 
     if (
-      paystackStatus === "success"
+      paystackStatus ===
+      "success"
     ) {
-      withdrawalStatus = "SUCCESS";
+      withdrawalStatus =
+        "SUCCESS";
     } else if (
-      paystackStatus === "failed"
+      paystackStatus ===
+        "failed" ||
+      paystackStatus ===
+        "reversed"
     ) {
-      withdrawalStatus = "FAILED";
+      withdrawalStatus =
+        "FAILED";
     } else {
-      withdrawalStatus = "PROCESSING";
+      withdrawalStatus =
+        "PROCESSING";
     }
 
-    // =====================================================
-    // 12. UPDATE WITHDRAWAL RECORD
-    // =====================================================
+    /*
+     * ============================================================
+     * 16. UPDATE WITHDRAWAL
+     * ============================================================
+     */
 
     const transferCode =
-      transfer?.transfer_code || null;
+      transfer?.transfer_code ||
+      null;
 
     const updatedWithdrawal =
-      await prisma.businessWithdrawal.update({
-        where: {
-          id: withdrawal.id,
-        },
+      await prisma.businessWithdrawal.update(
+        {
+          where: {
+            id: withdrawal.id,
+          },
 
-        data: {
-          status: withdrawalStatus,
+          data: {
+            status:
+              withdrawalStatus,
 
-          transferCode,
+            transferCode,
 
-          adminNote:
-            paystackData.message ||
-            "Paystack transfer initiated.",
+            adminNote:
+              paystackData.message ||
+              "Paystack transfer initiated.",
 
-          processedAt:
-            withdrawalStatus === "SUCCESS" ||
-            withdrawalStatus === "FAILED"
-              ? new Date()
-              : null,
-        },
-      });
+            processedAt:
+              withdrawalStatus ===
+                "SUCCESS" ||
+              withdrawalStatus ===
+                "FAILED"
+                ? new Date()
+                : null,
+          },
+        }
+      );
 
-    // =====================================================
-    // 13. ONLY DEDUCT PROFIT WHEN PAYSTACK
-    //     CONFIRMS SUCCESS
-    // =====================================================
+    /*
+     * ============================================================
+     * 17. RE-CALCULATE WALLET
+     * ============================================================
+     *
+     * This is important.
+     *
+     * We calculate withdrawals AGAIN after creating/updating
+     * the withdrawal record.
+     *
+     * That means:
+     *
+     * SUCCESS     -> deducted
+     * PROCESSING  -> reserved
+     * PENDING     -> reserved
+     * FAILED      -> not deducted
+     */
 
-    if (
-      withdrawalStatus === "SUCCESS"
-    ) {
-      const newAvailableProfit =
-        Math.max(
-          availableProfit -
-            roundedAmount,
-          0
-        );
+    const latestWithdrawalTotals =
+      await prisma.businessWithdrawal.aggregate(
+        {
+          where: {
+            status: {
+              in: [
+                "PENDING",
+                "PROCESSING",
+                "SUCCESS",
+              ],
+            },
+          },
 
-      const newWithdrawnProfit =
-        Number(
-          businessWallet.withdrawnProfit ||
-            0
-        ) + roundedAmount;
+          _sum: {
+            amount: true,
+          },
+        }
+      );
 
-      await prisma.businessWallet.update({
-        where: {
-          id: businessWallet.id,
-        },
+    const latestReservedWithdrawals =
+      Number(
+        latestWithdrawalTotals
+          ._sum.amount ?? 0
+      );
 
-        data: {
-          withdrawnProfit:
-            newWithdrawnProfit,
+    const latestAvailableProfit =
+      Math.max(
+        0,
+        totalProfit -
+          latestReservedWithdrawals
+      );
 
-          availableProfit:
-            newAvailableProfit,
+    /*
+     * ============================================================
+     * 18. SYNCHRONIZE BUSINESS WALLET
+     * ============================================================
+     */
 
-          balance:
-            newAvailableProfit,
-        },
-      });
-    }
+    await prisma.businessWallet.update({
+      where: {
+        id: businessWallet.id,
+      },
 
-    // =====================================================
-    // 14. RETURN RESULT
-    // =====================================================
+      data: {
+        totalRevenue,
+
+        totalCost,
+
+        totalProfit,
+
+        withdrawnProfit:
+          latestReservedWithdrawals,
+
+        availableProfit:
+          latestAvailableProfit,
+
+        balance:
+          latestAvailableProfit,
+      },
+    });
+
+    /*
+     * ============================================================
+     * 19. RETURN RESULT
+     * ============================================================
+     */
 
     return NextResponse.json({
       success: true,
 
       message:
-        withdrawalStatus === "SUCCESS"
+        withdrawalStatus ===
+        "SUCCESS"
           ? "Withdrawal completed successfully."
           : "Withdrawal has been sent to Paystack for processing.",
 
@@ -385,7 +708,9 @@ export async function POST(request: Request) {
           updatedWithdrawal.id,
 
         amount:
-          updatedWithdrawal.amount,
+          Number(
+            updatedWithdrawal.amount
+          ),
 
         status:
           updatedWithdrawal.status,
@@ -398,6 +723,23 @@ export async function POST(request: Request) {
 
         createdAt:
           updatedWithdrawal.createdAt,
+      },
+
+      wallet: {
+        totalRevenue,
+
+        totalCost,
+
+        totalProfit,
+
+        withdrawnProfit:
+          latestReservedWithdrawals,
+
+        availableProfit:
+          latestAvailableProfit,
+
+        balance:
+          latestAvailableProfit,
       },
     });
   } catch (error) {
@@ -423,4 +765,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
