@@ -4,37 +4,40 @@ export default function Footer() {
   return (
     <footer className="bg-gray-900 text-white">
       <div className="mx-auto max-w-7xl px-6 py-12">
-
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
 
           {/* BRAND */}
-
           <div>
             <h2 className="text-xl font-bold">
               Brainfriend Global Tech
             </h2>
 
             <p className="mt-3 text-sm text-gray-400">
-              Your trusted platform for airtime,
-              data, electricity, cable TV and
-              other digital services.
+              Your trusted platform for airtime, data,
+              NIN verification, electricity, cable TV
+              and other digital services.
             </p>
           </div>
 
           {/* QUICK LINKS */}
-
           <div>
             <h3 className="mb-4 font-semibold">
               Quick Links
             </h3>
 
             <div className="space-y-3 text-sm text-gray-400">
-
               <Link
                 href="/"
                 className="block transition hover:text-white"
               >
                 Home
+              </Link>
+
+              <Link
+                href="/about"
+                className="block transition hover:text-white"
+              >
+                About Us
               </Link>
 
               <Link
@@ -57,19 +60,16 @@ export default function Footer() {
               >
                 Services
               </Link>
-
             </div>
           </div>
 
           {/* SERVICES */}
-
           <div>
             <h3 className="mb-4 font-semibold">
               Services
             </h3>
 
             <div className="space-y-3 text-sm text-gray-400">
-
               <Link
                 href="/dashboard/airtime"
                 className="block transition hover:text-white"
@@ -82,6 +82,13 @@ export default function Footer() {
                 className="block transition hover:text-white"
               >
                 Data
+              </Link>
+
+              <Link
+                href="/dashboard/nin"
+                className="block transition hover:text-white"
+              >
+                NIN Verification
               </Link>
 
               <Link
@@ -111,19 +118,16 @@ export default function Footer() {
               >
                 CBT/Education
               </Link>
-
             </div>
           </div>
 
           {/* ACCOUNT */}
-
           <div>
             <h3 className="mb-4 font-semibold">
               Account
             </h3>
 
             <div className="space-y-3 text-sm text-gray-400">
-
               <Link
                 href="/login"
                 className="block transition hover:text-white"
@@ -137,23 +141,18 @@ export default function Footer() {
               >
                 Create Account
               </Link>
-
             </div>
           </div>
-
         </div>
 
         {/* BOTTOM */}
-
         <div className="mt-10 flex flex-col gap-4 border-t border-gray-800 pt-6 text-sm text-gray-400 sm:flex-row sm:items-center sm:justify-between">
-
           <p>
             © {new Date().getFullYear()} Brainfriend Global Tech.
             All rights reserved.
           </p>
 
           <div className="flex flex-wrap gap-5">
-
             <Link
               href="/privacy"
               className="transition hover:text-white"
@@ -167,11 +166,8 @@ export default function Footer() {
             >
               Terms & Conditions
             </Link>
-
           </div>
-
         </div>
-
       </div>
     </footer>
   );

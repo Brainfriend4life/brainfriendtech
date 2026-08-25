@@ -408,12 +408,13 @@ export default function AboutPage() {
                 Meet the Founder
               </p>
 
-              <h2 className="mt-3 text-3xl font-bold text-gray-900 sm:text-4xl">
-                Emmanuel
+              <h2 className="mt-3 text-2xl font-bold text-gray-900 sm:text-3xl">
+                Odjuvwederhie Emmanuel Oghenevovwero
               </h2>
 
               <p className="mt-2 text-lg font-medium text-indigo-600">
-                Founder, Brainfriend Global Tech
+                Founder, Brainfriend Global Tech</p>
+                <p className="font-bold">Fullstack Dev /Nextjs /React /Typescript /Javascript / Tailwind CSS
               </p>
 
               <p className="mt-6 text-lg leading-8 text-gray-600">
@@ -431,7 +432,7 @@ export default function AboutPage() {
               </p>
 
               <p className="mt-5 text-lg font-medium leading-8 text-gray-900">
-                “Our goal is simple — to build technology that solves
+                “Our goal is simple: To build technology that solves
                 real problems and makes everyday life easier.”
               </p>
 
