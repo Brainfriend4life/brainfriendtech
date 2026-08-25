@@ -1,7 +1,6 @@
 
 "use client";
 
-
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
@@ -37,6 +36,8 @@ export default function Navbar() {
 
         {/* DESKTOP NAVIGATION */}
         <nav className="hidden items-center gap-7 md:flex">
+
+          {/* HOME */}
           <Link
             href="/"
             className="font-medium text-foreground/80 transition hover:text-indigo-600"
@@ -44,6 +45,15 @@ export default function Navbar() {
             Home
           </Link>
 
+          {/* ABOUT US */}
+          <Link
+            href="/about"
+            className="font-medium text-foreground/80 transition hover:text-indigo-600"
+          >
+            About Us
+          </Link>
+
+          {/* SERVICES */}
           <Link
             href="#services"
             className="font-medium text-foreground/80 transition hover:text-indigo-600"
@@ -51,6 +61,7 @@ export default function Navbar() {
             Services
           </Link>
 
+          {/* PRICING */}
           <Link
             href="/pricing"
             className="font-medium text-foreground/80 transition hover:text-indigo-600"
@@ -58,6 +69,7 @@ export default function Navbar() {
             Pricing
           </Link>
 
+          {/* CONTACT */}
           <Link
             href="/contact"
             className="font-medium text-foreground/80 transition hover:text-indigo-600"
@@ -68,7 +80,6 @@ export default function Navbar() {
 
         {/* DESKTOP ACTIONS */}
         <div className="hidden items-center gap-3 md:flex">
-        
 
           {/* LOGIN */}
           <Link href="/login">
@@ -83,6 +94,7 @@ export default function Navbar() {
               Create Account
             </Button>
           </Link>
+
         </div>
 
         {/* MOBILE ACTIONS */}
@@ -106,12 +118,14 @@ export default function Navbar() {
               <Menu className="h-6 w-6" />
             )}
           </button>
+
         </div>
       </div>
 
       {/* MOBILE MENU */}
       {mobileOpen && (
         <div className="border-t border-border bg-background px-4 py-4 shadow-md md:hidden">
+
           <nav className="flex flex-col gap-1">
 
             {/* HOME */}
@@ -121,6 +135,15 @@ export default function Navbar() {
               className="rounded-lg px-4 py-3 font-medium text-foreground/80 transition hover:bg-accent hover:text-accent-foreground"
             >
               Home
+            </Link>
+
+            {/* ABOUT US */}
+            <Link
+              href="/about"
+              onClick={() => setMobileOpen(false)}
+              className="rounded-lg px-4 py-3 font-medium text-foreground/80 transition hover:bg-accent hover:text-accent-foreground"
+            >
+              About Us
             </Link>
 
             {/* SERVICES */}
