@@ -115,7 +115,7 @@ export default function ContactPage() {
             {/* EMAIL */}
 
             <a
-              href="mailto:brainfriend4life@gmail.com"
+              href="mailto:brainfriendglobaltech@gmail.com"
               className="group flex items-start gap-4 rounded-2xl bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
             >
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
@@ -128,7 +128,7 @@ export default function ContactPage() {
                 </p>
 
                 <p className="mt-1 break-all text-sm text-gray-600 group-hover:text-indigo-600">
-                  brainfriend4life@gmail.com
+                 brainfriendglobaltech@gmail.com
                 </p>
               </div>
             </a>

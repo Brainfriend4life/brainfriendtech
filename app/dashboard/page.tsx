@@ -1,3 +1,4 @@
+
 import BalanceCard from "@/components/dashboard/BalanceCard";
 import QuickActions from "@/components/dashboard/QuickActions";
 import RecentTransactions from "@/components/dashboard/RecentTransactions";
@@ -5,8 +6,7 @@ import ProfileCard from "@/components/dashboard/ProfileCard";
 
 export default function DashboardPage() {
   return (
-    <div className="space-y-8">
-
+    <div className="min-h-full space-y-8 bg-background text-foreground">
       <BalanceCard />
 
       {/* WhatsApp Group Banner */}
@@ -17,7 +17,6 @@ export default function DashboardPage() {
         className="block w-full"
       >
         <div className="flex items-center justify-between rounded-2xl bg-green-600 px-5 py-4 text-white shadow-sm transition hover:bg-green-700">
-
           <div>
             <h3 className="text-lg font-bold sm:text-xl">
               Join Our WhatsApp Group
@@ -29,7 +28,6 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-3">
-
             <div className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-white sm:h-14 sm:w-14">
               <svg
                 viewBox="0 0 24 24"
@@ -43,7 +41,6 @@ export default function DashboardPage() {
             <span className="rounded-xl bg-white px-4 py-3 text-sm font-bold text-green-600 shadow-sm sm:px-5 sm:text-base">
               Join Now
             </span>
-
           </div>
         </div>
       </a>
@@ -53,7 +50,6 @@ export default function DashboardPage() {
       <RecentTransactions />
 
       <ProfileCard />
-
     </div>
   );
 }

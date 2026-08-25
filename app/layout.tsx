@@ -1,8 +1,10 @@
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import AuthProvider from "@/components/providers/AuthProvider";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
@@ -21,9 +23,10 @@ export const metadata: Metadata = {
   ),
 
   verification: {
-    google: "AQIBWSH6BimsTbJT4tNXn0f_At6RIL6JRwKV-GymDdQ",
+    google:
+      "AQIBWSH6BimsTbJT4tNXn0f_At6RIL6JRwKV-GymDdQ",
   },
-  
+
   title: {
     default:
       "Brainfriend Global Tech | Fast & Reliable NIN Verification/VTU Platform",
@@ -35,14 +38,12 @@ export const metadata: Metadata = {
 
   keywords: [
     "Brainfriend Global Tech",
-    "Brainfriend Global Tech",
     "VTU Nigeria",
     "VTU platform Nigeria",
     "buy data Nigeria",
     "cheap data Nigeria",
     "buy airtime Nigeria",
     "NIN verification Nigeria",
-    "NIN verification",
     "electricity bill payment Nigeria",
     "electricity token Nigeria",
     "DSTV subscription Nigeria",
@@ -69,7 +70,8 @@ export const metadata: Metadata = {
   publisher: "Brainfriend Global Tech",
 
   alternates: {
-    canonical: "https://brainfriendglobaltech.vercel.app",
+    canonical:
+      "https://brainfriendglobaltech.vercel.app",
   },
 
   openGraph: {
@@ -130,15 +132,19 @@ export default function RootLayout({
   return (
     <html
       lang="en-NG"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        <ThemeProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
 
-        <Toaster position="top-right" />
+          <Toaster position="top-right" />
+        </ThemeProvider>
       </body>
     </html>
   );
 }
+
