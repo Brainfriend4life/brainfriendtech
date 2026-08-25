@@ -4,6 +4,7 @@ import "./globals.css";
 
 import AuthProvider from "@/components/providers/AuthProvider";
 import { Toaster } from "react-hot-toast";
+import UpdatePrompt from "@/components/pwa/UpdatePrompt";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -138,6 +139,7 @@ export default function RootLayout({
         </AuthProvider>
 
         <Toaster position="top-right" />
+        <UpdatePrompt />
       </body>
     </html>
   );

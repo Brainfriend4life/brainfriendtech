@@ -4,7 +4,7 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Brainfriend Global Tech",
-    short_name: "Brainfriend",
+    short_name: "BF Tech",
     description:
       "Fast and reliable VTU services from Brainfriend Global Tech.",
     start_url: "/",
