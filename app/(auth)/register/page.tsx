@@ -12,13 +12,15 @@ import {
   Check,
   Eye,
   EyeOff,
+  Gift,
   LockKeyhole,
   Mail,
   Phone,
+  ShieldCheck,
   User,
-  Gift,
 } from "lucide-react";
 
+import AuthInput from "@/components/auth/AuthInput";
 import AuthButton from "@/components/auth/AuthButton";
 
 function RegisterForm() {
@@ -30,13 +32,16 @@ function RegisterForm() {
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] =
+    useState(false);
 
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     phone: "",
-    password: "",
     referralCode,
+    password: "",
+    confirmPassword: "",
   });
 
   const handleChange = (
@@ -53,6 +58,21 @@ function RegisterForm() {
     }));
   };
 
+  const passwordRequirements = {
+    length: form.password.length >= 6,
+    uppercase: /[A-Z]/.test(form.password),
+    lowercase: /[a-z]/.test(form.password),
+    number: /[0-9]/.test(form.password),
+    special: /[^A-Za-z0-9]/.test(form.password),
+  };
+
+  const strongPassword =
+    passwordRequirements.length &&
+    passwordRequirements.uppercase &&
+    passwordRequirements.lowercase &&
+    passwordRequirements.number &&
+    passwordRequirements.special;
+
   const handleSubmit = async (
     e: React.FormEvent<HTMLFormElement>
   ) => {
@@ -62,16 +82,22 @@ function RegisterForm() {
       !form.fullName.trim() ||
       !form.email.trim() ||
       !form.phone.trim() ||
-      !form.password
+      !form.password ||
+      !form.confirmPassword
     ) {
-      toast.error("Please complete all the fields.");
+      toast.error("Please complete all required fields.");
       return;
     }
 
-    if (form.password.length < 6) {
+    if (!strongPassword) {
       toast.error(
-        "Password must be at least 6 characters."
+        "Password must contain uppercase, lowercase, number and special character."
       );
+      return;
+    }
+
+    if (form.password !== form.confirmPassword) {
+      toast.error("Passwords do not match.");
       return;
     }
 
@@ -97,6 +123,8 @@ function RegisterForm() {
 
       router.push("/login");
     } catch (error: unknown) {
+      console.error("REGISTER ERROR:", error);
+
       if (axios.isAxiosError(error)) {
         toast.error(
           error.response?.data?.message ||
@@ -113,215 +141,298 @@ function RegisterForm() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <div className="flex min-h-screen flex-col lg:flex-row">
+    <main
+      className="
+        min-h-screen
+        bg-gradient-to-br
+        from-slate-50
+        via-white
+        to-indigo-50
+        px-4 py-6
+        transition-colors duration-300
+        dark:from-slate-950
+        dark:via-slate-950
+        dark:to-indigo-950/40
+        sm:px-6 sm:py-10
+      "
+    >
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl items-center justify-center">
+        <div
+          className="
+            grid w-full overflow-hidden rounded-3xl
+            border border-gray-200
+            bg-white
+            shadow-2xl shadow-indigo-100/50
+            transition-colors duration-300
+            dark:border-slate-800
+            dark:bg-slate-900
+            dark:shadow-black/30
+            lg:grid-cols-2
+          "
+        >
+          {/* ================================================= */}
+          {/* LEFT BRAND PANEL */}
+          {/* ================================================= */}
 
-        {/* LEFT BRAND PANEL */}
-        <section className="relative hidden overflow-hidden bg-indigo-700 lg:flex lg:w-[40%] xl:w-[42%]">
-          <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-white/10" />
+          <div
+            className="
+              relative hidden overflow-hidden
+              bg-gradient-to-br
+              from-indigo-700 via-indigo-600 to-violet-700
+              p-10 text-white
+              lg:flex lg:min-h-[680px]
+              lg:flex-col lg:justify-between
+              xl:p-14
+            "
+          >
+            {/* Decorative circles */}
 
-          <div className="absolute -bottom-40 -right-32 h-[30rem] w-[30rem] rounded-full bg-blue-400/20" />
+            <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/10" />
 
-          <div className="absolute right-20 top-1/3 h-32 w-32 rounded-full border border-white/10" />
+            <div className="absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-white/10" />
 
-          <div className="relative z-10 flex w-full flex-col justify-between p-10 xl:p-14">
+            <div className="absolute right-20 top-1/2 h-20 w-20 rounded-full bg-white/5" />
 
-            {/* LOGO */}
-            <Link
-              href="/"
-              className="group flex w-fit items-center gap-3"
-            >
-              <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg transition group-hover:scale-105">
-                <Image
-                  src="/logo.png"
-                  alt="Brainfriend Global Tech"
-                  width={48}
-                  height={48}
-                  priority
-                  className="h-10 w-10 object-contain"
-                />
-              </div>
-
-              <div>
-                <p className="text-xl font-bold text-white">
-                  Brainfriend
-                </p>
-
-                <p className="text-xs font-semibold tracking-widest text-indigo-200">
-                  TECH SERVICES
-                </p>
-              </div>
-            </Link>
-
-            {/* BRAND CONTENT */}
-            <div className="my-12 max-w-md">
-              <p className="mb-5 text-sm font-semibold uppercase tracking-[0.2em] text-indigo-200">
-                Join Brainfriend
-              </p>
-
-              <h1 className="text-4xl font-bold leading-tight text-white xl:text-5xl">
-                Everything you need.
-                <br />
-                One simple account.
-              </h1>
-
-              <p className="mt-6 text-base leading-7 text-indigo-100">
-                Create your account and enjoy
-                convenient access to airtime, data,
-                electricity, cable and other digital
-                services.
-              </p>
-
-              <div className="mt-9 space-y-4">
-
-                <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
-                    <Check className="h-4 w-4 text-indigo-600" />
-                  </div>
-
-                  <p className="text-sm font-medium text-white">
-                    Fast and convenient transactions
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
-                    <Check className="h-4 w-4 text-indigo-600" />
-                  </div>
-
-                  <p className="text-sm font-medium text-white">
-                    Secure wallet and payments
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
-                    <Check className="h-4 w-4 text-indigo-600" />
-                  </div>
-
-                  <p className="text-sm font-medium text-white">
-                    Reliable digital services
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
-                    <Gift className="h-4 w-4 text-indigo-600" />
-                  </div>
-
-                  <p className="text-sm font-medium text-white">
-                    Earn rewards when friends use the platform
-                  </p>
-                </div>
-
-              </div>
-            </div>
-
-            <p className="text-sm text-indigo-200">
-              © {new Date().getFullYear()} Brainfriend Global Tech
-            </p>
-          </div>
-        </section>
-
-        {/* REGISTER AREA */}
-        <section className="flex w-full flex-1 items-center justify-center px-4 py-8 sm:px-6 md:px-8 lg:w-[60%] lg:px-10 xl:px-14 2xl:px-20">
-
-          <div className="w-full max-w-2xl">
-
-            {/* MOBILE TOP */}
-            <div className="mb-7 lg:hidden">
+            <div className="relative z-10">
+              {/* LOGO */}
 
               <Link
                 href="/"
-                className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 transition hover:text-indigo-800"
+                className="inline-flex items-center gap-3"
               >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Home
-              </Link>
-
-              <div className="mt-7 flex items-center gap-3">
-
-                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-gray-100">
+                <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg">
                   <Image
                     src="/logo.png"
                     alt="Brainfriend Global Tech"
                     width={56}
                     height={56}
                     priority
-                    className="h-12 w-12 object-contain"
+                    className="h-full w-full object-contain p-1"
                   />
                 </div>
 
                 <div>
-                  <p className="text-xl font-bold text-gray-900">
+                  <p className="text-xl font-bold text-white">
                     Brainfriend
                   </p>
 
-                  <p className="text-[10px] font-bold tracking-[0.18em] text-indigo-600">
+                  <p className="text-xs font-medium tracking-wide text-indigo-200">
                     TECH SERVICES
                   </p>
                 </div>
+              </Link>
 
+              {/* BRAND CONTENT */}
+
+              <div className="mt-20 max-w-md">
+                <div
+                  className="
+                    mb-6 inline-flex items-center gap-2
+                    rounded-full border border-white/20
+                    bg-white/10 px-4 py-2
+                    text-xs font-semibold
+                    text-indigo-100
+                    backdrop-blur-sm
+                  "
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  Secure Registration
+                </div>
+
+                <h2 className="text-4xl font-bold leading-tight xl:text-5xl">
+                  Join Brainfriend,
+                  <span className="mt-2 block text-indigo-200">
+                    start today.
+                  </span>
+                </h2>
+
+                <p className="mt-6 text-base leading-7 text-indigo-100">
+                  Create your Brainfriend Global Tech
+                  account and enjoy fast, secure and
+                  reliable digital services.
+                </p>
+
+                <div className="mt-8 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
+                      <ShieldCheck className="h-4 w-4 text-white" />
+                    </div>
+
+                    <span className="text-sm text-indigo-100">
+                      Secure account protection
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
+                      <Check className="h-4 w-4 text-white" />
+                    </div>
+
+                    <span className="text-sm text-indigo-100">
+                      Fast and reliable transactions
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15">
+                      <Gift className="h-4 w-4 text-white" />
+                    </div>
+
+                    <span className="text-sm text-indigo-100">
+                      Referral rewards available
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* DESKTOP BACK */}
-            <div className="mb-7 hidden lg:block">
+            {/* FOOTER */}
 
-              <Link
-                href="/"
-                className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 transition hover:text-indigo-800"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Home
-              </Link>
-
+            <div className="relative z-10">
+              <p className="text-sm text-indigo-200">
+                © {new Date().getFullYear()} Brainfriend Global Tech
+              </p>
             </div>
+          </div>
 
-            {/* HEADING */}
-            <div className="mb-7">
+          {/* ================================================= */}
+          {/* RIGHT REGISTRATION AREA */}
+          {/* ================================================= */}
 
-              <p className="mb-2 text-sm font-semibold text-indigo-600">
-                Get started
-              </p>
+          <div
+            className="
+              relative flex
+              flex-col justify-center
+              bg-white
+              p-5
+              transition-colors duration-300
+              dark:bg-slate-900
+              sm:p-8
+              md:p-10
+              lg:p-12
+              xl:p-14
+            "
+          >
+            <div className="mx-auto w-full max-w-md">
 
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-                Create your account
-              </h2>
+              {/* ================================================= */}
+              {/* BACK TO HOME */}
+              {/* ================================================= */}
 
-              <p className="mt-3 max-w-xl text-sm leading-6 text-gray-500 sm:text-base">
-                Sign up in less than a minute and start
-                using Brainfriend Global Tech services.
-              </p>
+              <div className="mb-7">
+                <Link
+                  href="/"
+                  className="
+                    inline-flex items-center gap-2
+                    rounded-xl
+                    border border-gray-200
+                    bg-white
+                    px-4 py-2.5
+                    text-sm font-semibold
+                    text-gray-700
+                    shadow-sm
+                    transition
+                    hover:border-indigo-200
+                    hover:bg-indigo-50
+                    hover:text-indigo-600
+                    dark:border-slate-700
+                    dark:bg-slate-800
+                    dark:text-slate-200
+                    dark:hover:border-indigo-500/50
+                    dark:hover:bg-indigo-950/50
+                    dark:hover:text-indigo-300
+                  "
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to Home
+                </Link>
+              </div>
 
-              {/* REFERRAL NOTICE */}
-              {form.referralCode && (
-                <div className="mt-4 flex items-start gap-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+              {/* ================================================= */}
+              {/* MOBILE LOGO */}
+              {/* ================================================= */}
 
-                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white">
-                    <Gift className="h-4 w-4 text-indigo-600" />
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-semibold text-indigo-700">
-                      You were invited to Brainfriend
-                    </p>
-
-                    <p className="mt-1 text-xs text-indigo-500">
-                      Referral code:{" "}
-                      <span className="font-bold">
-                        {form.referralCode}
-                      </span>
-                    </p>
-                  </div>
-
+              <div className="mb-7 flex items-center gap-3 lg:hidden">
+                <div
+                  className="
+                    flex h-14 w-14
+                    items-center justify-center
+                    overflow-hidden rounded-2xl
+                    bg-white shadow-md
+                    ring-1 ring-gray-100
+                    dark:bg-slate-800
+                    dark:ring-slate-700
+                  "
+                >
+                  <Image
+                    src="/logo.png"
+                    alt="Brainfriend Global Tech"
+                    width={56}
+                    height={56}
+                    priority
+                    className="h-full w-full object-contain p-1"
+                  />
                 </div>
-              )}
 
-            </div>
+                <div>
+                  <p className="text-xl font-bold text-gray-900 dark:text-white">
+                    Brainfriend
+                  </p>
 
-            {/* FORM CARD */}
-            <div className="w-full rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-7 lg:p-8">
+                  <p className="text-xs font-semibold tracking-wide text-indigo-600 dark:text-indigo-400">
+                    TECH SERVICES
+                  </p>
+                </div>
+              </div>
+
+              {/* ================================================= */}
+              {/* HEADING */}
+              {/* ================================================= */}
+
+              <div className="mb-7">
+                <div
+                  className="
+                    mb-3 inline-flex items-center gap-2
+                    rounded-full
+                    bg-indigo-50
+                    px-3 py-1.5
+                    text-xs font-semibold
+                    text-indigo-600
+                    dark:bg-indigo-950/60
+                    dark:text-indigo-300
+                  "
+                >
+                  <User className="h-3.5 w-3.5" />
+                  Create Account
+                </div>
+
+                <h1
+                  className="
+                    text-3xl font-bold tracking-tight
+                    text-gray-900
+                    dark:text-white
+                    sm:text-4xl
+                  "
+                >
+                  Create your account
+                </h1>
+
+                <p
+                  className="
+                    mt-3 text-sm leading-6
+                    text-gray-500
+                    dark:text-slate-400
+                    sm:text-base
+                  "
+                >
+                  Register with Brainfriend Global Tech
+                  and start using our digital services.
+                </p>
+              </div>
+
+              {/* ================================================= */}
+              {/* REGISTRATION FORM */}
+              {/* ================================================= */}
 
               <form
                 onSubmit={handleSubmit}
@@ -329,98 +440,65 @@ function RegisterForm() {
               >
 
                 {/* FULL NAME */}
-                <div>
-                  <label
-                    htmlFor="fullName"
-                    className="mb-2 block text-sm font-semibold text-gray-700"
-                  >
-                    Full name
-                  </label>
 
-                  <div className="relative">
-                    <User className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
-
-                    <input
-                      id="fullName"
-                      name="fullName"
-                      type="text"
-                      autoComplete="name"
-                      placeholder="John Doe"
-                      value={form.fullName}
-                      onChange={handleChange}
-                      disabled={loading}
-                      className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-                    />
-                  </div>
-                </div>
+                <AuthInput
+                  label="Full Name"
+                  name="fullName"
+                  type="text"
+                  placeholder="John Doe"
+                  value={form.fullName}
+                  onChange={handleChange}
+                />
 
                 {/* EMAIL */}
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="mb-2 block text-sm font-semibold text-gray-700"
-                  >
-                    Email address
-                  </label>
 
-                  <div className="relative">
-                    <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
-
-                    <input
-                      id="email"
-                      name="email"
-                      type="email"
-                      autoComplete="email"
-                      placeholder="you@example.com"
-                      value={form.email}
-                      onChange={handleChange}
-                      disabled={loading}
-                      className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-                    />
-                  </div>
-                </div>
+                <AuthInput
+                  label="Email Address"
+                  name="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={form.email}
+                  onChange={handleChange}
+                />
 
                 {/* PHONE */}
-                <div>
-                  <label
-                    htmlFor="phone"
-                    className="mb-2 block text-sm font-semibold text-gray-700"
-                  >
-                    Phone number
-                  </label>
 
-                  <div className="relative">
-                    <Phone className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                <AuthInput
+                  label="Phone Number"
+                  name="phone"
+                  type="tel"
+                  placeholder="08012345678"
+                  value={form.phone}
+                  onChange={handleChange}
+                />
 
-                    <input
-                      id="phone"
-                      name="phone"
-                      type="tel"
-                      inputMode="tel"
-                      autoComplete="tel"
-                      placeholder="08012345678"
-                      value={form.phone}
-                      onChange={handleChange}
-                      disabled={loading}
-                      className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-                    />
-                  </div>
-                </div>
+                {/* REFERRAL */}
 
-                {/* REFERRAL CODE */}
                 <div>
                   <label
                     htmlFor="referralCode"
-                    className="mb-2 block text-sm font-semibold text-gray-700"
+                    className="
+                      mb-2 block text-sm font-semibold
+                      text-gray-700
+                      dark:text-slate-200
+                    "
                   >
-                    Referral code{" "}
+                    Referral Code{" "}
                     <span className="font-normal text-gray-400">
                       (optional)
                     </span>
                   </label>
 
                   <div className="relative">
-                    <Gift className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                    <Gift
+                      className="
+                        pointer-events-none
+                        absolute left-4 top-1/2
+                        h-5 w-5
+                        -translate-y-1/2
+                        text-slate-400
+                      "
+                    />
 
                     <input
                       id="referralCode"
@@ -431,26 +509,64 @@ function RegisterForm() {
                       value={form.referralCode}
                       onChange={handleChange}
                       disabled={loading}
-                      className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-4 text-sm uppercase text-gray-900 outline-none transition placeholder:normal-case placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="
+                        h-12 w-full rounded-xl
+                        border border-gray-200
+                        bg-gray-50
+                        pl-12 pr-4
+                        text-base uppercase
+                        text-gray-900
+                        outline-none
+                        transition
+                        placeholder:normal-case
+                        placeholder:text-gray-400
+                        focus:border-indigo-500
+                        focus:bg-white
+                        focus:ring-4
+                        focus:ring-indigo-500/10
+                        disabled:cursor-not-allowed
+                        disabled:opacity-60
+                        dark:border-slate-700
+                        dark:bg-slate-800
+                        dark:text-white
+                        dark:placeholder:text-slate-500
+                        dark:focus:border-indigo-400
+                        sm:h-14
+                      "
                     />
                   </div>
 
-                  <p className="mt-2 text-xs text-gray-400">
+                  <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
                     Enter a referral code if someone invited you.
                   </p>
                 </div>
 
+                {/* ================================================= */}
                 {/* PASSWORD */}
+                {/* ================================================= */}
+
                 <div>
                   <label
                     htmlFor="password"
-                    className="mb-2 block text-sm font-semibold text-gray-700"
+                    className="
+                      mb-2 block text-sm font-semibold
+                      text-gray-700
+                      dark:text-slate-200
+                    "
                   >
                     Password
                   </label>
 
                   <div className="relative">
-                    <LockKeyhole className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                    <LockKeyhole
+                      className="
+                        pointer-events-none
+                        absolute left-4 top-1/2
+                        h-5 w-5
+                        -translate-y-1/2
+                        text-slate-400
+                      "
+                    />
 
                     <input
                       id="password"
@@ -461,11 +577,33 @@ function RegisterForm() {
                           : "password"
                       }
                       autoComplete="new-password"
-                      placeholder="At least 6 characters"
+                      placeholder="Create a strong password"
                       value={form.password}
                       onChange={handleChange}
                       disabled={loading}
-                      className="h-12 w-full rounded-xl border border-gray-200 bg-gray-50 pl-11 pr-12 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="
+                        h-12 w-full rounded-xl
+                        border border-gray-200
+                        bg-gray-50
+                        pl-12 pr-12
+                        text-base
+                        text-gray-900
+                        outline-none
+                        transition
+                        placeholder:text-gray-400
+                        focus:border-indigo-500
+                        focus:bg-white
+                        focus:ring-4
+                        focus:ring-indigo-500/10
+                        disabled:cursor-not-allowed
+                        disabled:opacity-60
+                        dark:border-slate-700
+                        dark:bg-slate-800
+                        dark:text-white
+                        dark:placeholder:text-slate-500
+                        dark:focus:border-indigo-400
+                        sm:h-14
+                      "
                     />
 
                     <button
@@ -481,7 +619,14 @@ function RegisterForm() {
                         )
                       }
                       disabled={loading}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="
+                        absolute right-4 top-1/2
+                        -translate-y-1/2
+                        text-slate-400
+                        transition
+                        hover:text-slate-700
+                        dark:hover:text-slate-200
+                      "
                     >
                       {showPassword ? (
                         <EyeOff className="h-5 w-5" />
@@ -490,14 +635,212 @@ function RegisterForm() {
                       )}
                     </button>
                   </div>
-
-                  <p className="mt-2 text-xs text-gray-400">
-                    Use at least 6 characters.
-                  </p>
                 </div>
 
-                {/* SUBMIT */}
-                <div className="pt-2">
+                {/* ================================================= */}
+                {/* CONFIRM PASSWORD */}
+                {/* ================================================= */}
+
+                <div>
+                  <label
+                    htmlFor="confirmPassword"
+                    className="
+                      mb-2 block text-sm font-semibold
+                      text-gray-700
+                      dark:text-slate-200
+                    "
+                  >
+                    Confirm Password
+                  </label>
+
+                  <div className="relative">
+                    <LockKeyhole
+                      className="
+                        pointer-events-none
+                        absolute left-4 top-1/2
+                        h-5 w-5
+                        -translate-y-1/2
+                        text-slate-400
+                      "
+                    />
+
+                    <input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type={
+                        showConfirmPassword
+                          ? "text"
+                          : "password"
+                      }
+                      autoComplete="new-password"
+                      placeholder="Re-enter your password"
+                      value={form.confirmPassword}
+                      onChange={handleChange}
+                      disabled={loading}
+                      className={`
+                        h-12 w-full rounded-xl
+                        border bg-gray-50
+                        pl-12 pr-12
+                        text-base
+                        text-gray-900
+                        outline-none
+                        transition
+                        placeholder:text-gray-400
+                        dark:bg-slate-800
+                        dark:text-white
+                        dark:placeholder:text-slate-500
+                        sm:h-14
+                        ${
+                          form.confirmPassword &&
+                          form.password !==
+                            form.confirmPassword
+                            ? `
+                              border-red-400
+                              focus:border-red-500
+                              focus:ring-4
+                              focus:ring-red-500/10
+                              dark:border-red-500
+                            `
+                            : form.confirmPassword &&
+                              form.password ===
+                                form.confirmPassword
+                            ? `
+                              border-emerald-400
+                              focus:border-emerald-500
+                              focus:ring-4
+                              focus:ring-emerald-500/10
+                              dark:border-emerald-500
+                            `
+                            : `
+                              border-gray-200
+                              focus:border-indigo-500
+                              focus:bg-white
+                              focus:ring-4
+                              focus:ring-indigo-500/10
+                              dark:border-slate-700
+                              dark:focus:border-indigo-400
+                            `
+                        }
+                      `}
+                    />
+
+                    <button
+                      type="button"
+                      aria-label={
+                        showConfirmPassword
+                          ? "Hide confirm password"
+                          : "Show confirm password"
+                      }
+                      onClick={() =>
+                        setShowConfirmPassword(
+                          (current) => !current
+                        )
+                      }
+                      disabled={loading}
+                      className="
+                        absolute right-4 top-1/2
+                        -translate-y-1/2
+                        text-slate-400
+                        transition
+                        hover:text-slate-700
+                        dark:hover:text-slate-200
+                      "
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
+
+                  {form.confirmPassword && (
+                    <p
+                      className={`
+                        mt-2 text-xs font-medium
+                        ${
+                          form.password ===
+                          form.confirmPassword
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-red-500 dark:text-red-400"
+                        }
+                      `}
+                    >
+                      {form.password ===
+                      form.confirmPassword
+                        ? "Passwords match"
+                        : "Passwords do not match"}
+                    </p>
+                  )}
+                </div>
+
+                {/* ================================================= */}
+                {/* PASSWORD REQUIREMENTS */}
+                {/* ================================================= */}
+
+                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+  <p className="mb-3 text-xs font-bold text-slate-700 dark:text-slate-200">
+    Password requirements
+  </p>
+
+  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+    {[
+      {
+        label: "At least 6 characters",
+        valid: passwordRequirements.length,
+      },
+      {
+        label: "Uppercase letter",
+        valid: passwordRequirements.uppercase,
+      },
+      {
+        label: "Lowercase letter",
+        valid: passwordRequirements.lowercase,
+      },
+      {
+        label: "Number",
+        valid: passwordRequirements.number,
+      },
+      {
+        label: "Special character",
+        valid: passwordRequirements.special,
+      },
+    ].map((item) => (
+      <div
+        key={item.label}
+        className="flex min-w-0 items-center gap-2"
+      >
+        <div
+          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+            item.valid
+              ? "bg-emerald-500"
+              : "bg-slate-300 dark:bg-slate-600"
+          }`}
+        >
+          {item.valid && (
+            <Check className="h-3 w-3 text-white" />
+          )}
+        </div>
+
+        <span
+          className={`truncate text-xs ${
+            item.valid
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-slate-500 dark:text-slate-400"
+          }`}
+        >
+          {item.label}
+        </span>
+      </div>
+    ))}
+  </div>
+</div>
+
+                {/* ================================================= */}
+                {/* CREATE ACCOUNT */}
+                {/* ================================================= */}
+
+                <div className="pt-1">
                   <AuthButton
                     text={
                       loading
@@ -508,30 +851,64 @@ function RegisterForm() {
                 </div>
               </form>
 
-              {/* LOGIN */}
-              <div className="mt-7 border-t border-gray-100 pt-6 text-center">
-                <p className="text-sm text-gray-500">
-                  Already have an account?{" "}
+              {/* ================================================= */}
+              {/* LOGIN LINK */}
+              {/* ================================================= */}
 
-                  <Link
-                    href="/login"
-                    className="font-semibold text-indigo-600 transition hover:text-indigo-700"
-                  >
-                    Sign in
-                  </Link>
-                </p>
+              <div className="my-7 flex items-center gap-4">
+                <div className="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
+
+                <span
+                  className="
+                    whitespace-nowrap
+                    text-[10px] font-semibold
+                    tracking-wider
+                    text-gray-400
+                    dark:text-slate-500
+                  "
+                >
+                  ALREADY A MEMBER?
+                </span>
+
+                <div className="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
               </div>
+
+              <p className="text-center text-sm text-gray-600 dark:text-slate-400">
+                Already have an account?{" "}
+                <Link
+                  href="/login"
+                  className="
+                    font-bold
+                    text-indigo-600
+                    transition
+                    hover:text-indigo-700
+                    dark:text-indigo-400
+                    dark:hover:text-indigo-300
+                  "
+                >
+                  Sign in
+                </Link>
+              </p>
+
+              {/* ================================================= */}
+              {/* FOOTER */}
+              {/* ================================================= */}
+
+              <p
+                className="
+                  mt-7 text-center
+                  text-xs leading-5
+                  text-gray-400
+                  dark:text-slate-500
+                "
+              >
+                By creating an account, you agree to use
+                Brainfriend Global Tech responsibly and
+                keep your account information secure.
+              </p>
             </div>
-
-            {/* TERMS */}
-            <p className="mx-auto mt-5 max-w-lg text-center text-xs leading-5 text-gray-400">
-              By creating an account, you agree to use
-              Brainfriend Global Tech responsibly and keep
-              your account information secure.
-            </p>
-
           </div>
-        </section>
+        </div>
       </div>
     </main>
   );
@@ -541,8 +918,21 @@ export default function RegisterPage() {
   return (
     <Suspense
       fallback={
-        <main className="flex min-h-screen items-center justify-center bg-slate-50">
-          <div className="text-sm font-medium text-gray-500">
+        <main
+          className="
+            flex min-h-screen
+            items-center justify-center
+            bg-slate-50
+            dark:bg-slate-950
+          "
+        >
+          <div
+            className="
+              text-sm font-medium
+              text-slate-500
+              dark:text-slate-400
+            "
+          >
             Loading registration...
           </div>
         </main>

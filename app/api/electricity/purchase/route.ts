@@ -1,14 +1,9 @@
-import {
-  NextRequest,
-  NextResponse,
-} from "next/server";
-
+import bcrypt from "bcryptjs";
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/lib/auth";
-
 import { prisma } from "@/lib/prisma";
-
 import {
   getServiceFeePercent,
   calculateServiceFee,
@@ -21,6 +16,63 @@ const REFERRAL_COMMISSION_SETTING_KEY =
   "REFERRAL_COMMISSION_ELECTRICITY";
 
 const DEFAULT_REFERRAL_COMMISSION_PERCENTAGE = 1;
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+// ============================================================
+// GET - LOAD SERVICE FEE
+// ============================================================
+
+export async function GET() {
+  try {
+    const serviceFeePercentage =
+      await getServiceFeePercent();
+
+    return NextResponse.json(
+      {
+        success: true,
+        percentage: serviceFeePercentage,
+        serviceFeePercentage,
+        serviceFeePercent:
+          serviceFeePercentage,
+      },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
+  } catch (error) {
+    console.error(
+      "ELECTRICITY SERVICE FEE GET ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Unable to load electricity service fee.",
+        percentage: null,
+        serviceFeePercentage: null,
+        serviceFeePercent: null,
+      },
+      {
+        status: 500,
+        headers: {
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
+  }
+}
+// ============================================================
+// HELPERS
+// ============================================================
 
 function generateReference(): string {
   return `ELEC-${Date.now()}-${Math.random()
@@ -39,13 +91,64 @@ function isProviderSuccessful(result: any): boolean {
   );
 }
 
+function normalizePhone(phone: unknown): string {
+  return String(phone || "")
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/^\+234/, "0")
+    .replace(/^234/, "0");
+}
+
+function formatAmount(value: number): string {
+  return Number(value || 0).toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+async function getReferralCommissionPercent(): Promise<number> {
+  try {
+    const setting = await prisma.systemSetting.findUnique({
+      where: {
+        key: REFERRAL_COMMISSION_SETTING_KEY,
+      },
+      select: {
+        value: true,
+      },
+    });
+
+    if (setting) {
+      const value = Number(setting.value);
+
+      if (
+        Number.isFinite(value) &&
+        value >= 0 &&
+        value <= 100
+      ) {
+        return value;
+      }
+    }
+  } catch (error) {
+    console.error(
+      "ELECTRICITY REFERRAL COMMISSION SETTING ERROR:",
+      error
+    );
+  }
+
+  return DEFAULT_REFERRAL_COMMISSION_PERCENTAGE;
+}
+
+// ============================================================
+// POST
+// ============================================================
+
 export async function POST(request: NextRequest) {
   let transactionId: string | null = null;
 
   try {
-    // ============================================================
+    // ========================================================
     // 1. AUTHENTICATION
-    // ============================================================
+    // ========================================================
 
     const session = await getServerSession(authOptions);
 
@@ -61,11 +164,23 @@ export async function POST(request: NextRequest) {
 
     const userId = session.user.id;
 
-    // ============================================================
+    // ========================================================
     // 2. REQUEST BODY
-    // ============================================================
+    // ========================================================
 
-    const body = await request.json();
+    let body: any;
+
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid request body.",
+        },
+        { status: 400 }
+      );
+    }
 
     const {
       discoId,
@@ -73,6 +188,7 @@ export async function POST(request: NextRequest) {
       amount,
       meterType,
       phone,
+      transactionPin,
     } = body;
 
     const numericDiscoId = Number(discoId);
@@ -82,23 +198,17 @@ export async function POST(request: NextRequest) {
       meterNumber || ""
     ).replace(/\s+/g, "");
 
-    const cleanedPhone = String(
-      phone || ""
-    )
-      .trim()
-      .replace(/\s+/g, "")
-      .replace(/^\+234/, "0")
-      .replace(/^234/, "0");
+    const cleanedPhone = normalizePhone(phone);
 
     const normalizedMeterType = String(
-      meterType || "PREPAID"
+      meterType || "prepaid"
     )
       .trim()
       .toUpperCase();
 
-    // ============================================================
+    // ========================================================
     // 3. VALIDATION
-    // ============================================================
+    // ========================================================
 
     if (
       !Number.isInteger(numericDiscoId) ||
@@ -126,11 +236,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (numericAmount < 100) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Minimum electricity amount is ₦100.",
+        },
+        { status: 400 }
+      );
+    }
+
     if (!cleanedMeter) {
       return NextResponse.json(
         {
           success: false,
           error: "Meter number is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!/^\d{6,20}$/.test(cleanedMeter)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Please enter a valid meter number.",
         },
         { status: 400 }
       );
@@ -172,22 +302,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ============================================================
-    // 4. FIND USER + REFERRER
-    // ============================================================
+    // ========================================================
+    // 4. TRANSACTION PIN
+    // ========================================================
+
+    const pin = String(
+      transactionPin || ""
+    ).trim();
+
+    if (!pin) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Transaction PIN is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // ========================================================
+    // 5. FIND USER
+    // ========================================================
 
     const user = await prisma.user.findUnique({
       where: {
         id: userId,
       },
-
       include: {
         referredBy: {
           select: {
             id: true,
             fullName: true,
             referralCode: true,
-            referralBalance: true,
           },
         },
       },
@@ -213,152 +359,135 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ============================================================
-    // 5. SERVICE FEE
-    // ============================================================
+    // ========================================================
+    // 6. VERIFY TRANSACTION PIN
+    // ========================================================
 
-    const serviceFeePercent =
-      await getServiceFeePercent();
-
-    const pricing = calculateServiceFee(
-      numericAmount,
-      serviceFeePercent
-    );
-
-    const providerCost = pricing.providerCost;
-    const serviceFee = pricing.serviceFee;
-    const totalAmount = pricing.totalAmount;
-
-    // ============================================================
-    // 6. GROSS PROFIT
-    // ============================================================
-
-    const grossProfit = Number(
-      (
-        totalAmount -
-        providerCost
-      ).toFixed(2)
-    );
-
-    // ============================================================
-    // 7. REFERRAL COMMISSION SETTING
-    // ============================================================
-
-    let referralPercentage =
-      DEFAULT_REFERRAL_COMMISSION_PERCENTAGE;
-
-    try {
-      const referralSetting =
-        await prisma.systemSetting.findUnique({
-          where: {
-            key:
-              REFERRAL_COMMISSION_SETTING_KEY,
-          },
-        });
-
-      if (referralSetting) {
-        const parsedReferral = Number(
-          referralSetting.value
-        );
-
-        if (
-          Number.isFinite(parsedReferral) &&
-          parsedReferral >= 0 &&
-          parsedReferral <= 100
-        ) {
-          referralPercentage = parsedReferral;
-        }
-      }
-    } catch (error) {
-      console.error(
-        "ELECTRICITY REFERRAL SETTING ERROR:",
-        error
-      );
-    }
-
-    // ============================================================
-    // 8. REFERRAL COMMISSION
-    // ============================================================
-
-    let referralCommission = 0;
-
-    if (
-      user.referredBy &&
-      grossProfit > 0 &&
-      referralPercentage > 0
-    ) {
-      const calculatedCommission = Number(
-        (
-          numericAmount *
-          (referralPercentage / 100)
-        ).toFixed(2)
-      );
-
-      referralCommission = Math.min(
-        calculatedCommission,
-        grossProfit
-      );
-    }
-
-    // ============================================================
-    // 9. FINAL BUSINESS PROFIT
-    // ============================================================
-
-    const profit = Number(
-      (
-        grossProfit -
-        referralCommission
-      ).toFixed(2)
-    );
-
-    console.log(
-      "ELECTRICITY FINANCIAL BREAKDOWN:",
-      {
-        providerAmount: numericAmount,
-        serviceFeePercent,
-        serviceFee,
-        totalAmount,
-        providerCost,
-        grossProfit,
-        referralPercentage,
-        referralCommission,
-        businessProfit: profit,
-        referrer:
-          user.referredBy?.id ?? null,
-      }
-    );
-
-    // ============================================================
-    // 10. WALLET CHECK
-    // ============================================================
-
-    const walletBalance =
-      Number(user.walletBalance);
-
-    if (
-      !Number.isFinite(walletBalance) ||
-      walletBalance < totalAmount
-    ) {
+    if (!user.transactionPinHash) {
       return NextResponse.json(
         {
           success: false,
           error:
-            "Insufficient wallet balance.",
+            "You have not created a transaction PIN yet.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const pinIsValid = await bcrypt.compare(
+      pin,
+      user.transactionPinHash
+    );
+
+    if (!pinIsValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid transaction PIN.",
+        },
+        { status: 401 }
+      );
+    }
+
+    // ========================================================
+    // 7. SERVICE FEE
+    // ========================================================
+
+    const serviceFeePercentage =
+      await getServiceFeePercent();
+
+    const pricing = calculateServiceFee(
+      numericAmount,
+      serviceFeePercentage
+    );
+
+    const providerCost = Number(
+      pricing.providerCost.toFixed(2)
+    );
+
+    const serviceFee = Number(
+      pricing.serviceFee.toFixed(2)
+    );
+
+    const totalAmount = Number(
+      pricing.totalAmount.toFixed(2)
+    );
+
+    console.log(
+      "=========================================="
+    );
+
+    console.log("ELECTRICITY PRICING");
+
+    console.log(
+      "ELECTRICITY AMOUNT:",
+      numericAmount
+    );
+
+    console.log(
+      "SERVICE FEE PERCENTAGE:",
+      serviceFeePercentage
+    );
+
+    console.log(
+      "SERVICE FEE:",
+      serviceFee
+    );
+
+    console.log(
+      "CUSTOMER TOTAL:",
+      totalAmount
+    );
+
+    console.log(
+      "PROVIDER COST:",
+      providerCost
+    );
+
+    console.log(
+      "=========================================="
+    );
+
+    // ========================================================
+    // 8. WALLET BALANCE
+    // ========================================================
+
+    const walletBalance = Number(
+      user.walletBalance
+    );
+
+    if (!Number.isFinite(walletBalance)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid wallet balance.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (walletBalance < totalAmount) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Insufficient wallet balance.",
           balance: walletBalance,
           required: totalAmount,
           providerAmount: numericAmount,
           providerCost,
           serviceFee,
-          serviceFeePercent,
+          serviceFeePercentage,
+          serviceFeePercent:
+            serviceFeePercentage,
           totalAmount,
         },
         { status: 400 }
       );
     }
 
-    // ============================================================
-    // 11. API KEY
-    // ============================================================
+    // ========================================================
+    // 9. API KEY
+    // ========================================================
 
     const apiKey =
       process.env.CHEAPDATAHUB_API_KEY;
@@ -374,16 +503,62 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ============================================================
-    // 12. TRANSACTION REFERENCE
-    // ============================================================
+    // ========================================================
+    // 10. REFERRAL COMMISSION
+    // ========================================================
+
+    const referralPercentage =
+      await getReferralCommissionPercent();
+
+    // ========================================================
+    // 11. PROFIT CALCULATION
+    // ========================================================
+
+    const grossProfit = Number(
+      (
+        totalAmount -
+        providerCost
+      ).toFixed(2)
+    );
+
+    let referralCommission = 0;
+
+    if (
+      user.referredBy &&
+      grossProfit > 0 &&
+      referralPercentage > 0
+    ) {
+      const calculatedCommission =
+        Number(
+          (
+            numericAmount *
+            (referralPercentage / 100)
+          ).toFixed(2)
+        );
+
+      referralCommission = Math.min(
+        calculatedCommission,
+        grossProfit
+      );
+    }
+
+    const profit = Number(
+      (
+        grossProfit -
+        referralCommission
+      ).toFixed(2)
+    );
+
+    // ========================================================
+    // 12. REFERENCE
+    // ========================================================
 
     const reference =
       generateReference();
 
-    // ============================================================
+    // ========================================================
     // 13. CREATE PENDING TRANSACTION
-    // ============================================================
+    // ========================================================
 
     const transaction =
       await prisma.transaction.create({
@@ -395,14 +570,15 @@ export async function POST(request: NextRequest) {
           amount: totalAmount,
 
           description:
-            `Electricity payment of ₦${numericAmount} + ${serviceFeePercent}% service fee for meter ${cleanedMeter}`,
+            `Electricity payment of ₦${formatAmount(
+              numericAmount
+            )} + ${serviceFeePercentage}% service fee for meter ${cleanedMeter}`,
 
           status: "PENDING",
 
           reference,
 
-          provider:
-            "CheapDataHub",
+          provider: "CheapDataHub",
 
           cost: providerCost,
 
@@ -414,15 +590,17 @@ export async function POST(request: NextRequest) {
 
     transactionId = transaction.id;
 
-    // ============================================================
-    // 14. PROVIDER REQUEST
-    // ============================================================
+    // ========================================================
+    // 14. CHEAPDATAHUB REQUEST
+    // ========================================================
 
     const providerBody = {
       disco_id: numericDiscoId,
 
       meter_number: cleanedMeter,
 
+      // Only the electricity amount goes to provider.
+      // Service fee stays with Brainfriend Global Tech.
       amount: providerCost,
 
       meter_type:
@@ -440,13 +618,18 @@ export async function POST(request: NextRequest) {
     );
 
     console.log(
+      "REFERENCE:",
+      reference
+    );
+
+    console.log(
       "REQUEST:",
       providerBody
     );
 
     console.log(
-      "SERVICE FEE PERCENT:",
-      serviceFeePercent
+      "SERVICE FEE PERCENTAGE:",
+      serviceFeePercentage
     );
 
     console.log(
@@ -455,13 +638,13 @@ export async function POST(request: NextRequest) {
     );
 
     console.log(
-      "PROVIDER COST:",
-      providerCost
+      "CUSTOMER TOTAL:",
+      totalAmount
     );
 
     console.log(
-      "CUSTOMER TOTAL:",
-      totalAmount
+      "PROVIDER COST:",
+      providerCost
     );
 
     console.log(
@@ -488,9 +671,9 @@ export async function POST(request: NextRequest) {
       "=========================================="
     );
 
-    // ============================================================
+    // ========================================================
     // 15. CALL CHEAPDATAHUB
-    // ============================================================
+    // ========================================================
 
     const providerResponse =
       await fetch(
@@ -517,9 +700,9 @@ export async function POST(request: NextRequest) {
         }
       );
 
-    // ============================================================
-    // 16. PROVIDER RESPONSE
-    // ============================================================
+    // ========================================================
+    // 16. READ PROVIDER RESPONSE SAFELY
+    // ========================================================
 
     const responseText =
       await providerResponse.text();
@@ -541,13 +724,18 @@ export async function POST(request: NextRequest) {
         responseText.trim()
           ? JSON.parse(responseText)
           : null;
-    } catch {
+    } catch (parseError) {
+      console.error(
+        "CHEAPDATAHUB RESPONSE JSON PARSE ERROR:",
+        parseError
+      );
+
       providerResult = null;
     }
 
-    // ============================================================
+    // ========================================================
     // 17. INVALID PROVIDER RESPONSE
-    // ============================================================
+    // ========================================================
 
     if (!providerResult) {
       await prisma.transaction.update({
@@ -565,23 +753,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
+
           error:
             "CheapDataHub returned an invalid response.",
+
           providerStatus:
             providerResponse.status,
+
           providerResponse:
-            responseText.substring(
-              0,
-              500
-            ),
+            responseText.substring(0, 500),
         },
+
         { status: 502 }
       );
     }
 
-    // ============================================================
-    // 18. PROVIDER SUCCESS
-    // ============================================================
+    // ========================================================
+    // 18. CHECK PROVIDER SUCCESS
+    // ========================================================
 
     const providerSuccess =
       isProviderSuccessful(
@@ -620,13 +809,14 @@ export async function POST(request: NextRequest) {
           providerResponse:
             providerResult,
         },
+
         { status: 400 }
       );
     }
 
-    // ============================================================
-    // 19. PROVIDER DATA
-    // ============================================================
+    // ========================================================
+    // 19. EXTRACT ELECTRICITY RESULT
+    // ========================================================
 
     const providerData =
       providerResult?.data || {};
@@ -648,20 +838,20 @@ export async function POST(request: NextRequest) {
       null;
 
     const units =
-      providerResult?.units ||
-      providerData?.units ||
+      providerResult?.units ??
+      providerData?.units ??
       null;
 
-    // ============================================================
+    // ========================================================
     // 20. ATOMIC ACCOUNTING
-    // ============================================================
+    // ========================================================
 
-    const result =
+    const accountingResult =
       await prisma.$transaction(
         async (tx) => {
-          // ------------------------------------------------------
+          // --------------------------------------------------
           // FRESH USER
-          // ------------------------------------------------------
+          // --------------------------------------------------
 
           const freshUser =
             await tx.user.findUnique({
@@ -686,9 +876,18 @@ export async function POST(request: NextRequest) {
             );
           }
 
-          // ------------------------------------------------------
+          if (
+            freshUser.status !==
+            "ACTIVE"
+          ) {
+            throw new Error(
+              "Your account is not active."
+            );
+          }
+
+          // --------------------------------------------------
           // ATOMIC WALLET DEDUCTION
-          // ------------------------------------------------------
+          // --------------------------------------------------
 
           const walletDebit =
             await tx.user.updateMany({
@@ -710,15 +909,17 @@ export async function POST(request: NextRequest) {
               },
             });
 
-          if (walletDebit.count !== 1) {
+          if (
+            walletDebit.count !== 1
+          ) {
             throw new Error(
               "Insufficient wallet balance."
             );
           }
 
-          // ------------------------------------------------------
+          // --------------------------------------------------
           // BUSINESS WALLET
-          // ------------------------------------------------------
+          // --------------------------------------------------
 
           const businessWallet =
             await tx.businessWallet.upsert({
@@ -747,9 +948,9 @@ export async function POST(request: NextRequest) {
               },
             });
 
-          // ------------------------------------------------------
-          // BUSINESS WALLET VALUES
-          // ------------------------------------------------------
+          // --------------------------------------------------
+          // BUSINESS VALUES
+          // --------------------------------------------------
 
           const newBusinessBalance =
             Number(
@@ -796,25 +997,9 @@ export async function POST(request: NextRequest) {
               ).toFixed(2)
             );
 
-          // ------------------------------------------------------
-          // UPDATE USER
-          // ------------------------------------------------------
-
-          await tx.user.update({
-            where: {
-              id: freshUser.id,
-            },
-
-            data: {
-              walletBalance: {
-                decrement: 0,
-              },
-            },
-          });
-
-          // ------------------------------------------------------
+          // --------------------------------------------------
           // UPDATE TRANSACTION
-          // ------------------------------------------------------
+          // --------------------------------------------------
 
           await tx.transaction.update({
             where: {
@@ -831,18 +1016,19 @@ export async function POST(request: NextRequest) {
               profit,
 
               description:
-                `Electricity payment of ₦${numericAmount} + ${serviceFeePercent}% service fee for meter ${cleanedMeter}`,
+                `Electricity payment of ₦${formatAmount(
+                  numericAmount
+                )} + ${serviceFeePercentage}% service fee for meter ${cleanedMeter}`,
             },
           });
 
-          // ------------------------------------------------------
+          // --------------------------------------------------
           // UPDATE BUSINESS WALLET
-          // ------------------------------------------------------
+          // --------------------------------------------------
 
           await tx.businessWallet.update({
             where: {
-              id:
-                businessWallet.id,
+              id: businessWallet.id,
             },
 
             data: {
@@ -863,9 +1049,9 @@ export async function POST(request: NextRequest) {
             },
           });
 
-          // ------------------------------------------------------
+          // --------------------------------------------------
           // BUSINESS REVENUE
-          // ------------------------------------------------------
+          // --------------------------------------------------
 
           await tx.businessRevenue.create({
             data: {
@@ -889,16 +1075,18 @@ export async function POST(request: NextRequest) {
               reference,
 
               description:
-                `Electricity ₦${numericAmount} for meter ${cleanedMeter} + ${serviceFeePercent}% service fee`,
+                `Electricity ₦${formatAmount(
+                  numericAmount
+                )} for meter ${cleanedMeter} + ${serviceFeePercentage}% service fee`,
 
               businessWalletId:
                 businessWallet.id,
             },
           });
 
-          // ------------------------------------------------------
-          // PAY REFERRER
-          // ------------------------------------------------------
+          // --------------------------------------------------
+          // REFERRAL COMMISSION
+          // --------------------------------------------------
 
           if (
             freshUser.referredBy &&
@@ -945,7 +1133,9 @@ export async function POST(request: NextRequest) {
                   "SUCCESS",
 
                 description:
-                  `Referral earning from ${freshUser.fullName}'s electricity payment of ₦${numericAmount}`,
+                  `Referral earning from ${freshUser.fullName}'s electricity payment of ₦${formatAmount(
+                    numericAmount
+                  )}`,
 
                 reference:
                   `REF-${reference}`,
@@ -953,9 +1143,9 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          // ------------------------------------------------------
+          // --------------------------------------------------
           // FINAL USER BALANCES
-          // ------------------------------------------------------
+          // --------------------------------------------------
 
           const finalUser =
             await tx.user.findUnique({
@@ -1006,84 +1196,119 @@ export async function POST(request: NextRequest) {
         }
       );
 
-    // ============================================================
+    // ========================================================
     // 21. SUCCESS RESPONSE
-    // ============================================================
+    // ========================================================
 
-    return NextResponse.json({
-      success: true,
+    return NextResponse.json(
+      {
+        success: true,
 
-      message:
-        providerResult?.message ||
-        "Electricity payment successful.",
+        message:
+          providerResult?.message ||
+          "Electricity payment successful.",
 
-      reference,
+        reference,
 
-      providerReference,
+        providerReference,
 
-      discoId:
-        numericDiscoId,
+        discoId:
+          numericDiscoId,
 
-      meterNumber:
-        cleanedMeter,
+        meterNumber:
+          cleanedMeter,
 
-      meterType:
-        normalizedMeterType,
+        meterType:
+          normalizedMeterType,
 
-      phone:
-        cleanedPhone,
+        phone:
+          cleanedPhone,
 
-      providerAmount:
-        numericAmount,
+        // ====================================================
+        // ELECTRICITY AMOUNT
+        // ====================================================
 
-      serviceFeePercent,
+        providerAmount:
+          numericAmount,
 
-      serviceFee,
+        // ====================================================
+        // SERVICE FEE
+        // ====================================================
 
-      amount:
+        serviceFeePercentage,
+
+        // Backward-compatible property
+        serviceFeePercent:
+          serviceFeePercentage,
+
+        serviceFee,
+
+        // ====================================================
+        // CUSTOMER TOTAL
+        // ====================================================
+
+        amount:
+          totalAmount,
+
         totalAmount,
 
-      totalAmount,
+        // ====================================================
+        // BUSINESS ACCOUNTING
+        // ====================================================
 
-      providerCost,
-
-      grossProfit:
-        result.grossProfit,
-
-      referralPercentage,
-
-      referralCommission:
-        result.referralCommission,
-
-      profit:
-        result.profit,
-
-      walletBalance:
-        result.walletBalance,
-
-      referralBalance:
-        result.referralBalance,
-
-      businessRevenue:
-        totalAmount,
-
-      businessCost:
         providerCost,
 
-      businessProfit:
-        result.profit,
+        grossProfit:
+          accountingResult.grossProfit,
 
-      token,
+        referralPercentage,
 
-      units,
+        referralCommission:
+          accountingResult.referralCommission,
 
-      providerResponse:
-        providerResult,
-    });
+        profit:
+          accountingResult.profit,
+
+        walletBalance:
+          accountingResult.walletBalance,
+
+        referralBalance:
+          accountingResult.referralBalance,
+
+        businessRevenue:
+          totalAmount,
+
+        businessCost:
+          providerCost,
+
+        businessProfit:
+          accountingResult.profit,
+
+        // ====================================================
+        // ELECTRICITY RESULT
+        // ====================================================
+
+        token,
+
+        units,
+
+        providerResponse:
+          providerResult,
+      },
+
+      {
+        status: 200,
+
+        headers: {
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (error: any) {
-    // ============================================================
+    // ========================================================
     // 22. ERROR HANDLING
-    // ============================================================
+    // ========================================================
 
     console.error(
       "ELECTRICITY PURCHASE ERROR:",
@@ -1129,15 +1354,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const errorMessage =
+      error?.message ||
+      "Electricity purchase failed.";
+
     return NextResponse.json(
       {
         success: false,
-
-        error:
-          error?.message ||
-          "Electricity purchase failed.",
+        error: errorMessage,
       },
-      { status: 500 }
+
+      {
+        status: 500,
+
+        headers: {
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate",
+        },
+      }
     );
   }
 }

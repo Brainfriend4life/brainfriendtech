@@ -1,4 +1,3 @@
-
 import {
   BadgeCheck,
   Clock3,
@@ -37,24 +36,23 @@ export default function Features() {
   return (
     <section
       aria-labelledby="features-heading"
-      className="bg-white py-20"
+      className="bg-white py-20 text-gray-900 transition-colors dark:bg-gray-950 dark:text-gray-100"
     >
       <div className="mx-auto max-w-7xl px-6">
         {/* Heading */}
-
         <div className="mx-auto mb-14 max-w-2xl text-center">
-          <p className="mb-3 font-semibold text-indigo-600">
+          <p className="mb-3 font-semibold text-indigo-600 dark:text-indigo-400">
             WHY CHOOSE BRAINFRIEND GLOBAL TECH
           </p>
 
           <h2
             id="features-heading"
-            className="text-3xl font-bold tracking-tight text-gray-900 md:text-4xl"
+            className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white md:text-4xl"
           >
             Fast, Secure and Reliable VTU Services
           </h2>
 
-          <p className="mt-4 text-gray-600">
+          <p className="mt-4 text-gray-600 dark:text-gray-300">
             We make everyday digital payments and VTU services
             simple, fast, secure and convenient for users across
             Nigeria.
@@ -62,7 +60,6 @@ export default function Features() {
         </div>
 
         {/* Feature Cards */}
-
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {features.map((feature) => {
             const Icon = feature.icon;
@@ -70,20 +67,81 @@ export default function Features() {
             return (
               <div
                 key={feature.title}
-                className="group rounded-2xl border border-gray-100 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg"
+                className="
+                  group
+                  rounded-2xl
+                  border
+                  border-gray-200
+                  bg-white
+                  p-6
+                  shadow-sm
+                  transition-all
+                  duration-300
+                  hover:-translate-y-1
+                  hover:border-indigo-200
+                  hover:shadow-lg
+                  dark:border-gray-800
+                  dark:bg-gray-900
+                  dark:shadow-black/20
+                  dark:hover:border-indigo-900
+                  dark:hover:shadow-xl
+                "
               >
-                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 transition group-hover:bg-indigo-600">
+                {/* Icon */}
+                <div
+                  className="
+                    mb-5
+                    flex
+                    h-12
+                    w-12
+                    items-center
+                    justify-center
+                    rounded-xl
+                    bg-indigo-50
+                    transition-all
+                    duration-300
+                    group-hover:bg-indigo-600
+                    dark:bg-indigo-950
+                    dark:group-hover:bg-indigo-500
+                  "
+                >
                   <Icon
                     aria-hidden="true"
-                    className="h-6 w-6 text-indigo-600 transition group-hover:text-white"
+                    className="
+                      h-6
+                      w-6
+                      text-indigo-600
+                      transition-colors
+                      duration-300
+                      group-hover:text-white
+                      dark:text-indigo-400
+                      dark:group-hover:text-white
+                    "
                   />
                 </div>
 
-                <h3 className="mb-2 text-lg font-bold text-gray-900">
+                {/* Title */}
+                <h3
+                  className="
+                    mb-2
+                    text-lg
+                    font-bold
+                    text-gray-900
+                    dark:text-white
+                  "
+                >
                   {feature.title}
                 </h3>
 
-                <p className="text-sm leading-6 text-gray-600">
+                {/* Description */}
+                <p
+                  className="
+                    text-sm
+                    leading-6
+                    text-gray-600
+                    dark:text-gray-300
+                  "
+                >
                   {feature.description}
                 </p>
               </div>
@@ -94,4 +152,3 @@ export default function Features() {
     </section>
   );
 }
-

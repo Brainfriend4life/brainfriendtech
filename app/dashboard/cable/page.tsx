@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { toast } from "react-hot-toast";
+import TransactionPinModal from "@/components/TransactionPinModal";
 
 type CablePlan = {
   id: number;
@@ -22,6 +27,7 @@ type Receipt = {
   reference: string;
   providerReference: string;
   status: string;
+  serviceFeePercentage: number;
 };
 
 const PROVIDERS = [
@@ -31,7 +37,8 @@ const PROVIDERS = [
 ];
 
 export default function CablePage() {
-  const [plans, setPlans] = useState<CablePlan[]>([]);
+  const [plans, setPlans] =
+    useState<CablePlan[]>([]);
 
   const [provider, setProvider] =
     useState("DSTV");
@@ -60,136 +67,284 @@ export default function CablePage() {
   const [buying, setBuying] =
     useState(false);
 
+  const [
+    serviceFeePercentage,
+    setServiceFeePercentage,
+  ] = useState<number | null>(null);
+
+  const [
+    loadingServiceFee,
+    setLoadingServiceFee,
+  ] = useState(true);
+
+  const [showPinModal, setShowPinModal] =
+    useState(false);
+
   const [receipt, setReceipt] =
     useState<Receipt | null>(null);
 
-  // ==========================================
-  // LOAD CABLE PLANS
-  // ==========================================
-
   useEffect(() => {
-    async function loadPlans() {
+    let cancelled = false;
+
+    async function loadServiceFee() {
       try {
-        setLoadingPlans(true);
+        setLoadingServiceFee(true);
 
         const response = await fetch(
-          `/api/cable/plans?provider=${provider}`,
+          "/api/service-fee",
           {
+            method: "GET",
             cache: "no-store",
+            headers: {
+              Accept: "application/json",
+              "Cache-Control": "no-cache",
+            },
           }
         );
 
-        const result =
-          await response.json();
+        const responseText =
+          await response.text();
+
+        let result: any = null;
+
+        try {
+          result = responseText
+            ? JSON.parse(responseText)
+            : null;
+        } catch {
+          console.error(
+            "CABLE SERVICE FEE NON-JSON RESPONSE:",
+            responseText
+          );
+
+          throw new Error(
+            `Service fee API returned an invalid response (${response.status}).`
+          );
+        }
 
         console.log(
-          "CABLE PLANS:",
+          "CABLE SERVICE FEE RESPONSE:",
           result
         );
 
         if (
           !response.ok ||
-          !result.success
+          !result?.success
         ) {
           throw new Error(
-            result.message ||
+            result?.error ||
+              result?.message ||
+              "Unable to load service fee."
+          );
+        }
+
+        const percentage = Number(
+          result.percentage ??
+            result.serviceFeePercentage ??
+            result.serviceFee ??
+            result.data?.percentage ??
+            result.data?.serviceFeePercentage ??
+            result.data?.serviceFee ??
+            result.data?.value ??
+            result.setting?.value
+        );
+
+        if (
+          !Number.isFinite(percentage) ||
+          percentage < 0 ||
+          percentage > 100
+        ) {
+          throw new Error(
+            "Invalid service fee percentage returned by the server."
+          );
+        }
+
+        if (!cancelled) {
+          setServiceFeePercentage(
+            percentage
+          );
+        }
+      } catch (error) {
+        console.error(
+          "LOAD CABLE SERVICE FEE ERROR:",
+          error
+        );
+
+        if (!cancelled) {
+          setServiceFeePercentage(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingServiceFee(false);
+        }
+      }
+    }
+
+    loadServiceFee();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPlans() {
+      try {
+        setLoadingPlans(true);
+
+        const response =
+          await fetch(
+            `/api/cable/plans?provider=${encodeURIComponent(
+              provider
+            )}`,
+            {
+              method: "GET",
+              cache: "no-store",
+              headers: {
+                Accept: "application/json",
+              },
+            }
+          );
+
+        const text =
+          await response.text();
+
+        let result: any = null;
+
+        try {
+          result = text
+            ? JSON.parse(text)
+            : null;
+        } catch {
+          console.error(
+            "CABLE PLANS NON-JSON RESPONSE:",
+            text
+          );
+
+          throw new Error(
+            `Cable plans API returned an invalid response (${response.status}).`
+          );
+        }
+
+        console.log(
+          "CABLE PLANS RESPONSE:",
+          result
+        );
+
+        if (
+          !response.ok ||
+          !result?.success
+        ) {
+          throw new Error(
+            result?.error ||
+              result?.message ||
               "Unable to load cable plans."
           );
         }
 
-        setPlans(
-          Array.isArray(result.data)
-            ? result.data
-            : []
-        );
+        if (!cancelled) {
+          setPlans(
+            Array.isArray(result.data)
+              ? result.data
+              : []
+          );
+        }
       } catch (error) {
         console.error(
           "LOAD CABLE PLANS ERROR:",
           error
         );
 
-        setPlans([]);
+        if (!cancelled) {
+          setPlans([]);
 
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "Unable to load cable plans."
-        );
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Unable to load cable plans."
+          );
+        }
       } finally {
-        setLoadingPlans(false);
+        if (!cancelled) {
+          setLoadingPlans(false);
+        }
       }
     }
 
     loadPlans();
 
-    // Clear selected plan
     setPlanId("");
-
-    // Clear verification
     setVerified(false);
     setCustomerName("");
+
+    return () => {
+      cancelled = true;
+    };
   }, [provider]);
 
-  // ==========================================
-  // FILTER PLANS
-  // ==========================================
+  const filteredPlans =
+    useMemo(() => {
+      return plans.filter(
+        (plan) =>
+          String(
+            plan.provider
+          ).toUpperCase() ===
+          provider.toUpperCase()
+      );
+    }, [
+      plans,
+      provider,
+    ]);
 
-  const filteredPlans = useMemo(() => {
-    return plans.filter(
+  const selectedPlan =
+    filteredPlans.find(
       (plan) =>
-        plan.provider.toUpperCase() ===
-        provider.toUpperCase()
+        String(plan.id) ===
+        planId
     );
-  }, [plans, provider]);
 
-  // ==========================================
-  // SELECT PROVIDER
-  // ==========================================
+  const amount = Number(
+    selectedPlan?.price || 0
+  );
+
+  const serviceFee =
+    serviceFeePercentage !== null &&
+    amount > 0
+      ? Number(
+          (
+            amount *
+            (serviceFeePercentage / 100)
+          ).toFixed(2)
+        )
+      : 0;
+
+  const totalAmount =
+    serviceFeePercentage !== null &&
+    amount > 0
+      ? Number(
+          (
+            amount +
+            serviceFee
+          ).toFixed(2)
+        )
+      : amount;
 
   function handleProviderChange(
     value: string
   ) {
     setProvider(value);
-
     setPlanId("");
-
     setVerified(false);
-
     setCustomerName("");
   }
-
-  // ==========================================
-  // SELECT PLAN
-  // ==========================================
 
   function handlePlanChange(
     value: string
   ) {
     setPlanId(value);
   }
-
-  // ==========================================
-  // SELECTED PLAN
-  // ==========================================
-
-  const selectedPlan =
-    filteredPlans.find(
-      (plan) =>
-        String(plan.id) === planId
-    );
-
-  const amount =
-    selectedPlan?.price || 0;
-
-  const serviceFee =
-    amount * 0.05;
-
-  const totalAmount =
-    amount + serviceFee;
-
-  // ==========================================
-  // VERIFY SMART CARD
-  // ==========================================
 
   async function verifySmartCard() {
     const cleanCard =
@@ -203,46 +358,54 @@ export default function CablePage() {
       return;
     }
 
-    if (!provider) {
-      toast.error(
-        "Please select a cable provider."
-      );
-
-      return;
-    }
-
     setVerifying(true);
-
     setVerified(false);
-
     setCustomerName("");
 
     try {
-      const response = await fetch(
-        "/api/cable/verify",
-        {
-          method: "POST",
+      const response =
+        await fetch(
+          "/api/cable/verify",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+              Accept:
+                "application/json",
+            },
+            body: JSON.stringify({
+              serviceID:
+                provider.toLowerCase(),
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+              smartCard:
+                cleanCard,
 
-          body: JSON.stringify({
-            serviceID:
-              provider.toLowerCase(),
+              cardnumber:
+                cleanCard,
+            }),
+          }
+        );
 
-            smartCard:
-              cleanCard,
+      const responseText =
+        await response.text();
 
-            cardnumber:
-              cleanCard,
-          }),
-        }
-      );
+      let result: any = null;
 
-      const result =
-        await response.json();
+      try {
+        result = responseText
+          ? JSON.parse(responseText)
+          : null;
+      } catch {
+        console.error(
+          "CABLE VERIFY NON-JSON RESPONSE:",
+          responseText
+        );
+
+        throw new Error(
+          `Cable verification API returned an invalid response (${response.status}).`
+        );
+      }
 
       console.log(
         "CABLE VERIFY RESPONSE:",
@@ -251,15 +414,13 @@ export default function CablePage() {
 
       if (
         !response.ok ||
-        !result.success
+        !result?.success
       ) {
-        toast.error(
-          result.message ||
-            result.error ||
+        throw new Error(
+          result?.error ||
+            result?.message ||
             "Smart Card verification failed."
         );
-
-        return;
       }
 
       const content =
@@ -272,10 +433,11 @@ export default function CablePage() {
         content.customer_name ||
         content.customerName ||
         content.Name ||
-        result.customerName ||
         "Verified Customer";
 
-      setCustomerName(name);
+      setCustomerName(
+        String(name)
+      );
 
       setVerified(true);
 
@@ -284,90 +446,113 @@ export default function CablePage() {
       );
     } catch (error) {
       console.error(
-        "SMART CARD VERIFY ERROR:",
+        "VERIFY SMART CARD ERROR:",
         error
       );
 
+      setVerified(false);
+      setCustomerName("");
+
       toast.error(
-        "Unable to verify Smart Card."
+        error instanceof Error
+          ? error.message
+          : "Unable to verify Smart Card."
       );
     } finally {
       setVerifying(false);
     }
   }
 
-  // ==========================================
-  // BUY CABLE
-  // ==========================================
-
-  async function buyCable(
+  function buyCable(
     event: React.FormEvent
   ) {
     event.preventDefault();
 
-    // ------------------------------
-    // PLAN
-    // ------------------------------
-
     if (!planId) {
       toast.error(
-        "Please select a subscription plan."
+        "Please select subscription plan."
       );
 
       return;
     }
-
-    // ------------------------------
-    // SMART CARD
-    // ------------------------------
-
-    const cleanCard =
-      cardnumber.trim();
-
-    if (!cleanCard) {
-      toast.error(
-        "Please enter Smart Card / IUC number."
-      );
-
-      return;
-    }
-
-    // ------------------------------
-    // VERIFICATION
-    // ------------------------------
-
-    if (!verified) {
-      toast.error(
-        "Please verify your Smart Card first."
-      );
-
-      return;
-    }
-
-    // ------------------------------
-    // PHONE
-    // ------------------------------
-
-    const cleanPhone =
-      phone.replace(/\s+/g, "");
-
-    if (
-      !/^0\d{10}$/.test(cleanPhone)
-    ) {
-      toast.error(
-        "Please enter a valid Nigerian phone number."
-      );
-
-      return;
-    }
-
-    // ------------------------------
-    // PLAN
-    // ------------------------------
 
     if (!selectedPlan) {
       toast.error(
-        "Selected plan could not be found."
+        "Invalid subscription plan."
+      );
+
+      return;
+    }
+
+    if (!cardnumber.trim()) {
+      toast.error(
+        "Enter Smart Card number."
+      );
+
+      return;
+    }
+
+    if (!verified) {
+      toast.error(
+        "Verify Smart Card first."
+      );
+
+      return;
+    }
+
+    if (
+      serviceFeePercentage === null ||
+      loadingServiceFee
+    ) {
+      toast.error(
+        "Service fee is still loading. Please wait and try again."
+      );
+
+      return;
+    }
+
+    if (amount <= 0) {
+      toast.error(
+        "Invalid subscription amount."
+      );
+
+      return;
+    }
+
+    const cleanPhone =
+      phone
+        .replace(/\s+/g, "")
+        .trim();
+
+    if (
+      !/^0\d{10}$/.test(
+        cleanPhone
+      )
+    ) {
+      toast.error(
+        "Enter valid Nigerian phone number."
+      );
+
+      return;
+    }
+
+    setShowPinModal(true);
+  }
+
+  async function processBuyCable(
+    pin: string
+  ) {
+    const cleanCard =
+      cardnumber.trim();
+
+    const cleanPhone =
+      phone
+        .replace(/\s+/g, "")
+        .trim();
+
+    if (!selectedPlan) {
+      toast.error(
+        "Invalid subscription plan."
       );
 
       return;
@@ -376,48 +561,76 @@ export default function CablePage() {
     setBuying(true);
 
     try {
-      // ========================================
-      // EXACT CHEAPDATAHUB PAYLOAD
-      // ========================================
-
       const payload = {
         planId:
-          Number(selectedPlan.id),
+          Number(
+            selectedPlan.id
+          ),
 
         cardnumber:
           cleanCard,
 
         phone:
           cleanPhone,
+
+        transactionPin:
+          pin,
       };
 
       console.log(
-        "CABLE PURCHASE PAYLOAD:",
-        payload
-      );
-
-      // ========================================
-      // PURCHASE
-      // ========================================
-
-      const response = await fetch(
-        "/api/cable/purchase",
+        "CABLE PURCHASE REQUEST:",
         {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify(
-            payload
-          ),
+          planId:
+            Number(
+              selectedPlan.id
+            ),
+          cardnumber:
+            cleanCard,
+          phone:
+            cleanPhone,
         }
       );
 
-      const result =
-        await response.json();
+      const response =
+        await fetch(
+          "/api/cable/purchase",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              Accept:
+                "application/json",
+            },
+
+            body:
+              JSON.stringify(
+                payload
+              ),
+          }
+        );
+
+      const responseText =
+        await response.text();
+
+      let result: any = null;
+
+      try {
+        result = responseText
+          ? JSON.parse(responseText)
+          : null;
+      } catch {
+        console.error(
+          "CABLE PURCHASE NON-JSON RESPONSE:",
+          responseText
+        );
+
+        throw new Error(
+          `Cable purchase API returned an invalid response (${response.status}).`
+        );
+      }
 
       console.log(
         "CABLE PURCHASE RESPONSE:",
@@ -426,32 +639,52 @@ export default function CablePage() {
 
       if (
         !response.ok ||
-        !result.success
+        !result?.success
       ) {
-        toast.error(
-          result.message ||
-            result.error ||
+        throw new Error(
+          result?.error ||
+            result?.message ||
             "Cable subscription failed."
         );
-
-        return;
       }
 
-      // ========================================
-      // RECEIPT
-      // ========================================
+      const finalAmount =
+        Number(
+          result.amount ??
+            amount
+        );
 
-      const providerReference =
-        result.providerReference ||
-        result.providerResponse
-          ?.reference ||
-        result.providerResponse
-          ?.transaction_id ||
-        "N/A";
+      const finalServiceFee =
+        Number(
+          result.serviceFee ??
+            0
+        );
 
-      const reference =
-        result.reference ||
-        "N/A";
+      const finalTotalAmount =
+        Number(
+          result.totalAmount ??
+            (
+              finalAmount +
+              finalServiceFee
+            )
+        );
+
+      const finalServiceFeePercentage =
+        Number(
+          result.serviceFeePercentage ??
+            serviceFeePercentage ??
+            0
+        );
+
+      if (
+        Number.isFinite(
+          finalServiceFeePercentage
+        )
+      ) {
+        setServiceFeePercentage(
+          finalServiceFeePercentage
+        );
+      }
 
       const receiptData: Receipt = {
         provider,
@@ -470,26 +703,26 @@ export default function CablePage() {
           cleanPhone,
 
         amount:
-          Number(
-            result.amount ??
-              amount
-          ),
+          finalAmount,
 
         serviceFee:
-          Number(
-            result.serviceFee ??
-              serviceFee
-          ),
+          finalServiceFee,
 
         totalAmount:
-          Number(
-            result.totalAmount ??
-              totalAmount
-          ),
+          finalTotalAmount,
 
-        reference,
+        serviceFeePercentage:
+          finalServiceFeePercentage,
 
-        providerReference,
+        reference:
+          result.reference ||
+          result.transactionReference ||
+          "N/A",
+
+        providerReference:
+          result.providerReference ||
+          result.provider_transaction_id ||
+          "N/A",
 
         status:
           result.status ||
@@ -498,6 +731,10 @@ export default function CablePage() {
 
       setReceipt(
         receiptData
+      );
+
+      setShowPinModal(
+        false
       );
 
       toast.success(
@@ -510,16 +747,14 @@ export default function CablePage() {
       );
 
       toast.error(
-        "Something went wrong. Please try again."
+        error instanceof Error
+          ? error.message
+          : "Cable subscription failed."
       );
     } finally {
       setBuying(false);
     }
   }
-
-  // ==========================================
-  // CLOSE RECEIPT
-  // ==========================================
 
   function closeReceipt() {
     setReceipt(null);
@@ -535,219 +770,286 @@ export default function CablePage() {
     setVerified(false);
   }
 
-  // ==========================================
-  // SUCCESS RECEIPT
-  // ==========================================
-
   if (receipt) {
     return (
       <div className="w-full">
+
         {/* HEADER */}
 
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl font-bold text-green-600">
+
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl font-bold text-green-600 dark:bg-green-950/40 dark:text-green-400">
             ✓
           </div>
 
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+          <h1 className="text-2xl font-bold text-foreground">
             Subscription Successful
           </h1>
 
-          <p className="mt-1 text-sm text-gray-500">
-            Your cable TV subscription
-            was completed successfully.
+          <p className="mt-2 text-sm text-muted-foreground">
+            Your cable subscription was completed successfully.
           </p>
+
         </div>
 
         {/* RECEIPT */}
 
-        <div className="space-y-4 rounded-2xl border bg-white p-5 shadow-sm sm:p-6">
-          <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
-            <span className="text-gray-500">
+        <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
+
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">
               Provider
             </span>
 
-            <span className="font-semibold uppercase">
+            <span className="text-right font-semibold text-foreground">
               {receipt.provider}
             </span>
           </div>
 
-          <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
-            <span className="text-gray-500">
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">
               Package
             </span>
 
-            <span className="font-semibold sm:text-right">
+            <span className="text-right font-semibold text-foreground">
               {receipt.planName}
             </span>
           </div>
 
-          <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
-            <span className="text-gray-500">
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">
               Customer
             </span>
 
-            <span className="font-semibold sm:text-right">
+            <span className="text-right font-semibold text-foreground">
               {receipt.customerName}
             </span>
           </div>
 
-          <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
-            <span className="text-gray-500">
-              Smart Card / IUC
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">
+              Smart Card
             </span>
 
-            <span className="break-all font-semibold sm:text-right">
+            <span className="text-right font-semibold text-foreground">
               {receipt.cardnumber}
             </span>
           </div>
 
-          <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
-            <span className="text-gray-500">
+          <div className="flex justify-between gap-4">
+            <span className="text-muted-foreground">
               Phone
             </span>
 
-            <span className="font-semibold">
+            <span className="text-right font-semibold text-foreground">
               {receipt.phone}
             </span>
           </div>
 
-          <div className="border-t pt-4" />
+          <div className="border-t border-border pt-4" />
 
-          <div className="flex justify-between">
-            <span className="text-gray-500">
+          {/* SUBSCRIPTION AMOUNT */}
+
+          <div className="flex justify-between text-foreground">
+            <span>
               Subscription
             </span>
 
-            <span className="font-semibold">
+            <span>
               ₦
               {receipt.amount.toLocaleString(
                 "en-NG",
                 {
                   minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
                 }
               )}
             </span>
           </div>
 
-          <div className="flex justify-between">
-            <span className="text-gray-500">
-              Service Fee (5%)
+          {/* SERVICE FEE */}
+
+          <div className="flex justify-between text-foreground">
+            <span>
+              Service Fee (
+              {receipt.serviceFeePercentage}
+              %)
             </span>
 
-            <span className="font-semibold">
+            <span>
               ₦
               {receipt.serviceFee.toLocaleString(
                 "en-NG",
                 {
                   minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
                 }
               )}
             </span>
           </div>
 
-          <div className="flex justify-between border-t pt-4">
-            <span className="font-bold">
+          {/* TOTAL */}
+
+          <div className="flex justify-between border-t border-border pt-4 font-bold text-foreground">
+
+            <span>
               Total Deducted
             </span>
 
-            <span className="font-bold text-indigo-600">
+            <span className="text-indigo-600 dark:text-indigo-400">
               ₦
               {receipt.totalAmount.toLocaleString(
                 "en-NG",
                 {
                   minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
                 }
               )}
             </span>
+
           </div>
+
         </div>
 
-        {/* TRANSACTION */}
+        {/* TRANSACTION DETAILS */}
 
-        <div className="mt-5 rounded-2xl border bg-white p-5 shadow-sm">
-          <h2 className="mb-4 font-semibold">
+        <div className="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm">
+
+          <h2 className="mb-4 font-semibold text-foreground">
             Transaction Details
           </h2>
 
-          <div className="space-y-3 text-sm">
-            <div className="flex flex-col gap-1 sm:flex-row sm:justify-between">
-              <span className="text-gray-500">
-                Status
-              </span>
+          <p className="text-sm text-foreground">
+            Status:
 
-              <span className="font-semibold uppercase text-green-600">
-                {receipt.status}
-              </span>
-            </div>
+            <span className="ml-2 font-semibold text-green-600 dark:text-green-400">
+              {receipt.status}
+            </span>
+          </p>
 
-            <div className="flex flex-col gap-1">
-              <span className="text-gray-500">
-                Reference
-              </span>
+          <p className="mt-3 break-all text-sm text-foreground">
+            Reference:
+            <br />
+            <span className="font-medium">
+              {receipt.reference}
+            </span>
+          </p>
 
-              <span className="break-all font-medium">
-                {receipt.reference}
-              </span>
-            </div>
+          <p className="mt-3 break-all text-sm text-foreground">
+            Provider Reference:
+            <br />
+            <span className="font-medium">
+              {receipt.providerReference}
+            </span>
+          </p>
 
-            <div className="flex flex-col gap-1">
-              <span className="text-gray-500">
-                Provider Reference
-              </span>
-
-              <span className="break-all font-medium">
-                {receipt.providerReference}
-              </span>
-            </div>
-          </div>
         </div>
 
         {/* DONE */}
 
         <button
           type="button"
-          onClick={closeReceipt}
-          className="mt-6 w-full rounded-xl bg-indigo-600 p-3.5 font-semibold text-white transition hover:bg-indigo-700"
+          onClick={
+            closeReceipt
+          }
+          className="mt-6 w-full rounded-xl bg-indigo-600 p-3 font-semibold text-white transition hover:bg-indigo-700"
         >
           Done
         </button>
+
       </div>
     );
   }
 
-  // ==========================================
-  // MAIN PAGE
-  // ==========================================
-
   return (
     <div className="w-full">
+
+      {/* HEADER */}
+
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+
+        <h1 className="text-2xl font-bold text-foreground">
           Cable TV Subscription
         </h1>
 
-        <p className="mt-1 text-sm text-gray-500">
-          Select your provider, package and
-          enter your Smart Card number.
+        <p className="mt-2 text-sm text-muted-foreground">
+          Subscribe to DSTV, GOTV and Startimes.
         </p>
+
       </div>
 
+      {/* FORM */}
+
       <form
-        onSubmit={buyCable}
-        className="w-full max-w-2xl space-y-5 rounded-2xl bg-white p-4 shadow-sm sm:p-6"
+        onSubmit={
+          buyCable
+        }
+        className="max-w-2xl space-y-5 rounded-2xl bg-card p-5 shadow-sm sm:p-6"
       >
+
         {/* PROVIDER */}
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">
-            Cable Provider
+
+          <label className="mb-2 block text-sm font-medium text-foreground">
+            Provider
           </label>
 
           <select
-            value={provider}
-            onChange={(e) =>
+            value={
+              provider
+            }
+            onChange={(
+              e
+            ) =>
               handleProviderChange(
+                e.target.value
+              )
+            }
+            disabled={
+              buying ||
+              verifying
+            }
+            className="w-full rounded-xl border border-border bg-background p-3 text-foreground outline-none transition focus:border-indigo-500"
+          >
+
+            {PROVIDERS.map(
+              (
+                item
+              ) => (
+                <option
+                  key={
+                    item
+                  }
+                  value={
+                    item
+                  }
+                >
+                  {item}
+                </option>
+              )
+            )}
+
+          </select>
+
+        </div>
+
+        {/* PACKAGE */}
+
+        <div>
+
+          <label className="mb-2 block text-sm font-medium text-foreground">
+            Package
+          </label>
+
+          <select
+            value={
+              planId
+            }
+            onChange={(
+              e
+            ) =>
+              handlePlanChange(
                 e.target.value
               )
             }
@@ -755,144 +1057,74 @@ export default function CablePage() {
               loadingPlans ||
               buying
             }
-            className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            className="w-full rounded-xl border border-border bg-background p-3 text-foreground outline-none transition focus:border-indigo-500"
           >
-            {PROVIDERS.map(
-              (item) => (
-                <option
-                  key={item}
-                  value={item}
-                >
-                  {item}
-                </option>
-              )
-            )}
-          </select>
-        </div>
 
-        {/* PLAN */}
-
-        <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">
-            Subscription Package
-          </label>
-
-          <select
-            value={planId}
-            onChange={(e) =>
-              handlePlanChange(
-                e.target.value
-              )
-            }
-            disabled={
-              loadingPlans ||
-              buying ||
-              filteredPlans.length === 0
-            }
-            className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-          >
             <option value="">
               {loadingPlans
                 ? "Loading plans..."
-                : filteredPlans.length ===
-                  0
-                ? "No plans available"
                 : "Select package"}
             </option>
 
             {filteredPlans.map(
-              (plan) => (
+              (
+                plan
+              ) => (
                 <option
-                  key={plan.id}
-                  value={plan.id}
+                  key={
+                    plan.id
+                  }
+                  value={
+                    plan.id
+                  }
                 >
                   {plan.name} - ₦
-                  {Number(
-                    plan.price
-                  ).toLocaleString(
+                  {plan.price.toLocaleString(
                     "en-NG"
                   )}
                 </option>
               )
             )}
+
           </select>
-        </div>
 
-        {/* AMOUNT */}
-
-        <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">
-            Subscription Amount
-          </label>
-
-          <input
-            type="text"
-            value={
-              amount
-                ? `₦${amount.toLocaleString(
-                    "en-NG"
-                  )}`
-                : ""
-            }
-            readOnly
-            placeholder="Select a package"
-            className="w-full rounded-xl border border-gray-200 bg-gray-100 p-3"
-          />
-
-          {amount > 0 && (
-            <div className="mt-2 rounded-lg bg-gray-50 p-3 text-sm text-gray-500">
-              <p>
-                Service fee (5%):{" "}
-                <strong>
-                  ₦
-                  {serviceFee.toLocaleString(
-                    "en-NG",
-                    {
-                      minimumFractionDigits: 2,
-                    }
-                  )}
-                </strong>
-              </p>
-
-              <p className="mt-1">
-                Total deduction:{" "}
-                <strong className="text-gray-700">
-                  ₦
-                  {totalAmount.toLocaleString(
-                    "en-NG",
-                    {
-                      minimumFractionDigits: 2,
-                    }
-                  )}
-                </strong>
-              </p>
-            </div>
-          )}
         </div>
 
         {/* SMART CARD */}
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">
+
+          <label className="mb-2 block text-sm font-medium text-foreground">
             Smart Card / IUC Number
           </label>
 
           <input
             type="text"
             inputMode="numeric"
-            value={cardnumber}
-            onChange={(e) => {
+            value={
+              cardnumber
+            }
+            onChange={(
+              e
+            ) => {
               setCardnumber(
                 e.target.value
               );
 
-              setVerified(false);
+              setVerified(
+                false
+              );
 
-              setCustomerName("");
+              setCustomerName(
+                ""
+              );
             }}
-            placeholder="Enter Smart Card / IUC number"
-            disabled={buying}
-            className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            placeholder="Enter Smart Card number"
+            disabled={
+              verifying ||
+              buying
+            }
+            className="w-full rounded-xl border border-border bg-background p-3 text-foreground outline-none transition focus:border-indigo-500"
           />
 
           <button
@@ -911,51 +1143,143 @@ export default function CablePage() {
               ? "Verifying..."
               : "Verify Smart Card"}
           </button>
+
         </div>
 
-        {/* VERIFIED */}
+        {/* VERIFIED CUSTOMER */}
 
         {verified && (
-          <div className="rounded-xl bg-green-50 p-4 text-green-700">
-            <p className="font-semibold">
-              Customer Verified ✓
-            </p>
+          <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-400">
 
-            <p className="mt-1">
-              Customer Name:{" "}
-              <strong>
-                {customerName}
-              </strong>
-            </p>
+            Customer:
 
-            <p className="mt-1 text-sm">
-              Smart Card:{" "}
-              {cardnumber}
-            </p>
+            <strong className="ml-1">
+              {customerName}
+            </strong>
+
           </div>
         )}
 
         {/* PHONE */}
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-gray-700">
+
+          <label className="mb-2 block text-sm font-medium text-foreground">
             Phone Number
           </label>
 
           <input
             type="tel"
             inputMode="numeric"
-            value={phone}
-            onChange={(e) =>
+            maxLength={11}
+            value={
+              phone
+            }
+            onChange={(
+              e
+            ) =>
               setPhone(
                 e.target.value
               )
             }
             placeholder="08012345678"
-            maxLength={11}
-            disabled={buying}
-            className="w-full rounded-xl border border-gray-200 p-3 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+            disabled={
+              buying
+            }
+            className="w-full rounded-xl border border-border bg-background p-3 text-foreground outline-none transition focus:border-indigo-500"
           />
+
+        </div>
+
+        {/* PRICE SUMMARY */}
+
+        <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm dark:border-indigo-900 dark:bg-indigo-950/30">
+
+          <p className="mb-3 font-semibold text-indigo-900 dark:text-indigo-200">
+            Payment Summary
+          </p>
+
+          {/* SUBSCRIPTION */}
+
+          <div className="flex justify-between">
+
+            <span className="text-muted-foreground">
+              Subscription
+            </span>
+
+            <span className="font-medium text-foreground">
+              ₦
+              {amount.toLocaleString(
+                "en-NG",
+                {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                }
+              )}
+            </span>
+
+          </div>
+
+          {/* SERVICE FEE */}
+
+          <div className="mt-2 flex justify-between">
+
+            <span className="text-muted-foreground">
+              {loadingServiceFee
+                ? "Loading service fee..."
+                : serviceFeePercentage ===
+                    null
+                  ? "Service Fee unavailable"
+                  : `Service Fee (${serviceFeePercentage}%)`}
+            </span>
+
+            <span className="font-medium text-foreground">
+
+              {loadingServiceFee
+                ? "..."
+                : serviceFeePercentage ===
+                    null
+                  ? "—"
+                  : `₦${serviceFee.toLocaleString(
+                      "en-NG",
+                      {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }
+                    )}`}
+
+            </span>
+
+          </div>
+
+          {/* TOTAL */}
+
+          {serviceFeePercentage !==
+            null && (
+            <>
+              <div className="my-3 border-t border-indigo-200 dark:border-indigo-900" />
+
+              <div className="flex justify-between">
+
+                <span className="font-semibold text-foreground">
+                  Total
+                </span>
+
+                <span className="text-lg font-bold text-indigo-700 dark:text-indigo-300">
+                  ₦
+                  {totalAmount.toLocaleString(
+                    "en-NG",
+                    {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    }
+                  )}
+                </span>
+
+              </div>
+            </>
+          )}
+
         </div>
 
         {/* SUBSCRIBE */}
@@ -964,10 +1288,13 @@ export default function CablePage() {
           type="submit"
           disabled={
             buying ||
-            loadingPlans ||
-            !planId ||
+            verifying ||
             !verified ||
-            !phone.trim()
+            !planId ||
+            !phone ||
+            serviceFeePercentage ===
+              null ||
+            loadingServiceFee
           }
           className="w-full rounded-xl bg-indigo-600 p-3.5 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -975,7 +1302,31 @@ export default function CablePage() {
             ? "Processing..."
             : "Subscribe"}
         </button>
+
       </form>
+
+      {/* TRANSACTION PIN MODAL */}
+
+      <TransactionPinModal
+        open={
+          showPinModal
+        }
+        onClose={() => {
+          if (!buying) {
+            setShowPinModal(
+              false
+            );
+          }
+        }}
+        onSuccess={(
+          pin
+        ) => {
+          processBuyCable(
+            pin
+          );
+        }}
+      />
+
     </div>
   );
 }

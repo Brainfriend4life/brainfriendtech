@@ -1,6 +1,6 @@
+import { verifyTransactionPin } from "@/lib/security/verifyTransactionPin";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-
 import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import {
@@ -245,6 +245,9 @@ export async function POST(request: NextRequest) {
 
     const phone = body.phone;
 
+    const transactionPin =
+      body.transactionPin;
+
     // ======================================================
     // 3. REQUIRED FIELDS
     // ======================================================
@@ -373,7 +376,37 @@ export async function POST(request: NextRequest) {
     }
 
     // ======================================================
-    // 8. ACCOUNT STATUS
+    // 8. CHECK TRANSACTION PIN
+    // ======================================================
+
+    if (!transactionPin) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Transaction PIN is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const pinResult =
+      await verifyTransactionPin(
+        user.id,
+        transactionPin
+      );
+
+    if (!pinResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: pinResult.message,
+        },
+        { status: 403 }
+      );
+    }
+
+    // ======================================================
+    // 9. ACCOUNT STATUS
     // ======================================================
 
     if (user.status !== "ACTIVE") {
@@ -388,7 +421,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ======================================================
-    // 9. API KEY
+    // 10. API KEY
     // ======================================================
 
     const apiKey =
@@ -406,14 +439,14 @@ export async function POST(request: NextRequest) {
     }
 
     // ======================================================
-    // 10. GET SERVICE FEE
+    // 11. GET SERVICE FEE
     // ======================================================
 
     const serviceFeePercentage =
       await getServiceFeePercent();
 
     // ======================================================
-    // 11. GET REFERRAL COMMISSION
+    // 12. GET REFERRAL COMMISSION
     // ======================================================
 
     const referralPercentage =
@@ -430,7 +463,7 @@ export async function POST(request: NextRequest) {
     );
 
     // ======================================================
-    // 12. PRICING
+    // 13. PRICING
     // ======================================================
 
     const providerCost =
@@ -469,7 +502,7 @@ export async function POST(request: NextRequest) {
       pricing.profit;
 
     // ======================================================
-    // 13. REFERRAL COMMISSION
+    // 14. REFERRAL COMMISSION
     // ======================================================
 
     let referralCommission = 0;
@@ -495,7 +528,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ======================================================
-    // 14. ACTUAL BUSINESS PROFIT
+    // 15. ACTUAL BUSINESS PROFIT
     // ======================================================
 
     const actualProfit =
@@ -507,7 +540,7 @@ export async function POST(request: NextRequest) {
       );
 
     // ======================================================
-    // 15. WALLET CHECK
+    // 16. WALLET CHECK
     // ======================================================
 
     const walletBalance =
@@ -550,14 +583,14 @@ export async function POST(request: NextRequest) {
     }
 
     // ======================================================
-    // 16. REFERENCE
+    // 17. REFERENCE
     // ======================================================
 
     const reference =
       generateReference();
 
     // ======================================================
-    // 17. CREATE PENDING TRANSACTION
+    // 18. CREATE PENDING TRANSACTION
     // ======================================================
 
     const transaction =
@@ -584,7 +617,7 @@ export async function POST(request: NextRequest) {
       transaction.id;
 
     // ======================================================
-    // 18. PROVIDER REQUEST
+    // 19. PROVIDER REQUEST
     // ======================================================
 
     const requestBody = {
@@ -664,7 +697,7 @@ export async function POST(request: NextRequest) {
     );
 
     // ======================================================
-    // 19. CALL CHEAPDATAHUB
+    // 20. CALL CHEAPDATAHUB
     // ======================================================
 
     const providerResponse =
@@ -703,7 +736,7 @@ export async function POST(request: NextRequest) {
     );
 
     // ======================================================
-    // 20. PARSE PROVIDER RESPONSE
+    // 21. PARSE PROVIDER RESPONSE
     // ======================================================
 
     let providerResult: any =
@@ -721,7 +754,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ======================================================
-    // 21. INVALID PROVIDER RESPONSE
+    // 22. INVALID PROVIDER RESPONSE
     // ======================================================
 
     if (!providerResult) {
@@ -758,7 +791,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ======================================================
-    // 22. PROVIDER SUCCESS
+    // 23. PROVIDER SUCCESS
     // ======================================================
 
     const providerSuccess =
@@ -803,7 +836,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ======================================================
-    // 23. PROVIDER REFERENCE
+    // 24. PROVIDER REFERENCE
     // ======================================================
 
     const providerData =
@@ -820,7 +853,7 @@ export async function POST(request: NextRequest) {
       null;
 
     // ======================================================
-    // 24. ATOMIC ACCOUNTING
+    // 25. ATOMIC ACCOUNTING
     // ======================================================
 
     const finalResult =
@@ -1165,7 +1198,7 @@ export async function POST(request: NextRequest) {
       );
 
     // ======================================================
-    // 25. SUCCESS RESPONSE
+    // 26. SUCCESS RESPONSE
     // ======================================================
 
     return NextResponse.json({
@@ -1241,7 +1274,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     // ======================================================
-    // 26. ERROR HANDLING
+    // 27. ERROR HANDLING
     // ======================================================
 
     console.error(

@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import TransactionPinModal from "@/components/TransactionPinModal";
 
+
+// Provider IDs confirmed against CheapDataHub's Mobile Networks table:
+// 1 = MTN, 2 = Glo, 3 = Airtel, 4 = 9mobile.
 const NETWORKS = [
   {
     id: "mtn",
@@ -11,14 +15,14 @@ const NETWORKS = [
     minimum: 100,
   },
   {
-    id: "airtel",
-    name: "Airtel",
+    id: "glo",
+    name: "GLO",
     providerId: 2,
     minimum: 100,
   },
   {
-    id: "glo",
-    name: "GLO",
+    id: "airtel",
+    name: "Airtel",
     providerId: 3,
     minimum: 100,
   },
@@ -30,283 +34,762 @@ const NETWORKS = [
   },
 ];
 
-export default function AirtimePage() {
-  const [serviceID, setServiceID] = useState("mtn");
-  const [phone, setPhone] = useState("");
-  const [amount, setAmount] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  const selectedNetwork = NETWORKS.find(
-    (network) => network.id === serviceID
+// ==============================
+// NETWORK PREFIX MAP
+// ==============================
+const NETWORK_PREFIXES: Record<string, string> = {
+
+  // MTN
+  "0803":"mtn","0806":"mtn","0813":"mtn","0814":"mtn","0816":"mtn",
+  "0810":"mtn","0903":"mtn","0906":"mtn","0913":"mtn","0916":"mtn",
+  "0704":"mtn","0706":"mtn",
+
+  // Airtel
+  "0802":"airtel","0808":"airtel","0812":"airtel","0701":"airtel",
+  "0902":"airtel","0901":"airtel","0904":"airtel","0907":"airtel",
+  "0912":"airtel","0911":"airtel",
+
+  // Glo
+  "0805":"glo","0807":"glo","0811":"glo","0815":"glo",
+  "0905":"glo","0915":"glo","0705":"glo",
+
+  // 9mobile
+  "0809":"9mobile","0817":"9mobile","0818":"9mobile",
+  "0908":"9mobile","0909":"9mobile",
+
+};
+
+
+
+function toLocalFormat(rawPhone: string) {
+
+  const cleaned =
+    rawPhone
+    .replace(/\s+/g,"")
+    .trim();
+
+  if(cleaned.startsWith("+234")){
+    return "0" + cleaned.slice(4);
+  }
+
+  if(cleaned.startsWith("234")){
+    return "0" + cleaned.slice(3);
+  }
+
+  return cleaned;
+
+}
+
+
+
+function detectNetworkFromPhone(rawPhone: string) {
+
+  const local = toLocalFormat(rawPhone);
+
+  if(!/^0\d{10}$/.test(local)){
+    return null;
+  }
+
+  const prefix = local.slice(0,4);
+
+  return NETWORK_PREFIXES[prefix] ?? null;
+
+}
+
+
+
+export default function AirtimePage() {
+
+
+  const [serviceID,setServiceID] =
+  useState("mtn");
+
+
+  const [phone,setPhone] =
+  useState("");
+
+
+  const [amount,setAmount] =
+  useState("");
+
+
+  const [loading,setLoading] =
+  useState(false);
+
+
+  const [networkTouched,setNetworkTouched] =
+  useState(false);
+
+
+
+  const [showPinModal,setShowPinModal] =
+  useState(false);
+
+
+
+  const selectedNetwork =
+  NETWORKS.find(
+    (network)=>
+    network.id === serviceID
   );
 
-  const buyAirtime = async () => {
-    // =====================================================
-    // VALIDATE PHONE
-    // =====================================================
 
-    const cleanPhone = phone.replace(/\s+/g, "");
+  const detectedNetworkId =
+  detectNetworkFromPhone(phone);
 
-    if (
-      !/^(0\d{10}|\+234\d{10}|234\d{10})$/.test(
-        cleanPhone
-      )
-    ) {
+
+
+  useEffect(()=>{
+
+    if(networkTouched){
+      return;
+    }
+
+    if(
+      detectedNetworkId &&
+      detectedNetworkId !== serviceID
+    ){
+
+      setServiceID(detectedNetworkId);
+
+    }
+
+  },[detectedNetworkId,networkTouched,serviceID]);
+
+
+
+  const handleNetworkChange =
+  (value:string) => {
+
+    setNetworkTouched(true);
+
+    setServiceID(value);
+
+  };
+
+
+
+  const handlePhoneChange =
+  (value:string) => {
+
+    setNetworkTouched(false);
+
+    setPhone(value);
+
+  };
+
+
+
+
+
+  const validatePurchase = () => {
+
+
+    const cleanPhone =
+    toLocalFormat(phone);
+
+
+
+    if(
+      !/^0\d{10}$/
+      .test(cleanPhone)
+    ){
+
       toast.error(
         "Please enter a valid Nigerian phone number."
       );
-      return;
+
+      return false;
     }
 
-    // =====================================================
-    // VALIDATE AMOUNT
-    // =====================================================
 
-    const numericAmount = Number(amount);
 
-    if (
+    const numericAmount =
+    Number(amount);
+
+
+
+    if(
       !Number.isFinite(numericAmount) ||
-      numericAmount <= 0
-    ) {
-      toast.error("Please enter a valid amount.");
-      return;
-    }
+      numericAmount <=0
+    ){
 
-    const minimumAmount =
-      selectedNetwork?.minimum ?? 50;
-
-    if (numericAmount < minimumAmount) {
       toast.error(
-        `Minimum amount is ₦${minimumAmount.toLocaleString()}.`
+        "Please enter a valid amount."
       );
-      return;
+
+      return false;
     }
 
-    if (numericAmount > 50000) {
+
+
+
+    const minimum =
+    selectedNetwork?.minimum ?? 100;
+
+
+
+    if(
+      numericAmount < minimum
+    ){
+
       toast.error(
-        "Maximum airtime amount is ₦50,000."
+        `Minimum amount is ₦${minimum}`
       );
+
+      return false;
+    }
+
+
+
+
+
+    if(
+      numericAmount > 50000
+    ){
+
+      toast.error(
+        "Maximum airtime amount is ₦50,000"
+      );
+
+      return false;
+    }
+
+
+
+
+    if(
+      !selectedNetwork?.providerId
+    ){
+
+      toast.error(
+        "Invalid network selected"
+      );
+
+      return false;
+    }
+
+
+
+    if(
+      detectedNetworkId &&
+      detectedNetworkId !== serviceID
+    ){
+
+      const detectedName =
+        NETWORKS.find(
+          (network)=>
+          network.id === detectedNetworkId
+        )?.name ?? detectedNetworkId;
+
+      toast.error(
+        `This number looks like ${detectedName}, but ${selectedNetwork?.name} is selected. Please switch the network to ${detectedName}.`
+      );
+
+      return false;
+    }
+
+
+
+    return true;
+
+  };
+
+
+
+
+
+
+  const buyAirtime = () => {
+
+
+    if(!validatePurchase()){
       return;
     }
 
-    // =====================================================
-    // PROVIDER ID
-    // =====================================================
+
+
+    setShowPinModal(true);
+
+
+  };
+
+
+
+
+
+
+
+  const confirmPurchase = async(pin:string)=>{
+
+
+    const cleanPhone =
+    toLocalFormat(phone);
+
+
+
+    const numericAmount =
+    Number(amount);
+
+
 
     const providerId =
-      selectedNetwork?.providerId;
+    selectedNetwork?.providerId;
 
-    if (!providerId) {
-      toast.error("Please select a valid network.");
+
+
+    if(!providerId){
+      toast.error(
+        "Invalid network"
+      );
+
       return;
     }
 
-    // =====================================================
-    // START PURCHASE
-    // =====================================================
+
 
     setLoading(true);
 
-    try {
-      const res = await fetch(
+
+
+    try{
+
+
+      const response =
+      await fetch(
         "/api/airtime/purchase",
         {
-          method: "POST",
 
-          headers: {
-            "Content-Type": "application/json",
+          method:"POST",
+
+          headers:{
+            "Content-Type":
+            "application/json"
           },
 
-          body: JSON.stringify({
-  providerId:
-    serviceID === "mtn"
-      ? 1
-      : serviceID === "glo"
-      ? 2
-      : serviceID === "airtel"
-      ? 3
-      : 4,
 
-  phoneNumber: cleanPhone,
+       body: JSON.stringify({
 
-  amount: Math.round(numericAmount),
+  providerId,
+
+  phoneNumber:
+  cleanPhone,
+
+
+  amount:
+  Math.round(
+    numericAmount
+  ),
+
+
+  transactionPin:
+  pin
+
 })
+
         }
       );
 
-      const data = await res.json();
+
+
+      const data =
+      await response.json();
+
+
+
 
       console.log(
-        "CheapDataHub Airtime Response:",
+        "AIRTIME RESPONSE:",
         data
       );
 
-      // ===================================================
-      // ERROR
-      // ===================================================
 
-      if (!res.ok || !data.success) {
+
+      if(
+        !response.ok ||
+        !data.success
+      ){
+
         toast.error(
           data.error ||
-            data.message ||
-            "Airtime purchase failed."
+          data.message ||
+          "Airtime purchase failed"
         );
 
         return;
       }
 
-      // ===================================================
-      // SUCCESS
-      // ===================================================
+
+
+
+
 
       toast.success(
         data.message ||
-          "Airtime purchased successfully!"
+        "Airtime purchased successfully"
       );
+
+
 
       setPhone("");
+
       setAmount("");
 
-      // Optional: refresh page data
+      setNetworkTouched(false);
+
+
+
       window.dispatchEvent(
-        new Event("walletUpdated")
+        new Event(
+          "walletUpdated"
+        )
       );
-    } catch (error) {
+
+
+
+
+    }catch(error){
+
+
       console.error(
-        "AIRTIME PURCHASE ERROR:",
         error
       );
 
+
       toast.error(
-        "Something went wrong. Please try again."
+        "Something went wrong"
       );
-    } finally {
+
+
+
+    }finally{
+
+
       setLoading(false);
+
     }
+
+
   };
 
+  const closePinModal = () => {
+
+    if(loading){
+      return;
+    }
+
+
+    setShowPinModal(false);
+
+  };
+
+
+
+  const showMismatchWarning =
+  Boolean(
+    detectedNetworkId &&
+    detectedNetworkId !== serviceID
+  );
+
+
+
   return (
+
     <div>
-      {/* PAGE HEADER */}
+
+
+      {/* HEADER */}
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+
+        <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
           Buy Airtime
         </h1>
 
-        <p className="mt-1 text-sm text-gray-500 sm:text-base">
+
+        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
           Purchase airtime quickly and securely.
         </p>
+
       </div>
 
-      {/* FORM CARD */}
 
-      <div className="w-full max-w-2xl rounded-2xl bg-white p-4 shadow-sm sm:p-6 lg:p-8">
+
+
+
+      {/* CARD */}
+
+
+      <div className="w-full max-w-2xl rounded-2xl bg-card p-4 shadow-sm sm:p-6 lg:p-8">
+
+
         <div className="space-y-5">
+
+
 
           {/* NETWORK */}
 
+
           <div>
-            <label
-              htmlFor="network"
-              className="mb-2 block text-sm font-medium text-gray-700"
-            >
+
+            <label className="mb-2 block text-sm font-medium text-foreground">
               Network
             </label>
 
+
             <select
-              id="network"
+
               value={serviceID}
-              onChange={(e) =>
-                setServiceID(e.target.value)
+
+              onChange={(e)=>
+                handleNetworkChange(
+                  e.target.value
+                )
               }
+
               disabled={loading}
-              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
+
+              className="w-full rounded-xl border border-border bg-background p-3 text-foreground outline-none"
+
             >
-              {NETWORKS.map((network) => (
-                <option
-                  key={network.id}
-                  value={network.id}
-                >
-                  {network.name}
-                </option>
-              ))}
+
+              {
+                NETWORKS.map(
+                  (network)=>(
+
+                    <option
+
+                    key={network.id}
+
+                    value={network.id}
+
+                    >
+
+                      {network.name}
+
+                    </option>
+
+                  )
+                )
+              }
+
+
             </select>
+
+
           </div>
 
-          {/* PHONE NUMBER */}
+
+
+
+
+
+
+          {/* PHONE */}
+
 
           <div>
-            <label
-              htmlFor="phone"
-              className="mb-2 block text-sm font-medium text-gray-700"
-            >
+
+
+            <label className="mb-2 block text-sm font-medium text-foreground">
+
               Phone Number
+
             </label>
 
+
             <input
-              id="phone"
+
               type="tel"
+
               inputMode="numeric"
+
               placeholder="08012345678"
+
               value={phone}
-              onChange={(e) =>
-                setPhone(e.target.value)
+
+              onChange={(e)=>
+                handlePhoneChange(
+                  e.target.value
+                )
               }
+
               maxLength={14}
+
               disabled={loading}
-              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
+
+              className="w-full rounded-xl border border-border bg-background p-3 text-foreground outline-none"
+
             />
+
+
+            {
+              showMismatchWarning
+              &&
+              (
+                <p className="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">
+
+                  This looks like a{" "}
+                  {
+                    NETWORKS.find(
+                      (network)=>
+                      network.id === detectedNetworkId
+                    )?.name
+                  }
+                  {" "}number. Switch the network above to avoid a failed purchase.
+
+                </p>
+              )
+            }
+
+
           </div>
+
+
+
+
+
+
+
+
 
           {/* AMOUNT */}
 
+
           <div>
-            <label
-              htmlFor="amount"
-              className="mb-2 block text-sm font-medium text-gray-700"
-            >
+
+
+            <label className="mb-2 block text-sm font-medium text-foreground">
+
               Amount
+
             </label>
 
+
+
             <input
-              id="amount"
+
               type="number"
-              inputMode="decimal"
-              min={selectedNetwork?.minimum ?? 50}
-              max="50000"
-              placeholder="Enter amount"
+
               value={amount}
-              onChange={(e) =>
-                setAmount(e.target.value)
+
+              min={
+                selectedNetwork?.minimum ??
+                100
               }
+
+              max="50000"
+
+              placeholder="Enter amount"
+
+              onChange={(e)=>
+                setAmount(
+                  e.target.value
+                )
+              }
+
+
               disabled={loading}
-              className="w-full rounded-xl border border-gray-200 p-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:text-base"
+
+
+              className="w-full rounded-xl border border-border bg-background p-3 text-foreground outline-none"
+
             />
 
-            <p className="mt-2 text-xs text-gray-400">
-              {selectedNetwork?.name}: minimum ₦
-              {(
-                selectedNetwork?.minimum ?? 50
-              ).toLocaleString()}
-              . Maximum: ₦50,000.
+
+
+            <p className="mt-2 text-xs text-muted-foreground">
+
+              Minimum ₦
+              {
+                (
+                  selectedNetwork?.minimum ??
+                  100
+                ).toLocaleString()
+              }
+
+              .
+              Maximum ₦50,000.
+
+
             </p>
+
+
           </div>
 
-          {/* PURCHASE BUTTON */}
+
+
+
+
+
+
+
+
+          {/* BUTTON */}
+
+
 
           <button
+
+
             type="button"
+
+
             onClick={buyAirtime}
+
+
             disabled={loading}
-            className="w-full rounded-xl bg-indigo-600 p-3.5 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+
+
+            className="w-full rounded-xl bg-indigo-600 p-3.5 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+
+
           >
-            {loading
-              ? "Processing..."
-              : "Buy Airtime"}
+
+            {
+              loading
+              ?
+              "Processing..."
+              :
+              "Buy Airtime"
+            }
+
+
           </button>
+
+
+
+
+
         </div>
+
+
       </div>
+
+
+      {/* TRANSACTION PIN MODAL */}
+
+<TransactionPinModal
+
+  open={showPinModal}
+
+  onClose={closePinModal}
+
+  onSuccess={(pin)=>{
+
+    setShowPinModal(false);
+
+    confirmPurchase(pin);
+
+  }}
+
+/>
+
+
+
     </div>
+
   );
+
 }

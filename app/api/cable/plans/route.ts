@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServiceFeePercent } from "@/lib/service-fee";
 
 const CABLE_PLANS = [
   {
@@ -167,9 +168,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get the exact fee configured in admin.
+    const serviceFeePercentage =
+      await getServiceFeePercent();
+
     return NextResponse.json({
       success: true,
       data: plans,
+      serviceFeePercentage,
     });
   } catch (error) {
     console.error(
@@ -180,8 +186,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        message:
-          "Unable to load cable plans.",
+        message: "Unable to load cable plans.",
       },
       { status: 500 }
     );

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 import AuthProvider from "@/components/providers/AuthProvider";
+import ThemeProvider from "@/components/providers/ThemeProvider";
 import { Toaster } from "react-hot-toast";
 import UpdatePrompt from "@/components/pwa/UpdatePrompt";
 
@@ -131,15 +132,23 @@ export default function RootLayout({
   return (
     <html
       lang="en-NG"
+      // Required because next-themes sets the "dark" class / color-scheme
+      // on <html> on the client before React hydrates, based on
+      // localStorage or system preference. Without this, React logs a
+      // hydration warning even though the mismatch is intentional and
+      // handled by next-themes.
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
 
-        <Toaster position="top-right" />
-        <UpdatePrompt />
+          <Toaster position="top-right" />
+          <UpdatePrompt />
+        </ThemeProvider>
       </body>
     </html>
   );

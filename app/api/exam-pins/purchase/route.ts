@@ -20,6 +20,10 @@ import {
   calculateServiceFee,
 } from "@/lib/service-fee";
 
+import {
+  verifyTransactionPin,
+} from "@/lib/security/verifyTransactionPin";
+
 const CHEAPDATAHUB_EXAM_PIN_URL =
   "https://www.cheapdatahub.ng/api/v1/resellers/exam-pin/purchase/";
 
@@ -107,10 +111,10 @@ function extractPins(
         ).trim(),
       };
     })
- .filter(
-  (item: { pin: string; serial: string }) =>
-    Boolean(item.pin)
-);
+    .filter(
+      (item: { pin: string; serial: string }) =>
+        Boolean(item.pin)
+    );
 }
 
 export async function POST(
@@ -154,6 +158,7 @@ export async function POST(
     const {
       productId,
       quantity,
+      transactionPin,
     } = body;
 
     if (
@@ -282,25 +287,6 @@ export async function POST(
     // ========================================================
     // CONFIGURABLE SERVICE FEE
     // ========================================================
-    //
-    // This gets the percentage configured from the
-    // admin service-fee setting.
-    //
-    // Example:
-    //
-    // Admin setting = 5%
-    // WAEC = ₦6,000
-    //
-    // Provider cost = ₦6,000
-    // Service fee = ₦300
-    // Customer pays = ₦6,300
-    //
-    // If admin changes it to 10%:
-    //
-    // Provider cost = ₦6,000
-    // Service fee = ₦600
-    // Customer pays = ₦6,600
-    //
 
     const serviceFeePercent =
       await getServiceFeePercent();
@@ -343,6 +329,47 @@ export async function POST(
         },
         {
           status: 404,
+        }
+      );
+    }
+
+    // ========================================================
+    // TRANSACTION PIN
+    // ========================================================
+
+    if (
+      transactionPin === undefined ||
+      transactionPin === null ||
+      String(transactionPin).trim() === ""
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Transaction PIN is required.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const pinResult =
+      await verifyTransactionPin(
+        user.id,
+        String(transactionPin)
+      );
+
+    if (!pinResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            pinResult.message ||
+            "Invalid transaction PIN.",
+        },
+        {
+          status: 403,
         }
       );
     }
@@ -466,10 +493,6 @@ export async function POST(
           type:
             "EXAM_PIN",
 
-          /*
-           * Amount is what the customer pays,
-           * including the service fee.
-           */
           amount:
             totalAmount,
 
@@ -484,15 +507,9 @@ export async function POST(
           provider:
             "CheapDataHub",
 
-          /*
-           * Actual amount paid to provider.
-           */
           cost:
             providerCost,
 
-          /*
-           * Our profit is the service fee.
-           */
           profit,
 
           isTest:
@@ -506,14 +523,6 @@ export async function POST(
     // ========================================================
     // PROVIDER REQUEST
     // ========================================================
-    //
-    // IMPORTANT:
-    //
-    // The service fee is NOT sent to CheapDataHub.
-    //
-    // CheapDataHub receives only the actual product
-    // request.
-    //
 
     const requestBody = {
       product_id:
@@ -899,13 +908,6 @@ export async function POST(
           // ==================================================
           // BUSINESS ACCOUNTING
           // ==================================================
-          //
-          // Revenue = customer payment
-          //
-          // Cost = provider cost
-          //
-          // Profit = service fee
-          //
 
           const revenue =
             totalAmount;
@@ -1094,19 +1096,6 @@ export async function POST(
                 .toString(36)
                 .substring(2, 8)
                 .toUpperCase()}`;
-
-            /*
-             * Each PIN receives its own customer price:
-             *
-             * Unit provider cost:
-             * ₦6,000
-             *
-             * 5% fee:
-             * ₦300
-             *
-             * Customer price:
-             * ₦6,300
-             */
 
             const pinCustomerAmount =
               Number(

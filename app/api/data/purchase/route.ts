@@ -1,8 +1,11 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
+import { verifyTransactionPin } from "@/lib/security/verifyTransactionPin";
 
 import {
   getServiceFeePercent,
@@ -501,12 +504,11 @@ const dataPlans: Record<
 
 async function getReferralCommissionPercentage(): Promise<number> {
   try {
-    const setting =
-      await prisma.systemSetting.findUnique({
-        where: {
-          key: REFERRAL_COMMISSION_SETTING_KEY,
-        },
-      });
+    const setting = await prisma.systemSetting.findUnique({
+      where: {
+        key: REFERRAL_COMMISSION_SETTING_KEY,
+      },
+    });
 
     if (setting) {
       const value = Number(setting.value);
@@ -567,9 +569,7 @@ function isProviderSuccess(result: any): boolean {
 // POST
 // ============================================================
 
-export async function POST(
-  request: NextRequest
-) {
+export async function POST(request: NextRequest) {
   let transactionId: string | null = null;
 
   try {
@@ -577,15 +577,13 @@ export async function POST(
     // 1. AUTHENTICATION
     // ========================================================
 
-    const session =
-      await getServerSession(authOptions);
+    const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "You must be logged in.",
+          message: "You must be logged in.",
         },
         { status: 401 }
       );
@@ -595,8 +593,7 @@ export async function POST(
     // 2. REQUEST BODY
     // ========================================================
 
-    const body =
-      await request.json();
+    const body = await request.json();
 
     const rawBundleId =
       body.bundle_id ??
@@ -610,8 +607,7 @@ export async function POST(
       body.phoneNumber ??
       body.phone;
 
-    const bundleId =
-      Number(rawBundleId);
+    const bundleId = Number(rawBundleId);
 
     if (
       !Number.isInteger(bundleId) ||
@@ -620,32 +616,23 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Invalid data plan.",
-          receivedBundleId:
-            rawBundleId,
+          message: "Invalid data plan.",
+          receivedBundleId: rawBundleId,
         },
         { status: 400 }
       );
     }
 
-    const plan =
-      dataPlans[bundleId];
+    const plan = dataPlans[bundleId];
 
     // ========================================================
     // 3. PHONE NUMBER
     // ========================================================
 
     const cleanedPhone =
-      normalizePhone(
-        rawPhoneNumber
-      );
+      normalizePhone(rawPhoneNumber);
 
-    if (
-      !/^0\d{10}$/.test(
-        cleanedPhone
-      )
-    ) {
+    if (!/^0\d{10}$/.test(cleanedPhone)) {
       return NextResponse.json(
         {
           success: false,
@@ -665,7 +652,6 @@ export async function POST(
         where: {
           id: session.user.id,
         },
-
         include: {
           referredBy: {
             select: {
@@ -682,8 +668,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "User not found.",
+          message: "User not found.",
         },
         { status: 404 }
       );
@@ -693,21 +678,54 @@ export async function POST(
     // 5. USER STATUS
     // ========================================================
 
-    if (
-      user.status !== "ACTIVE"
-    ) {
+    if (user.status !== "ACTIVE") {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Your account is not active.",
+          message: "Your account is not active.",
         },
         { status: 403 }
       );
     }
 
     // ========================================================
-    // 6. API KEY
+    // 6. TRANSACTION PIN
+    // ========================================================
+
+    const transactionPin =
+      body.transactionPin ??
+      body.transaction_pin;
+
+    if (!transactionPin) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Transaction PIN is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const pinResult =
+      await verifyTransactionPin(
+        user.id,
+        String(transactionPin)
+      );
+
+    if (!pinResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            pinResult.message ||
+            "Invalid transaction PIN.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // ========================================================
+    // 7. API KEY
     // ========================================================
 
     const apiKey =
@@ -729,7 +747,7 @@ export async function POST(
     }
 
     // ========================================================
-    // 7. PRICING
+    // 8. PRICING
     // ========================================================
 
     const basePrice =
@@ -745,8 +763,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Invalid reseller price.",
+          message: "Invalid reseller price.",
           bundleId,
           basePrice,
         },
@@ -761,8 +778,7 @@ export async function POST(
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Invalid provider price.",
+          message: "Invalid provider price.",
           bundleId,
           providerCost,
         },
@@ -771,7 +787,7 @@ export async function POST(
     }
 
     // ========================================================
-    // 8. SERVICE FEE
+    // 9. SERVICE FEE
     // ========================================================
 
     const serviceFeePercentage =
@@ -794,14 +810,14 @@ export async function POST(
       );
 
     // ========================================================
-    // 9. REFERRAL COMMISSION
+    // 10. REFERRAL COMMISSION
     // ========================================================
 
     const referralPercentage =
       await getReferralCommissionPercentage();
 
     // ========================================================
-    // 10. PROFIT
+    // 11. PROFIT
     // ========================================================
 
     const grossProfit =
@@ -843,7 +859,7 @@ export async function POST(
       );
 
     // ========================================================
-    // 11. CHECK USER WALLET
+    // 12. CHECK USER WALLET
     // ========================================================
 
     const walletBalance =
@@ -858,22 +874,19 @@ export async function POST(
           success: false,
           message:
             "Insufficient wallet balance.",
-          balance:
-            walletBalance,
-          required:
-            amount,
+          balance: walletBalance,
+          required: amount,
           basePrice,
           serviceFeePercentage,
           serviceFee,
-          totalAmount:
-            amount,
+          totalAmount: amount,
         },
         { status: 400 }
       );
     }
 
     // ========================================================
-    // 12. CREATE REFERENCE
+    // 13. CREATE REFERENCE
     // ========================================================
 
     const reference =
@@ -883,54 +896,34 @@ export async function POST(
         .toUpperCase()}`;
 
     // ========================================================
-    // 13. CREATE PENDING TRANSACTION
+    // 14. CREATE PENDING TRANSACTION
     // ========================================================
 
     const transaction =
       await prisma.transaction.create({
         data: {
-          userId:
-            user.id,
-
-          type:
-            "DATA",
-
-          amount:
-            amount,
-
-          reference:
-            reference,
-
-          status:
-            "PENDING",
-
-          provider:
-            "CheapDataHub",
-
-          cost:
-            providerCost,
-
-          profit:
-            profit,
-
+          userId: user.id,
+          type: "DATA",
+          amount,
+          reference,
+          status: "PENDING",
+          provider: "CheapDataHub",
+          cost: providerCost,
+          profit,
           description:
             `${plan.provider.toUpperCase()} ${plan.size} ${plan.duration} for ${cleanedPhone}`,
         },
       });
 
-    transactionId =
-      transaction.id;
+    transactionId = transaction.id;
 
     // ========================================================
-    // 14. CHEAPDATAHUB REQUEST
+    // 15. CHEAPDATAHUB REQUEST
     // ========================================================
 
     const providerBody = {
-      bundle_id:
-        bundleId,
-
-      phone_number:
-        cleanedPhone,
+      bundle_id: bundleId,
+      phone_number: cleanedPhone,
     };
 
     console.log(
@@ -942,43 +935,21 @@ export async function POST(
     );
 
     console.log({
-      url:
-        CHEAPDATAHUB_DATA_URL,
-
-      bundle_id:
-        bundleId,
-
-      phone_number:
-        cleanedPhone,
-
-      provider:
-        plan.provider,
-
-      size:
-        plan.size,
-
-      duration:
-        plan.duration,
-
+      url: CHEAPDATAHUB_DATA_URL,
+      bundle_id: bundleId,
+      phone_number: cleanedPhone,
+      provider: plan.provider,
+      size: plan.size,
+      duration: plan.duration,
       basePrice,
-
       serviceFeePercentage,
-
       serviceFee,
-
-      customerAmount:
-        amount,
-
+      customerAmount: amount,
       providerCost,
-
       grossProfit,
-
       referralPercentage,
-
       referralCommission,
-
-      businessProfit:
-        profit,
+      businessProfit: profit,
     });
 
     console.log(
@@ -986,19 +957,17 @@ export async function POST(
     );
 
     // ========================================================
-    // 15. CALL CHEAPDATAHUB
+    // 16. CALL CHEAPDATAHUB
     // ========================================================
 
-    let providerResponse:
-      Response;
+    let providerResponse: Response;
 
     try {
       providerResponse =
         await fetch(
           CHEAPDATAHUB_DATA_URL,
           {
-            method:
-              "POST",
+            method: "POST",
 
             headers: {
               Authorization:
@@ -1033,42 +1002,32 @@ export async function POST(
 
       await prisma.transaction.update({
         where: {
-          id:
-            transaction.id,
+          id: transaction.id,
         },
 
         data: {
-          status:
-            "FAILED",
-
-          cost:
-            0,
-
-          profit:
-            0,
+          status: "FAILED",
+          cost: 0,
+          profit: 0,
         },
       });
 
       return NextResponse.json(
         {
           success: false,
-
           message:
             "Unable to connect to CheapDataHub.",
-
           error:
             fetchError?.message ||
             "Provider connection failed.",
-
-          request:
-            providerBody,
+          request: providerBody,
         },
         { status: 502 }
       );
     }
 
     // ========================================================
-    // 16. READ PROVIDER RESPONSE
+    // 17. READ PROVIDER RESPONSE
     // ========================================================
 
     const responseText =
@@ -1089,18 +1048,15 @@ export async function POST(
     );
 
     // ========================================================
-    // 17. PARSE PROVIDER RESPONSE
+    // 18. PARSE PROVIDER RESPONSE
     // ========================================================
 
-    let providerResult:
-      any = null;
+    let providerResult: any = null;
 
     try {
       providerResult =
         responseText.trim()
-          ? JSON.parse(
-              responseText
-            )
+          ? JSON.parse(responseText)
           : null;
     } catch (parseError) {
       console.error(
@@ -1110,50 +1066,39 @@ export async function POST(
     }
 
     // ========================================================
-    // 18. INVALID RESPONSE
+    // 19. INVALID RESPONSE
     // ========================================================
 
     if (!providerResult) {
       await prisma.transaction.update({
         where: {
-          id:
-            transaction.id,
+          id: transaction.id,
         },
 
         data: {
-          status:
-            "FAILED",
-
-          cost:
-            0,
-
-          profit:
-            0,
+          status: "FAILED",
+          cost: 0,
+          profit: 0,
         },
       });
 
       return NextResponse.json(
         {
           success: false,
-
           message:
             "CheapDataHub returned an invalid response.",
-
           providerStatus:
             providerResponse.status,
-
           providerResponse:
             responseText,
-
-          request:
-            providerBody,
+          request: providerBody,
         },
         { status: 502 }
       );
     }
 
     // ========================================================
-    // 19. PROVIDER FAILURE
+    // 20. PROVIDER FAILURE
     // ========================================================
 
     const providerSuccess =
@@ -1195,19 +1140,13 @@ export async function POST(
 
       await prisma.transaction.update({
         where: {
-          id:
-            transaction.id,
+          id: transaction.id,
         },
 
         data: {
-          status:
-            "FAILED",
-
-          cost:
-            0,
-
-          profit:
-            0,
+          status: "FAILED",
+          cost: 0,
+          profit: 0,
         },
       });
 
@@ -1245,7 +1184,7 @@ export async function POST(
     }
 
     // ========================================================
-    // 20. PROVIDER SUCCESS
+    // 21. PROVIDER SUCCESS
     // ========================================================
 
     const providerReference =
@@ -1263,7 +1202,7 @@ export async function POST(
     );
 
     // ========================================================
-    // 21. COMPLETE EVERYTHING ATOMICALLY
+    // 22. COMPLETE EVERYTHING ATOMICALLY
     // ========================================================
 
     const result =
@@ -1276,8 +1215,7 @@ export async function POST(
           const currentUser =
             await tx.user.findUnique({
               where: {
-                id:
-                  user.id,
+                id: user.id,
               },
             });
 
@@ -1308,14 +1246,12 @@ export async function POST(
           // --------------------------------------------------
 
           let businessWallet =
-            await tx.businessWallet.findUnique(
-              {
-                where: {
-                  name:
-                    "Brainfriend Global Tech",
-                },
-              }
-            );
+            await tx.businessWallet.findUnique({
+              where: {
+                name:
+                  "Brainfriend Global Tech",
+              },
+            });
 
           if (!businessWallet) {
             businessWallet =
@@ -1324,23 +1260,17 @@ export async function POST(
                   name:
                     "Brainfriend Global Tech",
 
-                  balance:
-                    0,
+                  balance: 0,
 
-                  totalRevenue:
-                    0,
+                  totalRevenue: 0,
 
-                  totalCost:
-                    0,
+                  totalCost: 0,
 
-                  totalProfit:
-                    0,
+                  totalProfit: 0,
 
-                  withdrawnProfit:
-                    0,
+                  withdrawnProfit: 0,
 
-                  availableProfit:
-                    0,
+                  availableProfit: 0,
                 },
               });
           }
@@ -1417,8 +1347,7 @@ export async function POST(
 
           await tx.user.update({
             where: {
-              id:
-                user.id,
+              id: user.id,
             },
 
             data: {
@@ -1433,8 +1362,7 @@ export async function POST(
 
           await tx.businessWallet.update({
             where: {
-              id:
-                businessWallet.id,
+              id: businessWallet.id,
             },
 
             data: {
@@ -1464,23 +1392,19 @@ export async function POST(
               transactionId:
                 transaction.id,
 
-              type:
-                "DATA",
+              type: "DATA",
 
               provider:
                 "CheapDataHub",
 
-              amount:
-                amount,
+              amount,
 
               cost:
                 providerCost,
 
-              profit:
-                profit,
+              profit,
 
-              reference:
-                reference,
+              reference,
 
               description:
                 `${plan.provider.toUpperCase()} ${plan.size} ${plan.duration} for ${cleanedPhone} + ${serviceFeePercentage}% service fee`,
@@ -1564,8 +1488,7 @@ export async function POST(
               cost:
                 providerCost,
 
-              profit:
-                profit,
+              profit,
 
               description:
                 `${plan.provider.toUpperCase()} ${plan.size} ${plan.duration} for ${cleanedPhone} + ${serviceFeePercentage}% service fee`,
@@ -1614,16 +1537,24 @@ export async function POST(
 
             profit,
           };
+        },
+
+        // ====================================================
+        // TRANSACTION OPTIONS
+        // ====================================================
+
+        {
+          maxWait: 10000,
+          timeout: 30000,
         }
       );
 
     // ========================================================
-    // 22. SUCCESS RESPONSE
+    // 23. SUCCESS RESPONSE
     // ========================================================
 
     return NextResponse.json({
-      success:
-        true,
+      success: true,
 
       message:
         providerResult.message ||
@@ -1768,17 +1699,16 @@ export async function POST(
 
     return NextResponse.json(
       {
-        success:
-          false,
+        success: false,
 
         message:
           error?.message ||
           "Data purchase failed.",
       },
       {
-        status:
-          500,
+        status: 500,
       }
     );
   }
 }
+

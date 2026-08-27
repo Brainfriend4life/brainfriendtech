@@ -9,37 +9,112 @@ datasource db {
 }
 
 model User {
-  id                       String               @id @default(cuid())
-  fullName                 String
-  email                    String               @unique
-  phone                    String               @unique
-  password                 String
-  walletBalance            Float                @default(0)
-  role                     Role                 @default(USER)
-  createdAt                DateTime             @default(now())
-  updatedAt                DateTime             @updatedAt
-  resetPasswordExpires     DateTime?
-  resetPasswordToken       String?
-  status                   UserStatus           @default(ACTIVE)
+  id String @id @default(cuid())
+
+  // BASIC INFO
+  fullName String
+  email    String @unique
+  phone    String @unique
+  password String
+  transactionPinResetOtp          String?
+  transactionPinResetOtpExpires   DateTime? 
+  transactionPinResetAttempts     Int      @default(0)
+
+  // ===============================
+  // TRANSACTION SECURITY
+  // ===============================
+
+  transactionPinHash        String?
+  transactionPinSetAt       DateTime?
+  transactionPinAttempts    Int       @default(0)
+  transactionPinLockedUntil DateTime?
+  transactionPinEnabled     Boolean   @default(false)
+  lastTransactionPinCheck   DateTime?
+
+  // ===============================
+  // LOGIN SECURITY
+  // ===============================
+
+  lastLoginAt     DateTime?
+  lastLoginIp     String?
+  lastLoginDevice String?
+
+  // ===============================
+  // ACCOUNT
+  // ===============================
+
+  walletBalance Float @default(0)
+
+  role Role @default(USER)
+
+  status UserStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+
+  updatedAt DateTime @updatedAt
+
+  // ===============================
+  // PASSWORD RESET
+  // ===============================
+
+  resetPasswordToken   String?
+  resetPasswordExpires DateTime?
+
+  // ===============================
+  // VERIFICATION
+  // ===============================
+
+  emailVerificationToken String? @unique
+
   emailVerificationExpires DateTime?
-  emailVerificationToken   String?              @unique
-  emailVerified            Boolean              @default(false)
-  phoneVerificationCode    String?
+
+  emailVerified Boolean @default(false)
+
+  phoneVerificationCode String?
+
   phoneVerificationExpires DateTime?
-  phoneVerified            Boolean              @default(false)
-  referralCode             String?              @unique
-  referredById             String?
-  referralBalance          Float                @default(0)
-  cbtAttempts              CbtAttempt[]
-  examPins                 ExamPin[]
-  ninVerifications         NinVerification[]
-  receivedReferralEarnings ReferralEarning[]    @relation("ReferredUserEarnings")
-  referralEarnings         ReferralEarning[]    @relation("ReferrerEarnings")
-  referralWithdrawals      ReferralWithdrawal[]
-  transactions             Transaction[]
-  referredBy               User?                @relation("UserReferrals", fields: [referredById], references: [id])
-  referredUsers            User[]               @relation("UserReferrals")
-  withdrawals              Withdrawal[]
+
+  phoneVerified Boolean @default(false)
+
+  // ===============================
+  // REFERRAL SYSTEM
+  // ===============================
+
+  referralCode String? @unique
+
+  referredById String?
+
+  referralBalance Float @default(0)
+
+  // ===============================
+  // RELATIONS
+  // ===============================
+
+  // User who referred this user
+  referredBy User? @relation("UserReferrals", fields: [referredById], references: [id])
+
+  // Users referred by this user
+  referredUsers User[] @relation("UserReferrals")
+
+  cbtAttempts CbtAttempt[]
+
+  examPins ExamPin[]
+
+  ninVerifications NinVerification[]
+
+  transactions Transaction[]
+
+  withdrawals Withdrawal[]
+
+  referralWithdrawals ReferralWithdrawal[]
+
+  receivedReferralEarnings ReferralEarning[] @relation("ReferredUserEarnings")
+
+  referralEarnings ReferralEarning[] @relation("ReferrerEarnings")
+
+  // ===============================
+  // INDEXES
+  // ===============================
 
   @@index([email])
   @@index([phone])

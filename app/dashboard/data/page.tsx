@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import TransactionPinModal from "@/components/TransactionPinModal";
 
 type DataPlan = {
   id: string;
@@ -14,55 +15,69 @@ type DataPlan = {
   status: string;
 };
 
-const NETWORKS = ["MTN", "AIRTEL", "GLO", "9MOBILE"];
+const NETWORKS = [
+  "MTN",
+  "AIRTEL",
+  "GLO",
+  "9MOBILE",
+];
 
 export default function BuyDataPage() {
   const [plans, setPlans] = useState<DataPlan[]>([]);
+
   const [network, setNetwork] = useState("");
   const [planId, setPlanId] = useState("");
   const [phone, setPhone] = useState("");
 
-  const [loadingPlans, setLoadingPlans] = useState(true);
-  const [buying, setBuying] = useState(false);
+  const [serviceFeePercent, setServiceFeePercent] =
+    useState(5);
 
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [showPinModal, setShowPinModal] =
+    useState(false);
 
-  // ============================================
-  // LOAD DATA PLANS
-  // ============================================
+  const [loadingPlans, setLoadingPlans] =
+    useState(true);
+
+  const [loadingFee, setLoadingFee] =
+    useState(true);
+
+  const [buying, setBuying] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [message, setMessage] =
+    useState("");
 
   useEffect(() => {
     async function loadPlans() {
       try {
-        setLoadingPlans(true);
-        setError("");
-
-        const response = await fetch("/api/data-plans", {
-          method: "GET",
-          cache: "no-store",
-        });
+        const response = await fetch(
+          "/api/data-plans",
+          {
+            cache: "no-store",
+          }
+        );
 
         const result = await response.json();
 
-        console.log("DATA PLANS RESPONSE:", result);
-
-        if (!response.ok || !result.success) {
+        if (
+          !response.ok ||
+          !result.success
+        ) {
           throw new Error(
             result.message ||
-              result.error ||
-              "Unable to load data plans."
+              "Unable to load data plans"
           );
         }
 
         setPlans(result.data || []);
       } catch (err) {
-        console.error("LOAD DATA PLANS ERROR:", err);
-
         setError(
           err instanceof Error
             ? err.message
-            : "Unable to load data plans."
+            : "Unable to load plans"
         );
       } finally {
         setLoadingPlans(false);
@@ -72,9 +87,41 @@ export default function BuyDataPage() {
     loadPlans();
   }, []);
 
-  // ============================================
-  // FILTER PLANS BY NETWORK
-  // ============================================
+  useEffect(() => {
+    async function loadServiceFee() {
+      try {
+        const response = await fetch(
+          "/api/settings/service-fee",
+          {
+            cache: "no-store",
+          }
+        );
+
+        const result = await response.json();
+
+        if (
+          response.ok &&
+          result.success &&
+          Number.isFinite(
+            Number(result.percentage)
+          )
+        ) {
+          setServiceFeePercent(
+            Number(result.percentage)
+          );
+        }
+      } catch (error) {
+        console.error(
+          "SERVICE FEE FRONTEND ERROR:",
+          error
+        );
+      } finally {
+        setLoadingFee(false);
+      }
+    }
+
+    loadServiceFee();
+  }, []);
 
   const filteredPlans = useMemo(() => {
     if (!network) {
@@ -83,42 +130,66 @@ export default function BuyDataPage() {
 
     return plans.filter(
       (plan) =>
-        String(plan.provider).toUpperCase() ===
+        plan.provider.toUpperCase() ===
         network.toUpperCase()
     );
   }, [plans, network]);
 
-  // ============================================
-  // SELECTED PLAN
-  // ============================================
-
   const selectedPlan = useMemo(() => {
     return plans.find(
-      (plan) => String(plan.id) === String(planId)
+      (plan) => plan.id === planId
     );
   }, [plans, planId]);
 
-  // ============================================
-  // NETWORK CHANGE
-  // ============================================
+  const pricing = useMemo(() => {
+    if (!selectedPlan) {
+      return {
+        basePrice: 0,
+        serviceFee: 0,
+        total: 0,
+      };
+    }
+
+    const basePrice =
+      Number(selectedPlan.sellingPrice) || 0;
+
+    const serviceFee =
+      Number(
+        (
+          basePrice *
+          (serviceFeePercent / 100)
+        ).toFixed(2)
+      );
+
+    const total =
+      Number(
+        (
+          basePrice +
+          serviceFee
+        ).toFixed(2)
+      );
+
+    return {
+      basePrice,
+      serviceFee,
+      total,
+    };
+  }, [
+    selectedPlan,
+    serviceFeePercent,
+  ]);
 
   function handleNetworkChange(
     e: React.ChangeEvent<HTMLSelectElement>
   ) {
-    const value = e.target.value;
-
-    setNetwork(value);
+    setNetwork(e.target.value);
     setPlanId("");
-    setMessage("");
     setError("");
+    setMessage("");
   }
 
-  // ============================================
-  // BUY DATA
-  // ============================================
-
-  async function handleBuyData(
-    e: React.FormEvent<HTMLFormElement>
+  function handleBuyData(
+    e: React.FormEvent
   ) {
     e.preventDefault();
 
@@ -126,154 +197,144 @@ export default function BuyDataPage() {
     setMessage("");
 
     if (!network) {
-      setError("Please select a network.");
+      setError(
+        "Please select network"
+      );
       return;
     }
 
     if (!planId) {
-      setError("Please select a data plan.");
-      return;
-    }
-
-    if (!selectedPlan) {
-      setError("Please select a valid data plan.");
-      return;
-    }
-
-    if (!selectedPlan.bundleId) {
       setError(
-        "This data plan does not have a valid provider bundle ID."
+        "Please select data plan"
       );
       return;
     }
 
     if (!phone) {
       setError(
-        "Please enter the recipient phone number."
+        "Please enter phone number"
       );
       return;
     }
 
-    const cleanedPhone = phone.replace(/\s+/g, "");
+    setShowPinModal(true);
+  }
+
+  async function processBuyData(
+    pin: string
+  ) {
+    if (!selectedPlan) {
+      return;
+    }
+
+    const cleanedPhone =
+      phone
+        .replace(/\s+/g, "")
+        .replace(/-/g, "");
 
     if (!/^0\d{10}$/.test(cleanedPhone)) {
       setError(
-        "Please enter a valid Nigerian phone number."
+        "Invalid Nigerian phone number"
       );
       return;
     }
 
     setBuying(true);
+    setError("");
+    setMessage("");
 
     try {
-      // ==========================================
-      // IMPORTANT:
-      // SEND PROVIDER BUNDLE ID
-      // NOT OUR DATABASE ID
-      // ==========================================
-
-      const requestBody = {
-        bundle_id: Number(selectedPlan.bundleId),
-        phone_number: cleanedPhone,
-      };
-
-      console.log(
-        "DATA PURCHASE REQUEST:",
-        requestBody
-      );
-
-      console.log(
-        "SELECTED PLAN:",
-        selectedPlan
-      );
-
       const response = await fetch(
         "/api/data/purchase",
         {
           method: "POST",
+
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
-          body: JSON.stringify(requestBody),
+
+          body: JSON.stringify({
+            bundle_id:
+              Number(
+                selectedPlan.bundleId
+              ),
+
+            phone_number:
+              cleanedPhone,
+
+            transactionPin:
+              pin,
+          }),
         }
       );
 
-      const result = await response.json();
+      const result =
+        await response.json();
 
-      console.log(
-        "DATA PURCHASE RESPONSE:",
-        result
-      );
-
-      if (!response.ok || !result.success) {
+      if (
+        !response.ok ||
+        !result.success
+      ) {
         throw new Error(
           result.message ||
-            result.error ||
-            "Data purchase failed."
+            "Purchase failed"
         );
       }
 
-      // ==========================================
-      // SUCCESS
-      // ==========================================
-
       setMessage(
         result.message ||
-          "Data purchase successful."
+          "Data purchase successful"
       );
 
       setPhone("");
       setPlanId("");
-    } catch (err) {
-      console.error(
-        "DATA PURCHASE ERROR:",
-        err
-      );
 
+      if (
+        Number.isFinite(
+          Number(
+            result.serviceFeePercentage
+          )
+        )
+      ) {
+        setServiceFeePercent(
+          Number(
+            result.serviceFeePercentage
+          )
+        );
+      }
+    } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Data purchase failed."
+          : "Purchase failed"
       );
     } finally {
       setBuying(false);
     }
   }
 
-  // ============================================
-  // UI
-  // ============================================
-
   return (
     <div className="w-full">
-      {/* HEADER */}
-
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+        <h1 className="text-3xl font-bold text-foreground">
           Buy Data
         </h1>
 
-        <p className="mt-1 text-sm text-gray-500 sm:text-base">
-          Select your network, data plan and enter
-          the recipient number.
+        <p className="text-muted-foreground">
+          Select network, plan and recipient number
         </p>
       </div>
 
-      {/* CARD */}
-
-      <div className="w-full max-w-2xl rounded-2xl bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-        {/* ERROR */}
-
+      <div className="max-w-2xl rounded-2xl bg-card p-6 shadow">
         {error && (
-          <div className="mb-5 rounded-lg bg-red-50 p-3 text-sm text-red-600">
+          <div className="mb-4 rounded-lg bg-red-50 p-3 text-red-600 dark:bg-red-950/30 dark:text-red-400">
             {error}
           </div>
         )}
 
-        {/* SUCCESS */}
-
         {message && (
-          <div className="mb-5 rounded-lg bg-green-50 p-3 text-sm text-green-600">
+          <div className="mb-4 rounded-lg bg-green-50 p-3 text-green-600 dark:bg-green-950/30 dark:text-green-400">
             {message}
           </div>
         )}
@@ -281,88 +342,50 @@ export default function BuyDataPage() {
         <form onSubmit={handleBuyData}>
           {/* NETWORK */}
 
-          <label className="mb-2 block text-sm font-medium text-gray-700">
+          <label className="mb-2 block font-medium text-foreground">
             Network
           </label>
 
           <select
             value={network}
             onChange={handleNetworkChange}
-            className="mb-5 w-full rounded-lg border p-3 outline-none"
             disabled={
               loadingPlans || buying
             }
+            className="mb-5 w-full rounded-lg border border-border bg-background p-3 text-foreground"
           >
             <option value="">
-              {loadingPlans
-                ? "Loading networks..."
-                : "Select network"}
+              Select Network
             </option>
 
-            {!loadingPlans &&
-              NETWORKS.map((item) => (
-                <option
-                  key={item}
-                  value={item}
-                >
-                  {item}
-                </option>
-              ))}
+            {NETWORKS.map((item) => (
+              <option
+                key={item}
+                value={item}
+              >
+                {item}
+              </option>
+            ))}
           </select>
 
           {/* DATA PLAN */}
 
-          <label className="mb-2 block text-sm font-medium text-gray-700">
+          <label className="mb-2 block font-medium text-foreground">
             Data Plan
           </label>
 
           <select
             value={planId}
-            onChange={(e) => {
-              const value =
-                e.target.value;
-
-              console.log(
-                "SELECTED DATABASE PLAN ID:",
-                value
-              );
-
-              const selected = plans.find(
-                (plan) =>
-                  String(plan.id) ===
-                  String(value)
-              );
-
-              console.log(
-                "SELECTED PLAN:",
-                selected
-              );
-
-              console.log(
-                "PROVIDER BUNDLE ID:",
-                selected?.bundleId
-              );
-
-              setPlanId(value);
-              setError("");
-              setMessage("");
-            }}
-            className="mb-5 w-full rounded-lg border p-3 outline-none"
-            disabled={
-              loadingPlans ||
-              buying ||
-              !network ||
-              filteredPlans.length === 0
+            onChange={(e) =>
+              setPlanId(e.target.value)
             }
+            disabled={
+              !network || buying
+            }
+            className="mb-5 w-full rounded-lg border border-border bg-background p-3 text-foreground"
           >
             <option value="">
-              {loadingPlans
-                ? "Loading data plans..."
-                : !network
-                ? "Select network first"
-                : filteredPlans.length === 0
-                ? "No data plans available"
-                : "Please select a data plan"}
+              Select Plan
             </option>
 
             {filteredPlans.map((plan) => (
@@ -370,71 +393,124 @@ export default function BuyDataPage() {
                 key={plan.id}
                 value={plan.id}
               >
-                {plan.name} - ₦
+                {plan.name} —{" "}
+                {plan.duration} — ₦
                 {Number(
                   plan.sellingPrice
-                ).toLocaleString("en-NG")}{" "}
-                - {plan.duration}
+                ).toLocaleString()}
               </option>
             ))}
           </select>
 
-          {/* SELECTED PLAN INFORMATION */}
+          {/* SELECTED PLAN DETAILS */}
 
           {selectedPlan && (
-            <div className="mb-5 rounded-lg bg-gray-50 p-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">
-                  Data
-                </span>
+            <div className="mb-5 rounded-xl bg-muted p-4">
+              <h3 className="mb-3 text-lg font-semibold text-foreground">
+                Plan Details
+              </h3>
 
-                <span className="font-medium">
-                  {selectedPlan.name}
-                </span>
-              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Network
+                  </span>
 
-              <div className="mt-2 flex justify-between text-sm">
-                <span className="text-gray-500">
-                  Duration
-                </span>
+                  <strong className="text-foreground">
+                    {selectedPlan.provider.toUpperCase()}
+                  </strong>
+                </div>
 
-                <span className="font-medium">
-                  {selectedPlan.duration}
-                </span>
-              </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Data
+                  </span>
 
-              <div className="mt-2 flex justify-between text-sm">
-                <span className="text-gray-500">
-                  Price
-                </span>
+                  <strong className="text-foreground">
+                    {selectedPlan.size}
+                  </strong>
+                </div>
 
-                <span className="font-semibold">
-                  ₦
-                  {Number(
-                    selectedPlan.sellingPrice
-                  ).toLocaleString("en-NG")}
-                </span>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Duration
+                  </span>
+
+                  <strong className="text-foreground">
+                    {selectedPlan.duration}
+                  </strong>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Data Price
+                  </span>
+
+                  <strong className="text-foreground">
+                    ₦
+                    {pricing.basePrice.toLocaleString(
+                      "en-NG",
+                      {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }
+                    )}
+                  </strong>
+                </div>
+
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    Service Fee
+                  </span>
+
+                  <strong className="text-foreground">
+                    {loadingFee
+                      ? "Loading..."
+                      : `${serviceFeePercent}% — ₦${pricing.serviceFee.toLocaleString(
+                          "en-NG",
+                          {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          }
+                        )}`}
+                  </strong>
+                </div>
+
+                <div className="mt-3 flex justify-between border-t border-border pt-3 text-base">
+                  <span className="font-semibold text-foreground">
+                    Total
+                  </span>
+
+                  <strong className="text-lg text-foreground">
+                    ₦
+                    {pricing.total.toLocaleString(
+                      "en-NG",
+                      {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }
+                    )}
+                  </strong>
+                </div>
               </div>
             </div>
           )}
 
           {/* PHONE */}
 
-          <label className="mb-2 block text-sm font-medium text-gray-700">
+          <label className="mb-2 block font-medium text-foreground">
             Phone Number
           </label>
 
           <input
-            type="tel"
-            inputMode="numeric"
             value={phone}
             onChange={(e) =>
               setPhone(e.target.value)
             }
-            placeholder="08012345678"
-            className="mb-5 w-full rounded-lg border p-3 outline-none"
             maxLength={11}
+            placeholder="08012345678"
             disabled={buying}
+            className="mb-5 w-full rounded-lg border border-border bg-background p-3 text-foreground"
           />
 
           {/* BUY BUTTON */}
@@ -444,12 +520,9 @@ export default function BuyDataPage() {
             disabled={
               buying ||
               loadingPlans ||
-              !network ||
-              !planId ||
-              !phone ||
               !selectedPlan
             }
-            className="w-full rounded-lg bg-black p-3 font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-lg bg-indigo-600 p-3 font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {buying
               ? "Processing..."
@@ -457,17 +530,18 @@ export default function BuyDataPage() {
           </button>
         </form>
 
-        {/* NOTE */}
+        {/* PIN MODAL */}
 
-        <div className="mt-6 rounded-xl border border-yellow-200 bg-yellow-50 p-4">
-          <h2 className="text-sm font-semibold text-yellow-800">
-            NOTE
-          </h2>
-
-          <p className="mt-1 text-sm leading-6 text-yellow-700">
-            Data purchases attract a 5% service fee.
-          </p>
-        </div>
+        <TransactionPinModal
+          open={showPinModal}
+          onClose={() =>
+            setShowPinModal(false)
+          }
+          onSuccess={(pin) => {
+            setShowPinModal(false);
+            processBuyData(pin);
+          }}
+        />
       </div>
     </div>
   );

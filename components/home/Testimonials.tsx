@@ -1,4 +1,3 @@
-
 import { Star } from "lucide-react";
 
 const testimonials = [
@@ -26,39 +25,36 @@ export default function Testimonials() {
   return (
     <section
       aria-labelledby="testimonials-heading"
-      className="bg-white py-20"
+      className="bg-white py-20 transition-colors dark:bg-gray-950"
     >
       <div className="mx-auto max-w-7xl px-6">
         {/* Heading */}
-
         <div className="mb-14 text-center">
-          <p className="font-semibold uppercase tracking-wider text-indigo-600">
+          <p className="font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
             Customer Reviews
           </p>
 
           <h2
             id="testimonials-heading"
-            className="mt-2 text-4xl font-bold text-gray-900"
+            className="mt-2 text-4xl font-bold text-gray-900 dark:text-white"
           >
             What Our Customers Say About Brainfriend Global Tech
           </h2>
 
-          <p className="mx-auto mt-4 max-w-2xl text-gray-600">
+          <p className="mx-auto mt-4 max-w-2xl text-gray-600 dark:text-gray-400">
             See what customers have to say about our fast, secure and
             reliable VTU and digital payment services.
           </p>
         </div>
 
         {/* Testimonials */}
-
         <div className="grid gap-8 md:grid-cols-3">
           {testimonials.map((item) => (
             <div
               key={item.name}
-              className="rounded-2xl border bg-white p-8 shadow-sm transition hover:-translate-y-2 hover:shadow-xl"
+              className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm transition-all duration-300 hover:-translate-y-2 hover:shadow-xl dark:border-gray-800 dark:bg-gray-900 dark:shadow-gray-950/30 dark:hover:border-gray-700 dark:hover:shadow-2xl"
             >
-              {/* STARS */}
-
+              {/* Stars */}
               <div
                 className="mb-5 flex"
                 aria-label="5 out of 5 stars"
@@ -72,20 +68,18 @@ export default function Testimonials() {
                 ))}
               </div>
 
-              {/* REVIEW */}
-
-              <p className="mb-6 text-gray-600">
+              {/* Review */}
+              <p className="mb-6 leading-relaxed text-gray-600 dark:text-gray-300">
                 "{item.review}"
               </p>
 
-              {/* CUSTOMER */}
-
+              {/* Customer */}
               <div>
-                <h3 className="font-bold text-gray-900">
+                <h3 className="font-bold text-gray-900 dark:text-white">
                   {item.name}
                 </h3>
 
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   {item.role}
                 </p>
               </div>
@@ -96,4 +90,3 @@ export default function Testimonials() {
     </section>
   );
 }
-

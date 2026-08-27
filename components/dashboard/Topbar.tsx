@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Bell, Menu } from "lucide-react";
@@ -11,7 +10,7 @@ export default function Topbar({
   onMenuClick,
 }: TopbarProps) {
   return (
-    <header className="flex items-center justify-between border-b bg-white px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
+    <header className="flex items-center justify-between border-b bg-background px-4 py-4 sm:px-6 sm:py-5 lg:px-8">
       {/* LEFT SIDE */}
 
       <div className="flex items-center gap-3">
@@ -20,18 +19,18 @@ export default function Topbar({
         <button
           type="button"
           onClick={onMenuClick}
-          className="rounded-lg p-2 hover:bg-gray-100 lg:hidden"
+          className="rounded-lg p-2 hover:bg-accent lg:hidden"
           aria-label="Open menu"
         >
           <Menu size={24} />
         </button>
 
         <div>
-          <h2 className="text-xl font-bold sm:text-2xl">
+          <h2 className="text-xl font-bold text-foreground sm:text-2xl">
             Dashboard
           </h2>
 
-          <p className="hidden text-gray-500 sm:block">
+          <p className="hidden text-muted-foreground sm:block">
             Welcome back, Emmanuel 👋
           </p>
         </div>
@@ -44,12 +43,12 @@ export default function Topbar({
 
         <button
           type="button"
-          className="relative rounded-full bg-gray-100 p-2.5 hover:bg-gray-200 sm:p-3"
+          className="relative rounded-full bg-muted p-2.5 hover:bg-accent sm:p-3"
           aria-label="Notifications"
         >
           <Bell
             size={20}
-            className="sm:h-[22px] sm:w-[22px]"
+            className="text-foreground sm:h-[22px] sm:w-[22px]"
           />
 
           <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 sm:right-2 sm:top-2" />
@@ -63,11 +62,11 @@ export default function Topbar({
           </div>
 
           <div className="hidden sm:block">
-            <p className="font-semibold">
+            <p className="font-semibold text-foreground">
               Emmanuel
             </p>
 
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted-foreground">
               Customer
             </p>
           </div>
@@ -76,4 +75,3 @@ export default function Topbar({
     </header>
   );
 }
-
