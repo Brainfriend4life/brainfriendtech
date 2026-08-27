@@ -96,13 +96,10 @@ function formatMoney(amount: number) {
 }
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleString(
-    "en-NG",
-    {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }
-  );
+  return new Date(date).toLocaleString("en-NG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 function getTypeIcon(type: string) {
@@ -160,18 +157,20 @@ function StatusBadge({
 }: {
   status: string;
 }) {
-  if (status === "SUCCESS") {
+  const normalizedStatus = status.toUpperCase();
+
+  if (normalizedStatus === "SUCCESS") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700 dark:bg-green-500/15 dark:text-green-400">
         <CheckCircle2 className="h-3.5 w-3.5" />
         Successful
       </span>
     );
   }
 
-  if (status === "PENDING") {
+  if (normalizedStatus === "PENDING") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-700">
+      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-400">
         <Clock3 className="h-3.5 w-3.5" />
         Pending
       </span>
@@ -179,7 +178,7 @@ function StatusBadge({
   }
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700">
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-700 dark:bg-red-500/15 dark:text-red-400">
       <XCircle className="h-3.5 w-3.5" />
       Failed
     </span>
@@ -308,6 +307,7 @@ export default function AdminPurchasesPage() {
 
   useEffect(() => {
     loadPurchases();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, type, status]);
 
   function handleSearch(
@@ -335,17 +335,17 @@ export default function AdminPurchasesPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gray-50 text-gray-900 transition-colors dark:bg-gray-950 dark:text-gray-100">
       {/* HEADER */}
 
       <div className="mb-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h1 className="text-2xl font-black tracking-tight text-gray-900 sm:text-3xl">
+            <h1 className="text-2xl font-black tracking-tight text-gray-900 dark:text-white sm:text-3xl">
               Purchases History
             </h1>
 
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               View and manage purchases made
               by all users.
             </p>
@@ -355,7 +355,7 @@ export default function AdminPurchasesPage() {
             type="button"
             onClick={loadPurchases}
             disabled={loading}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw
               className={`h-4 w-4 ${
@@ -372,42 +372,50 @@ export default function AdminPurchasesPage() {
       {/* SUMMARY */}
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+        {/* PURCHASES */}
+
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-colors dark:border-gray-800 dark:bg-gray-900">
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Purchases
           </p>
 
-          <p className="mt-2 text-2xl font-black text-gray-900">
+          <p className="mt-2 text-2xl font-black text-gray-900 dark:text-white">
             {summary.transactions.toLocaleString()}
           </p>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+        {/* REVENUE */}
+
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-colors dark:border-gray-800 dark:bg-gray-900">
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Revenue
           </p>
 
-          <p className="mt-2 text-2xl font-black text-gray-900">
+          <p className="mt-2 text-2xl font-black text-gray-900 dark:text-white">
             {formatMoney(summary.amount)}
           </p>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+        {/* COST */}
+
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-colors dark:border-gray-800 dark:bg-gray-900">
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Cost
           </p>
 
-          <p className="mt-2 text-2xl font-black text-gray-900">
+          <p className="mt-2 text-2xl font-black text-gray-900 dark:text-white">
             {formatMoney(summary.cost)}
           </p>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+        {/* PROFIT */}
+
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition-colors dark:border-gray-800 dark:bg-gray-900">
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Profit
           </p>
 
-          <p className="mt-2 text-2xl font-black text-green-600">
+          <p className="mt-2 text-2xl font-black text-green-600 dark:text-green-400">
             {formatMoney(summary.profit)}
           </p>
         </div>
@@ -415,13 +423,15 @@ export default function AdminPurchasesPage() {
 
       {/* FILTERS */}
 
-      <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-colors dark:border-gray-800 dark:bg-gray-900">
         <form
           onSubmit={handleSearch}
           className="flex flex-col gap-3 lg:flex-row"
         >
+          {/* SEARCH */}
+
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
 
             <input
               value={search}
@@ -431,9 +441,11 @@ export default function AdminPurchasesPage() {
                 )
               }
               placeholder="Search name, email, phone or reference..."
-              className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 dark:border-gray-700 dark:bg-gray-950 dark:text-white dark:placeholder:text-gray-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-500/20"
             />
           </div>
+
+          {/* TYPE */}
 
           <select
             value={type}
@@ -443,7 +455,7 @@ export default function AdminPurchasesPage() {
               );
               setPage(1);
             }}
-            className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-indigo-500"
+            className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-900 outline-none transition focus:border-indigo-500 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
           >
             {typeOptions.map(
               (item) => (
@@ -459,6 +471,8 @@ export default function AdminPurchasesPage() {
             )}
           </select>
 
+          {/* STATUS */}
+
           <select
             value={status}
             onChange={(event) => {
@@ -467,7 +481,7 @@ export default function AdminPurchasesPage() {
               );
               setPage(1);
             }}
-            className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold outline-none focus:border-indigo-500"
+            className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-900 outline-none transition focus:border-indigo-500 dark:border-gray-700 dark:bg-gray-950 dark:text-white"
           >
             {statusOptions.map(
               (item) => (
@@ -483,9 +497,11 @@ export default function AdminPurchasesPage() {
             )}
           </select>
 
+          {/* SEARCH BUTTON */}
+
           <button
             type="submit"
-            className="rounded-xl bg-gray-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-gray-800"
+            className="rounded-xl bg-gray-900 px-5 py-3 text-sm font-bold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200"
           >
             Search
           </button>
@@ -494,49 +510,54 @@ export default function AdminPurchasesPage() {
 
       {/* TABLE */}
 
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-colors dark:border-gray-800 dark:bg-gray-900">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1000px] text-left">
-            <thead className="border-b border-gray-100 bg-gray-50">
+            <thead className="border-b border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-800/60">
               <tr>
-                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500">
+                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   User
                 </th>
 
-                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500">
+                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   Service
                 </th>
 
-                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500">
+                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   Amount
                 </th>
 
-                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500">
+                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   Status
                 </th>
 
-                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500">
+                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   Reference
                 </th>
 
-                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500">
+                <th className="px-5 py-4 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   Date
                 </th>
 
-                <th className="px-5 py-4 text-right text-xs font-black uppercase tracking-wide text-gray-500">
+                <th className="px-5 py-4 text-right text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   Action
                 </th>
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {loading ? (
                 <tr>
                   <td
                     colSpan={7}
-                    className="px-5 py-16 text-center text-sm text-gray-500"
+                    className="px-5 py-16 text-center text-sm text-gray-500 dark:text-gray-400"
                   >
-                    Loading purchases...
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <RefreshCw className="h-6 w-6 animate-spin text-indigo-500" />
+                      <span>
+                        Loading purchases...
+                      </span>
+                    </div>
                   </td>
                 </tr>
               ) : purchases.length ===
@@ -544,7 +565,7 @@ export default function AdminPurchasesPage() {
                 <tr>
                   <td
                     colSpan={7}
-                    className="px-5 py-16 text-center text-sm font-semibold text-gray-500"
+                    className="px-5 py-16 text-center text-sm font-semibold text-gray-500 dark:text-gray-400"
                   >
                     No purchases found.
                   </td>
@@ -562,10 +583,12 @@ export default function AdminPurchasesPage() {
                         key={
                           purchase.id
                         }
-                        className="transition hover:bg-gray-50"
+                        className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50"
                       >
+                        {/* USER */}
+
                         <td className="px-5 py-4">
-                          <p className="font-bold text-gray-900">
+                          <p className="font-bold text-gray-900 dark:text-white">
                             {
                               purchase
                                 .user
@@ -573,7 +596,7 @@ export default function AdminPurchasesPage() {
                             }
                           </p>
 
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
                             {
                               purchase
                                 .user
@@ -581,7 +604,7 @@ export default function AdminPurchasesPage() {
                             }
                           </p>
 
-                          <p className="text-xs text-gray-400">
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
                             {
                               purchase
                                 .user
@@ -590,20 +613,22 @@ export default function AdminPurchasesPage() {
                           </p>
                         </td>
 
+                        {/* SERVICE */}
+
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400">
                               <Icon className="h-4 w-4" />
                             </div>
 
                             <div>
-                              <p className="font-bold text-gray-900">
+                              <p className="font-bold text-gray-900 dark:text-white">
                                 {getTypeName(
                                   purchase.type
                                 )}
                               </p>
 
-                              <p className="text-xs text-gray-500">
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
                                 {
                                   purchase.provider
                                 }
@@ -612,20 +637,24 @@ export default function AdminPurchasesPage() {
                           </div>
                         </td>
 
+                        {/* AMOUNT */}
+
                         <td className="px-5 py-4">
-                          <p className="font-black text-gray-900">
+                          <p className="font-black text-gray-900 dark:text-white">
                             {formatMoney(
                               purchase.amount
                             )}
                           </p>
 
-                          <p className="text-xs text-green-600">
+                          <p className="text-xs text-green-600 dark:text-green-400">
                             Profit{" "}
                             {formatMoney(
                               purchase.profit
                             )}
                           </p>
                         </td>
+
+                        {/* STATUS */}
 
                         <td className="px-5 py-4">
                           <StatusBadge
@@ -635,9 +664,11 @@ export default function AdminPurchasesPage() {
                           />
                         </td>
 
+                        {/* REFERENCE */}
+
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
-                            <span className="max-w-[150px] truncate font-mono text-xs text-gray-600">
+                            <span className="max-w-[150px] truncate font-mono text-xs text-gray-600 dark:text-gray-300">
                               {
                                 purchase.reference
                               }
@@ -651,12 +682,12 @@ export default function AdminPurchasesPage() {
                                   purchase.id
                                 )
                               }
-                              className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                              className="rounded-lg p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
                               title="Copy reference"
                             >
                               {copied ===
                               purchase.id ? (
-                                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
                               ) : (
                                 <Copy className="h-4 w-4" />
                               )}
@@ -664,11 +695,15 @@ export default function AdminPurchasesPage() {
                           </div>
                         </td>
 
-                        <td className="px-5 py-4 text-xs text-gray-500">
+                        {/* DATE */}
+
+                        <td className="px-5 py-4 text-xs text-gray-500 dark:text-gray-400">
                           {formatDate(
                             purchase.createdAt
                           )}
                         </td>
+
+                        {/* ACTION */}
 
                         <td className="px-5 py-4 text-right">
                           <button
@@ -678,7 +713,7 @@ export default function AdminPurchasesPage() {
                                 purchase
                               )
                             }
-                            className="inline-flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100"
+                            className="inline-flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100 dark:bg-indigo-500/15 dark:text-indigo-400 dark:hover:bg-indigo-500/25"
                           >
                             <Eye className="h-4 w-4" />
                             View
@@ -695,14 +730,14 @@ export default function AdminPurchasesPage() {
 
         {/* PAGINATION */}
 
-        <div className="flex flex-col gap-3 border-t border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-gray-500">
+        <div className="flex flex-col gap-3 border-t border-gray-100 px-5 py-4 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Showing page{" "}
-            <span className="font-bold text-gray-900">
+            <span className="font-bold text-gray-900 dark:text-white">
               {page}
             </span>{" "}
             of{" "}
-            <span className="font-bold text-gray-900">
+            <span className="font-bold text-gray-900 dark:text-white">
               {totalPages}
             </span>{" "}
             · {total.toLocaleString()} total
@@ -721,7 +756,7 @@ export default function AdminPurchasesPage() {
                     )
                 )
               }
-              className="rounded-lg border border-gray-200 p-2 text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-lg border border-gray-200 bg-white p-2 text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
@@ -740,7 +775,7 @@ export default function AdminPurchasesPage() {
                     )
                 )
               }
-              className="rounded-lg border border-gray-200 p-2 text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-lg border border-gray-200 bg-white p-2 text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-gray-800"
             >
               <ChevronRight className="h-5 w-5" />
             </button>
@@ -751,15 +786,17 @@ export default function AdminPurchasesPage() {
       {/* DETAILS MODAL */}
 
       {selectedPurchase && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            <div className="sticky top-0 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-5">
-              <div>
-                <h2 className="text-lg font-black text-gray-900">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900">
+            {/* MODAL HEADER */}
+
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-800 dark:bg-gray-900">
+              <div className="min-w-0">
+                <h2 className="text-lg font-black text-gray-900 dark:text-white">
                   Purchase Details
                 </h2>
 
-                <p className="text-xs text-gray-500">
+                <p className="truncate text-xs text-gray-500 dark:text-gray-400">
                   {
                     selectedPurchase
                       .reference
@@ -774,7 +811,7 @@ export default function AdminPurchasesPage() {
                     null
                   )
                 }
-                className="rounded-xl p-2 text-gray-500 hover:bg-gray-100"
+                className="rounded-xl p-2 text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -783,26 +820,26 @@ export default function AdminPurchasesPage() {
             <div className="space-y-6 p-6">
               {/* USER */}
 
-              <div className="rounded-xl bg-gray-50 p-4">
-                <p className="mb-3 text-xs font-black uppercase tracking-wide text-gray-500">
+              <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/60">
+                <p className="mb-3 text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">
                   Customer
                 </p>
 
-                <p className="font-black text-gray-900">
+                <p className="font-black text-gray-900 dark:text-white">
                   {
                     selectedPurchase
                       .user.fullName
                   }
                 </p>
 
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   {
                     selectedPurchase
                       .user.email
                   }
                 </p>
 
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   {
                     selectedPurchase
                       .user.phone
@@ -814,11 +851,11 @@ export default function AdminPurchasesPage() {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <p className="text-xs font-bold text-gray-500">
+                  <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
                     Service
                   </p>
 
-                  <p className="mt-1 font-bold text-gray-900">
+                  <p className="mt-1 font-bold text-gray-900 dark:text-white">
                     {getTypeName(
                       selectedPurchase.type
                     )}
@@ -826,11 +863,11 @@ export default function AdminPurchasesPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs font-bold text-gray-500">
+                  <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
                     Provider
                   </p>
 
-                  <p className="mt-1 font-bold text-gray-900">
+                  <p className="mt-1 font-bold text-gray-900 dark:text-white">
                     {
                       selectedPurchase.provider
                     }
@@ -838,11 +875,11 @@ export default function AdminPurchasesPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs font-bold text-gray-500">
+                  <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
                     Amount
                   </p>
 
-                  <p className="mt-1 font-bold text-gray-900">
+                  <p className="mt-1 font-bold text-gray-900 dark:text-white">
                     {formatMoney(
                       selectedPurchase.amount
                     )}
@@ -850,7 +887,7 @@ export default function AdminPurchasesPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs font-bold text-gray-500">
+                  <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
                     Status
                   </p>
 
@@ -864,11 +901,11 @@ export default function AdminPurchasesPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs font-bold text-gray-500">
+                  <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
                     Reference
                   </p>
 
-                  <p className="mt-1 break-all font-mono text-sm text-gray-900">
+                  <p className="mt-1 break-all font-mono text-sm text-gray-900 dark:text-gray-200">
                     {
                       selectedPurchase.reference
                     }
@@ -876,11 +913,11 @@ export default function AdminPurchasesPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs font-bold text-gray-500">
+                  <p className="text-xs font-bold text-gray-500 dark:text-gray-400">
                     Date
                   </p>
 
-                  <p className="mt-1 text-sm text-gray-900">
+                  <p className="mt-1 text-sm text-gray-900 dark:text-gray-200">
                     {formatDate(
                       selectedPurchase.createdAt
                     )}
@@ -891,18 +928,18 @@ export default function AdminPurchasesPage() {
               {/* EXAM PIN */}
 
               {selectedPurchase.examPin && (
-                <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-5">
-                  <h3 className="mb-4 font-black text-indigo-900">
+                <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-5 dark:border-indigo-500/30 dark:bg-indigo-500/10">
+                  <h3 className="mb-4 font-black text-indigo-900 dark:text-indigo-300">
                     Exam PIN Details
                   </h3>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <p className="text-xs font-bold text-indigo-600">
+                      <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
                         Provider
                       </p>
 
-                      <p className="mt-1 font-bold text-gray-900">
+                      <p className="mt-1 font-bold text-gray-900 dark:text-white">
                         {
                           selectedPurchase
                             .examPin
@@ -912,11 +949,11 @@ export default function AdminPurchasesPage() {
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-indigo-600">
+                      <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
                         Amount
                       </p>
 
-                      <p className="mt-1 font-bold text-gray-900">
+                      <p className="mt-1 font-bold text-gray-900 dark:text-white">
                         {formatMoney(
                           selectedPurchase
                             .examPin
@@ -926,12 +963,12 @@ export default function AdminPurchasesPage() {
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-indigo-600">
+                      <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
                         PIN
                       </p>
 
                       <div className="mt-1 flex items-center gap-2">
-                        <code className="break-all rounded-lg bg-white px-3 py-2 font-mono font-black text-gray-900">
+                        <code className="min-w-0 break-all rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono font-black text-gray-900 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
                           {
                             selectedPurchase
                               .examPin
@@ -949,20 +986,25 @@ export default function AdminPurchasesPage() {
                               "exam-pin"
                             )
                           }
-                          className="rounded-lg bg-white p-2 text-indigo-600 hover:bg-indigo-100"
+                          className="shrink-0 rounded-lg border border-gray-200 bg-white p-2 text-indigo-600 transition hover:bg-indigo-100 dark:border-gray-700 dark:bg-gray-950 dark:text-indigo-400 dark:hover:bg-indigo-500/15"
                         >
-                          <Copy className="h-4 w-4" />
+                          {copied ===
+                          "exam-pin" ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
                         </button>
                       </div>
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-indigo-600">
+                      <p className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
                         Serial Number
                       </p>
 
                       <div className="mt-1 flex items-center gap-2">
-                        <code className="break-all rounded-lg bg-white px-3 py-2 font-mono font-black text-gray-900">
+                        <code className="min-w-0 break-all rounded-lg border border-gray-200 bg-white px-3 py-2 font-mono font-black text-gray-900 dark:border-gray-700 dark:bg-gray-950 dark:text-white">
                           {
                             selectedPurchase
                               .examPin
@@ -980,9 +1022,14 @@ export default function AdminPurchasesPage() {
                               "exam-serial"
                             )
                           }
-                          className="rounded-lg bg-white p-2 text-indigo-600 hover:bg-indigo-100"
+                          className="shrink-0 rounded-lg border border-gray-200 bg-white p-2 text-indigo-600 transition hover:bg-indigo-100 dark:border-gray-700 dark:bg-gray-950 dark:text-indigo-400 dark:hover:bg-indigo-500/15"
                         >
-                          <Copy className="h-4 w-4" />
+                          {copied ===
+                          "exam-serial" ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
                         </button>
                       </div>
                     </div>
@@ -993,18 +1040,18 @@ export default function AdminPurchasesPage() {
               {/* NIN */}
 
               {selectedPurchase.nin && (
-                <div className="rounded-2xl border border-purple-100 bg-purple-50 p-5">
-                  <h3 className="mb-4 font-black text-purple-900">
+                <div className="rounded-2xl border border-purple-100 bg-purple-50 p-5 dark:border-purple-500/30 dark:bg-purple-500/10">
+                  <h3 className="mb-4 font-black text-purple-900 dark:text-purple-300">
                     NIN Verification
                   </h3>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <p className="text-xs font-bold text-purple-600">
+                      <p className="text-xs font-bold text-purple-600 dark:text-purple-400">
                         NIN
                       </p>
 
-                      <p className="mt-1 font-mono font-black text-gray-900">
+                      <p className="mt-1 font-mono font-black text-gray-900 dark:text-white">
                         {
                           selectedPurchase
                             .nin.nin
@@ -1013,11 +1060,11 @@ export default function AdminPurchasesPage() {
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-purple-600">
+                      <p className="text-xs font-bold text-purple-600 dark:text-purple-400">
                         Card Type
                       </p>
 
-                      <p className="mt-1 font-bold text-gray-900">
+                      <p className="mt-1 font-bold text-gray-900 dark:text-white">
                         {
                           selectedPurchase
                             .nin
@@ -1027,11 +1074,11 @@ export default function AdminPurchasesPage() {
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-purple-600">
+                      <p className="text-xs font-bold text-purple-600 dark:text-purple-400">
                         Full Name
                       </p>
 
-                      <p className="mt-1 font-bold text-gray-900">
+                      <p className="mt-1 font-bold text-gray-900 dark:text-white">
                         {[
                           selectedPurchase
                             .nin
@@ -1050,11 +1097,11 @@ export default function AdminPurchasesPage() {
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-purple-600">
+                      <p className="text-xs font-bold text-purple-600 dark:text-purple-400">
                         Gender
                       </p>
 
-                      <p className="mt-1 font-bold text-gray-900">
+                      <p className="mt-1 font-bold text-gray-900 dark:text-white">
                         {
                           selectedPurchase
                             .nin.gender
@@ -1063,11 +1110,11 @@ export default function AdminPurchasesPage() {
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-purple-600">
+                      <p className="text-xs font-bold text-purple-600 dark:text-purple-400">
                         Date of Birth
                       </p>
 
-                      <p className="mt-1 font-bold text-gray-900">
+                      <p className="mt-1 font-bold text-gray-900 dark:text-white">
                         {
                           selectedPurchase
                             .nin
@@ -1077,11 +1124,11 @@ export default function AdminPurchasesPage() {
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-purple-600">
+                      <p className="text-xs font-bold text-purple-600 dark:text-purple-400">
                         Telephone
                       </p>
 
-                      <p className="mt-1 font-bold text-gray-900">
+                      <p className="mt-1 font-bold text-gray-900 dark:text-white">
                         {
                           selectedPurchase
                             .nin.telephone
@@ -1090,8 +1137,10 @@ export default function AdminPurchasesPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-xl bg-white p-4">
-                    <p className="text-xs font-bold text-purple-600">
+                  {/* PDF */}
+
+                  <div className="mt-4 rounded-xl border border-purple-100 bg-white p-4 dark:border-purple-500/20 dark:bg-gray-950">
+                    <p className="text-xs font-bold text-purple-600 dark:text-purple-400">
                       PDF Document
                     </p>
 
@@ -1107,7 +1156,7 @@ export default function AdminPurchasesPage() {
                         View PDF
                       </a>
                     ) : (
-                      <p className="mt-1 font-bold text-gray-500">
+                      <p className="mt-1 font-bold text-gray-500 dark:text-gray-400">
                         Not available
                       </p>
                     )}

@@ -235,19 +235,20 @@ export default function BusinessWalletPage() {
     Number(wallet?.withdrawnProfit || 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-gray-900 dark:text-gray-100">
+
       {/* HEADER */}
 
       <div className="pl-14 lg:pl-0">
-        <p className="text-sm font-medium text-indigo-600">
+        <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
           Administration
         </p>
 
-        <h1 className="mt-1 text-2xl font-bold text-gray-900 sm:text-3xl">
+        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
           Business Wallet
         </h1>
 
-        <p className="mt-2 text-sm text-gray-500 sm:text-base">
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 sm:text-base">
           Manage your business funds and withdraw
           available profit.
         </p>
@@ -256,7 +257,7 @@ export default function BusinessWalletPage() {
       {/* ERROR */}
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
           {error}
         </div>
       )}
@@ -264,7 +265,7 @@ export default function BusinessWalletPage() {
       {/* SUCCESS */}
 
       {message && (
-        <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+        <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700 dark:border-green-900/50 dark:bg-green-950/40 dark:text-green-300">
           {message}
         </div>
       )}
@@ -272,10 +273,10 @@ export default function BusinessWalletPage() {
       {/* LOADING */}
 
       {loading ? (
-        <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-indigo-600" />
+        <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-indigo-600 dark:border-gray-700 dark:border-t-indigo-400" />
 
-          <p className="mt-4 text-sm text-gray-500">
+          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
             Loading Brainfriend Global Tech revenue...
           </p>
         </div>
@@ -284,7 +285,10 @@ export default function BusinessWalletPage() {
           {/* BALANCE */}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div className="rounded-2xl bg-indigo-700 p-6 text-white shadow-sm">
+
+            {/* AVAILABLE BALANCE */}
+
+            <div className="rounded-2xl bg-indigo-700 p-6 text-white shadow-sm dark:bg-indigo-800">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-indigo-200">
@@ -309,59 +313,68 @@ export default function BusinessWalletPage() {
               </p>
             </div>
 
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <p className="text-sm font-medium text-gray-500">
+            {/* TOTAL REVENUE */}
+
+            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Total Revenue
               </p>
 
-              <p className="mt-2 text-2xl font-bold text-gray-900">
+              <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
                 {formatMoney(totalRevenue)}
               </p>
             </div>
 
-            <div className="rounded-2xl bg-white p-6 shadow-sm">
-              <p className="text-sm font-medium text-gray-500">
+            {/* TOTAL WITHDRAWN */}
+
+            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 Total Withdrawn
               </p>
 
-              <p className="mt-2 text-2xl font-bold text-gray-900">
+              <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
                 {formatMoney(totalWithdrawn)}
               </p>
             </div>
+
           </div>
 
           {/* BANK ACCOUNT */}
 
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100">
-                <Building2 className="h-5 w-5 text-indigo-600" />
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-950/60">
+                <Building2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
               </div>
 
               <div>
-                <h2 className="font-bold text-gray-900">
+                <h2 className="font-bold text-gray-900 dark:text-white">
                   Withdrawal Account
                 </h2>
 
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   Bank account that will receive your
                   business withdrawal.
                 </p>
               </div>
+
             </div>
 
-            <div className="mt-5 rounded-xl border border-gray-100 bg-gray-50 p-5">
+            <div className="mt-5 rounded-xl border border-gray-100 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-950">
+
               {wallet?.recipientCode ? (
                 <>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     Bank account
                   </p>
 
-                  <p className="mt-1 font-semibold text-green-700">
+                  <p className="mt-1 font-semibold text-green-700 dark:text-green-400">
                     Connected
                   </p>
 
-                  <p className="mt-2 text-xs text-gray-400">
+                  <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
                     Paystack recipient connected successfully.
                   </p>
 
@@ -370,22 +383,22 @@ export default function BusinessWalletPage() {
                     onClick={() => {
                       setShowBankForm(true);
                     }}
-                    className="mt-4 rounded-xl border border-indigo-200 bg-white px-5 py-3 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
+                    className="mt-4 rounded-xl border border-indigo-200 bg-white px-5 py-3 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 dark:border-indigo-800 dark:bg-gray-900 dark:text-indigo-400 dark:hover:bg-indigo-950/50"
                   >
                     Change Bank Account
                   </button>
                 </>
               ) : (
                 <>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
                     Bank account
                   </p>
 
-                  <p className="mt-1 font-semibold text-gray-900">
+                  <p className="mt-1 font-semibold text-gray-900 dark:text-white">
                     Not connected
                   </p>
 
-                  <p className="mt-2 text-sm text-gray-500">
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                     Connect your business bank account
                     before making a withdrawal.
                   </p>
@@ -397,7 +410,7 @@ export default function BusinessWalletPage() {
                       setError("");
                       setMessage("");
                     }}
-                    className="mt-4 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                    className="mt-4 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
                   >
                     Connect Bank Account
                   </button>
@@ -411,43 +424,51 @@ export default function BusinessWalletPage() {
                   }
                   onSuccess={async () => {
                     setShowBankForm(false);
+
                     setMessage(
                       "Bank account connected successfully."
                     );
+
                     await loadWallet();
                   }}
                 />
               )}
+
             </div>
           </div>
 
           {/* WITHDRAWAL */}
 
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-100">
-                <ArrowDownToLine className="h-5 w-5 text-green-600" />
+
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-100 dark:bg-green-950/50">
+                <ArrowDownToLine className="h-5 w-5 text-green-600 dark:text-green-400" />
               </div>
 
               <div>
-                <h2 className="font-bold text-gray-900">
+                <h2 className="font-bold text-gray-900 dark:text-white">
                   Withdraw Funds
                 </h2>
 
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   Withdraw available business profit to
                   your connected bank account.
                 </p>
               </div>
+
             </div>
 
             <div className="mt-6 max-w-xl">
-              <label className="text-sm font-medium text-gray-700">
+
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Withdrawal Amount
               </label>
 
               <div className="relative mt-2">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-medium text-gray-500">
+
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-medium text-gray-500 dark:text-gray-400">
                   ₦
                 </span>
 
@@ -464,11 +485,12 @@ export default function BusinessWalletPage() {
                     withdrawing ||
                     !wallet?.recipientCode
                   }
-                  className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-100"
+                  className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-700 dark:bg-gray-950 dark:text-white dark:placeholder:text-gray-600 dark:focus:border-indigo-400 dark:focus:ring-indigo-950/50 dark:disabled:bg-gray-800"
                 />
+
               </div>
 
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                 Available:{" "}
                 {formatMoney(
                   availableBalance
@@ -483,7 +505,7 @@ export default function BusinessWalletPage() {
                   !wallet?.recipientCode ||
                   availableBalance < 100
                 }
-                className="mt-5 w-full rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="mt-5 w-full rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-600"
               >
                 {withdrawing
                   ? "Processing withdrawal..."
@@ -491,37 +513,44 @@ export default function BusinessWalletPage() {
               </button>
 
               {!wallet?.recipientCode && (
-                <p className="mt-3 text-center text-xs text-gray-400">
+                <p className="mt-3 text-center text-xs text-gray-400 dark:text-gray-500">
                   Connect your bank account before
                   withdrawing.
                 </p>
               )}
+
             </div>
           </div>
 
           {/* WITHDRAWAL HISTORY */}
 
-          <div className="rounded-2xl bg-white shadow-sm">
-            <div className="border-b border-gray-100 p-5 sm:p-6">
-              <h2 className="font-bold text-gray-900">
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+
+            <div className="border-b border-gray-100 p-5 sm:p-6 dark:border-gray-800">
+
+              <h2 className="font-bold text-gray-900 dark:text-white">
                 Withdrawal History
               </h2>
 
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 Your recent business withdrawals.
               </p>
+
             </div>
 
             {withdrawals.length === 0 ? (
               <div className="p-8 text-center">
-                <ArrowDownToLine className="mx-auto h-8 w-8 text-gray-300" />
 
-                <p className="mt-3 text-sm text-gray-500">
+                <ArrowDownToLine className="mx-auto h-8 w-8 text-gray-300 dark:text-gray-700" />
+
+                <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
                   No withdrawals yet.
                 </p>
+
               </div>
             ) : (
-              <div className="divide-y divide-gray-100">
+              <div className="divide-y divide-gray-100 dark:divide-gray-800">
+
                 {withdrawals.map(
                   (withdrawal) => {
                     const status =
@@ -530,20 +559,22 @@ export default function BusinessWalletPage() {
                     return (
                       <div
                         key={withdrawal.id}
-                        className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+                        className="flex flex-col gap-3 p-5 transition hover:bg-gray-50 sm:flex-row sm:items-center sm:justify-between sm:p-6 dark:hover:bg-gray-800/50"
                       >
+
                         <div>
-                          <p className="font-medium text-gray-900">
+
+                          <p className="font-medium text-gray-900 dark:text-white">
                             {withdrawal.description ||
                               "Business withdrawal"}
                           </p>
 
-                          <p className="mt-1 break-all text-xs text-gray-400">
+                          <p className="mt-1 break-all text-xs text-gray-400 dark:text-gray-500">
                             {withdrawal.reference ||
                               "No reference"}
                           </p>
 
-                          <p className="mt-1 flex items-center gap-1 text-xs text-gray-400">
+                          <p className="mt-1 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
                             <Clock className="h-3 w-3" />
 
                             {new Date(
@@ -552,10 +583,12 @@ export default function BusinessWalletPage() {
                               "en-NG"
                             )}
                           </p>
+
                         </div>
 
                         <div className="flex items-center justify-between gap-4 sm:block sm:text-right">
-                          <p className="font-bold text-gray-900">
+
+                          <p className="font-bold text-gray-900 dark:text-white">
                             {formatMoney(
                               Number(
                                 withdrawal.amount
@@ -565,29 +598,33 @@ export default function BusinessWalletPage() {
 
                           {status ===
                           "success" ? (
-                            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-green-600 sm:justify-end">
+                            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 sm:justify-end">
                               <CheckCircle2 className="h-3.5 w-3.5" />
                               Successful
                             </p>
                           ) : status ===
                             "failed" ? (
-                            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-red-600 sm:justify-end">
+                            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400 sm:justify-end">
                               <XCircle className="h-3.5 w-3.5" />
                               Failed
                             </p>
                           ) : (
-                            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-yellow-600 sm:justify-end">
+                            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-yellow-600 dark:text-yellow-400 sm:justify-end">
                               <Clock className="h-3.5 w-3.5" />
                               Pending
                             </p>
                           )}
+
                         </div>
+
                       </div>
                     );
                   }
                 )}
+
               </div>
             )}
+
           </div>
         </>
       )}

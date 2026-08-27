@@ -249,17 +249,17 @@ export default function ReferralsPage() {
     return (
       <div className="space-y-6">
 
-        <div className="h-32 animate-pulse rounded-2xl bg-white shadow-sm" />
+        <div className="h-32 animate-pulse rounded-2xl bg-white shadow-sm dark:bg-slate-900" />
 
         <div className="grid gap-5 md:grid-cols-2">
 
-          <div className="h-36 animate-pulse rounded-2xl bg-white shadow-sm" />
+          <div className="h-36 animate-pulse rounded-2xl bg-white shadow-sm dark:bg-slate-900" />
 
-          <div className="h-36 animate-pulse rounded-2xl bg-white shadow-sm" />
+          <div className="h-36 animate-pulse rounded-2xl bg-white shadow-sm dark:bg-slate-900" />
 
         </div>
 
-        <div className="h-48 animate-pulse rounded-2xl bg-white shadow-sm" />
+        <div className="h-48 animate-pulse rounded-2xl bg-white shadow-sm dark:bg-slate-900" />
 
       </div>
     );
@@ -267,8 +267,8 @@ export default function ReferralsPage() {
 
   if (!data) {
     return (
-      <div className="rounded-2xl border border-red-100 bg-red-50 p-6 text-center">
-        <p className="font-semibold text-red-700">
+      <div className="rounded-2xl border border-red-100 bg-red-50 p-6 text-center dark:border-red-900/40 dark:bg-red-950/30">
+        <p className="font-semibold text-red-700 dark:text-red-300">
           Unable to load referral dashboard.
         </p>
       </div>
@@ -286,23 +286,25 @@ export default function ReferralsPage() {
 
         <div>
           <div className="mb-2 flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100">
+
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-950/60">
               <Gift
                 size={19}
-                className="text-indigo-600"
+                className="text-indigo-600 dark:text-indigo-400"
               />
             </div>
 
-            <span className="text-sm font-bold text-indigo-600">
+            <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
               Referral Program
             </span>
+
           </div>
 
-          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 sm:text-3xl">
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-white sm:text-3xl">
             Referral & Rewards
           </h1>
 
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500 dark:text-slate-400">
             Invite friends to Brainfriend Global Tech
             and earn rewards from their eligible
             transactions.
@@ -319,7 +321,7 @@ export default function ReferralsPage() {
 
         {/* REFERRAL BALANCE */}
 
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-700 p-6 text-white shadow-lg">
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-700 p-6 text-white shadow-lg dark:from-indigo-700 dark:to-indigo-900">
 
           <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/10" />
 
@@ -361,32 +363,33 @@ export default function ReferralsPage() {
             </p>
 
           </div>
+
         </div>
 
         {/* WALLET BALANCE */}
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
 
           <div className="flex items-center justify-between">
 
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/40">
               <Wallet
                 size={21}
-                className="text-emerald-600"
+                className="text-emerald-600 dark:text-emerald-400"
               />
             </div>
 
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-600">
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
               Main Wallet
             </span>
 
           </div>
 
-          <p className="mt-6 text-sm font-medium text-gray-500">
+          <p className="mt-6 text-sm font-medium text-gray-500 dark:text-slate-400">
             Current Wallet Balance
           </p>
 
-          <h2 className="mt-1 text-3xl font-extrabold tracking-tight text-gray-900">
+          <h2 className="mt-1 text-3xl font-extrabold tracking-tight text-gray-900 dark:text-white">
             ₦
             {data.walletBalance.toLocaleString(
               "en-NG",
@@ -397,7 +400,7 @@ export default function ReferralsPage() {
             )}
           </h2>
 
-          <p className="mt-2 text-xs text-gray-400">
+          <p className="mt-2 text-xs text-gray-400 dark:text-slate-500">
             Your referral earnings can be transferred here.
           </p>
 
@@ -409,27 +412,29 @@ export default function ReferralsPage() {
           TRANSFER CARD
       ====================================================== */}
 
-      <div className="overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-sm dark:border-indigo-900/40 dark:bg-slate-900">
 
-        <div className="border-b border-gray-100 px-5 py-5 sm:px-6">
+        <div className="border-b border-gray-100 px-5 py-5 dark:border-slate-800 sm:px-6">
 
           <div className="flex items-center gap-3">
 
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/50">
               <ArrowRight
                 size={19}
-                className="text-indigo-600"
+                className="text-indigo-600 dark:text-indigo-400"
               />
             </div>
 
             <div>
-              <h2 className="font-bold text-gray-900">
+
+              <h2 className="font-bold text-gray-900 dark:text-white">
                 Transfer Earnings
               </h2>
 
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-slate-400">
                 Move your referral earnings into your main wallet.
               </p>
+
             </div>
 
           </div>
@@ -438,15 +443,15 @@ export default function ReferralsPage() {
 
         <div className="px-5 py-5 sm:px-6">
 
-          <div className="flex flex-col gap-4 rounded-xl bg-gray-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-4 rounded-xl bg-gray-50 p-4 dark:bg-slate-800/70 sm:flex-row sm:items-center sm:justify-between">
 
             <div>
 
-              <p className="text-xs font-medium text-gray-500">
+              <p className="text-xs font-medium text-gray-500 dark:text-slate-400">
                 Amount available
               </p>
 
-              <p className="mt-1 text-xl font-extrabold text-gray-900">
+              <p className="mt-1 text-xl font-extrabold text-gray-900 dark:text-white">
                 ₦
                 {data.referralBalance.toLocaleString(
                   "en-NG",
@@ -466,8 +471,9 @@ export default function ReferralsPage() {
                 transferring ||
                 data.referralBalance <= 0
               }
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
+
               <Wallet size={17} />
 
               {transferring
@@ -477,11 +483,12 @@ export default function ReferralsPage() {
               {!transferring && (
                 <ArrowRight size={16} />
               )}
+
             </button>
 
           </div>
 
-          <p className="mt-3 text-xs leading-5 text-gray-400">
+          <p className="mt-3 text-xs leading-5 text-gray-400 dark:text-slate-500">
             Your entire available referral balance will be
             transferred to your main wallet. The transfer is
             processed securely.
@@ -495,40 +502,42 @@ export default function ReferralsPage() {
           REFERRAL LINK
       ====================================================== */}
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-6">
 
         <div className="flex items-start gap-4">
 
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-950/50">
             <Users
               size={21}
-              className="text-indigo-600"
+              className="text-indigo-600 dark:text-indigo-400"
             />
           </div>
 
           <div>
-            <h2 className="font-bold text-gray-900">
+
+            <h2 className="font-bold text-gray-900 dark:text-white">
               Invite friends
             </h2>
 
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-gray-500 dark:text-slate-400">
               Share your referral link and start earning rewards.
             </p>
+
           </div>
 
         </div>
 
         {/* CODE */}
 
-        <div className="mt-5 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+        <div className="mt-5 rounded-xl border border-indigo-100 bg-indigo-50 p-4 dark:border-indigo-900/50 dark:bg-indigo-950/30">
 
-          <p className="text-xs font-bold uppercase tracking-wider text-indigo-500">
+          <p className="text-xs font-bold uppercase tracking-wider text-indigo-500 dark:text-indigo-400">
             Your referral code
           </p>
 
           <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
-            <p className="break-all text-xl font-extrabold tracking-wider text-indigo-700">
+            <p className="break-all text-xl font-extrabold tracking-wider text-indigo-700 dark:text-indigo-300">
               {data.referralCode ||
                 "Not available"}
             </p>
@@ -541,15 +550,15 @@ export default function ReferralsPage() {
 
         <div className="mt-4">
 
-          <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+          <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-slate-400">
             Your referral link
           </label>
 
           <div className="flex flex-col gap-2 sm:flex-row">
 
-            <div className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+            <div className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800">
 
-              <p className="break-all text-sm text-gray-600">
+              <p className="break-all text-sm text-gray-600 dark:text-slate-300">
                 {referralLink}
               </p>
 
@@ -558,8 +567,9 @@ export default function ReferralsPage() {
             <button
               type="button"
               onClick={copyReferralLink}
-              className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 text-sm font-bold text-white transition hover:bg-gray-800"
+              className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 text-sm font-bold text-white transition hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100"
             >
+
               {copied ? (
                 <>
                   <Check size={17} />
@@ -571,6 +581,7 @@ export default function ReferralsPage() {
                   Copy
                 </>
               )}
+
             </button>
 
           </div>
@@ -582,7 +593,7 @@ export default function ReferralsPage() {
         <button
           type="button"
           onClick={shareReferralLink}
-          className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-white px-5 text-sm font-bold text-indigo-600 transition hover:bg-indigo-50 sm:w-auto"
+          className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-white px-5 text-sm font-bold text-indigo-600 transition hover:bg-indigo-50 dark:border-indigo-800 dark:bg-slate-900 dark:text-indigo-400 dark:hover:bg-indigo-950/40 sm:w-auto"
         >
           <Share2 size={17} />
           Share Referral Link
@@ -594,7 +605,7 @@ export default function ReferralsPage() {
           HOW IT WORKS
       ====================================================== */}
 
-      <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800 p-5 text-white shadow-sm sm:p-6">
+      <div className="rounded-2xl bg-gradient-to-br from-gray-900 to-gray-800 p-5 text-white shadow-sm dark:from-slate-950 dark:to-slate-900 dark:ring-1 dark:ring-slate-800 sm:p-6">
 
         <div className="flex items-center gap-3">
 
@@ -603,6 +614,7 @@ export default function ReferralsPage() {
           </div>
 
           <div>
+
             <h2 className="font-bold">
               How referrals work
             </h2>
@@ -610,6 +622,7 @@ export default function ReferralsPage() {
             <p className="text-xs text-gray-400">
               Simple and straightforward
             </p>
+
           </div>
 
         </div>
@@ -617,6 +630,7 @@ export default function ReferralsPage() {
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
 
           <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+
             <div className="text-sm font-extrabold text-indigo-300">
               01
             </div>
@@ -628,9 +642,11 @@ export default function ReferralsPage() {
             <p className="mt-1 text-xs leading-5 text-gray-400">
               Send your unique referral link to friends and family.
             </p>
+
           </div>
 
           <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+
             <div className="text-sm font-extrabold text-indigo-300">
               02
             </div>
@@ -642,9 +658,11 @@ export default function ReferralsPage() {
             <p className="mt-1 text-xs leading-5 text-gray-400">
               Your referral is automatically connected when they sign up.
             </p>
+
           </div>
 
           <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+
             <div className="text-sm font-extrabold text-indigo-300">
               03
             </div>
@@ -656,6 +674,7 @@ export default function ReferralsPage() {
             <p className="mt-1 text-xs leading-5 text-gray-400">
               Eligible referral earnings appear in your referral balance.
             </p>
+
           </div>
 
         </div>

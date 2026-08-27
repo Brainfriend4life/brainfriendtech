@@ -33,9 +33,7 @@ export default function ChangePasswordPage() {
       !newPassword ||
       !confirmPassword
     ) {
-      toast.error(
-        "Please fill in all fields."
-      );
+      toast.error("Please fill in all fields.");
       return;
     }
 
@@ -47,9 +45,7 @@ export default function ChangePasswordPage() {
     }
 
     if (newPassword !== confirmPassword) {
-      toast.error(
-        "New passwords do not match."
-      );
+      toast.error("New passwords do not match.");
       return;
     }
 
@@ -61,8 +57,7 @@ export default function ChangePasswordPage() {
         {
           method: "POST",
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
           },
           body: JSON.stringify({
             currentPassword,
@@ -111,17 +106,17 @@ export default function ChangePasswordPage() {
       <div>
         <Link
           href="/dashboard/profile"
-          className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+          className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-indigo-600 transition hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
         >
           <ArrowLeft size={17} />
           Back to Profile
         </Link>
 
-        <h1 className="text-3xl font-bold text-gray-900">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
           Change Password
         </h1>
 
-        <p className="mt-1 text-gray-500">
+        <p className="mt-1 text-gray-500 dark:text-gray-400">
           Update your account password to keep
           your account secure.
         </p>
@@ -129,11 +124,11 @@ export default function ChangePasswordPage() {
 
       {/* SECURITY HEADER */}
 
-      <div className="overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-700 p-6 text-white shadow-lg">
+      <div className="overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-700 p-6 text-white shadow-lg dark:from-indigo-700 dark:to-purple-800">
 
         <div className="flex items-center gap-4">
 
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white/15">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white/15">
             <ShieldCheck size={28} />
           </div>
 
@@ -154,7 +149,7 @@ export default function ChangePasswordPage() {
 
       {/* FORM */}
 
-      <div className="rounded-2xl bg-white p-6 shadow-sm sm:p-8">
+      <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:p-8">
 
         <form
           onSubmit={handleChangePassword}
@@ -164,7 +159,7 @@ export default function ChangePasswordPage() {
           {/* CURRENT PASSWORD */}
 
           <div>
-            <label className="mb-2 block text-sm font-semibold text-gray-700">
+            <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-200">
               Current Password
             </label>
 
@@ -172,7 +167,7 @@ export default function ChangePasswordPage() {
 
               <LockKeyhole
                 size={19}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
               />
 
               <input
@@ -184,7 +179,9 @@ export default function ChangePasswordPage() {
                   )
                 }
                 placeholder="Enter your current password"
-                className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                disabled={loading}
+                autoComplete="current-password"
+                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500 dark:focus:border-indigo-400 dark:focus:ring-indigo-500/20 dark:disabled:bg-gray-800"
               />
 
             </div>
@@ -193,7 +190,7 @@ export default function ChangePasswordPage() {
           {/* NEW PASSWORD */}
 
           <div>
-            <label className="mb-2 block text-sm font-semibold text-gray-700">
+            <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-200">
               New Password
             </label>
 
@@ -201,7 +198,7 @@ export default function ChangePasswordPage() {
 
               <LockKeyhole
                 size={19}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
               />
 
               <input
@@ -213,12 +210,14 @@ export default function ChangePasswordPage() {
                   )
                 }
                 placeholder="Enter your new password"
-                className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                disabled={loading}
+                autoComplete="new-password"
+                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500 dark:focus:border-indigo-400 dark:focus:ring-indigo-500/20 dark:disabled:bg-gray-800"
               />
 
             </div>
 
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
               Password must contain at least 6
               characters.
             </p>
@@ -227,7 +226,7 @@ export default function ChangePasswordPage() {
           {/* CONFIRM PASSWORD */}
 
           <div>
-            <label className="mb-2 block text-sm font-semibold text-gray-700">
+            <label className="mb-2 block text-sm font-semibold text-gray-700 dark:text-gray-200">
               Confirm New Password
             </label>
 
@@ -235,7 +234,7 @@ export default function ChangePasswordPage() {
 
               <LockKeyhole
                 size={19}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500"
               />
 
               <input
@@ -247,7 +246,9 @@ export default function ChangePasswordPage() {
                   )
                 }
                 placeholder="Confirm your new password"
-                className="w-full rounded-xl border border-gray-200 py-3 pl-10 pr-4 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                disabled={loading}
+                autoComplete="new-password"
+                className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500 dark:focus:border-indigo-400 dark:focus:ring-indigo-500/20 dark:disabled:bg-gray-800"
               />
 
             </div>
@@ -258,11 +259,19 @@ export default function ChangePasswordPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-indigo-600 py-3.5 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3.5 font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:focus:ring-offset-gray-900"
           >
-            {loading
-              ? "Changing Password..."
-              : "Change Password"}
+            {loading ? (
+              <>
+                <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Changing Password...
+              </>
+            ) : (
+              <>
+                <LockKeyhole size={18} />
+                Change Password
+              </>
+            )}
           </button>
 
         </form>
@@ -271,22 +280,22 @@ export default function ChangePasswordPage() {
 
       {/* SECURITY NOTE */}
 
-      <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+      <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-4 dark:border-indigo-900/60 dark:bg-indigo-950/40">
 
         <div className="flex gap-3">
 
           <ShieldCheck
             size={20}
-            className="mt-0.5 shrink-0 text-indigo-600"
+            className="mt-0.5 shrink-0 text-indigo-600 dark:text-indigo-400"
           />
 
           <div>
 
-            <p className="font-semibold text-indigo-900">
+            <p className="font-semibold text-indigo-900 dark:text-indigo-200">
               Keep your password secure
             </p>
 
-            <p className="mt-1 text-sm text-indigo-700">
+            <p className="mt-1 text-sm leading-6 text-indigo-700 dark:text-indigo-300">
               Never share your password with anyone.
               Brainfriend VTU will never ask you to
               disclose your password.
