@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -7,6 +8,8 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  Landmark,
+  RefreshCw,
 } from "lucide-react";
 
 import { useEffect, useState } from "react";
@@ -130,7 +133,10 @@ export default function BusinessWalletPage() {
     const withdrawalAmount =
       Number(amount);
 
-    if (!Number.isFinite(withdrawalAmount)) {
+    if (
+      !amount ||
+      !Number.isFinite(withdrawalAmount)
+    ) {
       setError(
         "Please enter a valid withdrawal amount."
       );
@@ -154,6 +160,13 @@ export default function BusinessWalletPage() {
         `You can only withdraw up to ${formatMoney(
           available
         )}.`
+      );
+      return;
+    }
+
+    if (!walletData?.wallet?.recipientCode) {
+      setError(
+        "Please connect a bank account before withdrawing."
       );
       return;
     }
@@ -187,7 +200,10 @@ export default function BusinessWalletPage() {
 
       const text = await response.text();
 
-      let data: any;
+      let data: {
+        success?: boolean;
+        message?: string;
+      };
 
       try {
         data = JSON.parse(text);
@@ -234,317 +250,526 @@ export default function BusinessWalletPage() {
   const totalWithdrawn =
     Number(wallet?.withdrawnProfit || 0);
 
-  return (
-    <div className="space-y-6 text-gray-900 dark:text-gray-100">
+  const totalProfit =
+    Number(wallet?.totalProfit || 0);
 
-      {/* HEADER */}
+  return (
+    <div className="min-h-full space-y-6 bg-transparent text-gray-900 transition-colors dark:text-gray-100">
+
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
 
       <div className="pl-14 lg:pl-0">
-        <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+        <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
           Administration
         </p>
 
-        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-950 dark:text-white sm:text-3xl">
           Business Wallet
         </h1>
 
-        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 sm:text-base">
-          Manage your business funds and withdraw
-          available profit.
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400 sm:text-base">
+          Manage your business funds, monitor revenue,
+          connect your bank account and withdraw available
+          profit.
         </p>
       </div>
 
-      {/* ERROR */}
+      {/* =====================================================
+          ALERTS
+      ===================================================== */}
 
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
-          {error}
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700 shadow-sm dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+        >
+          <XCircle className="mt-0.5 h-5 w-5 shrink-0" />
+
+          <div>
+            <p className="font-semibold">
+              Something went wrong
+            </p>
+
+            <p className="mt-1 leading-5">
+              {error}
+            </p>
+          </div>
         </div>
       )}
-
-      {/* SUCCESS */}
 
       {message && (
-        <div className="rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700 dark:border-green-900/50 dark:bg-green-950/40 dark:text-green-300">
-          {message}
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-2xl border border-green-200 bg-green-50 px-4 py-4 text-sm text-green-700 shadow-sm dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-300"
+        >
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
+
+          <div>
+            <p className="font-semibold">
+              Successful
+            </p>
+
+            <p className="mt-1 leading-5">
+              {message}
+            </p>
+          </div>
         </div>
       )}
 
-      {/* LOADING */}
+      {/* =====================================================
+          LOADING
+      ===================================================== */}
 
       {loading ? (
-        <div className="rounded-2xl border border-gray-100 bg-white p-10 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-indigo-600 dark:border-gray-700 dark:border-t-indigo-400" />
+        <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-500/10">
+            <RefreshCw className="h-6 w-6 animate-spin text-indigo-600 dark:text-indigo-400" />
+          </div>
 
-          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-            Loading Brainfriend Global Tech revenue...
+          <p className="mt-4 text-sm font-medium text-gray-700 dark:text-gray-300">
+            Loading business wallet...
+          </p>
+
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
+            Please wait while we retrieve your latest wallet information.
           </p>
         </div>
       ) : (
         <>
-          {/* BALANCE */}
+          {/* =====================================================
+              WALLET SUMMARY
+          ===================================================== */}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
 
             {/* AVAILABLE BALANCE */}
 
-            <div className="rounded-2xl bg-indigo-700 p-6 text-white shadow-sm dark:bg-indigo-800">
-              <div className="flex items-center justify-between">
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-purple-700 p-6 text-white shadow-lg shadow-indigo-500/10 dark:from-indigo-700 dark:via-indigo-800 dark:to-purple-900 dark:shadow-none">
+              <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10" />
+
+              <div className="relative flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-sm font-medium text-indigo-200">
-                    Available Balance
+                  <p className="text-sm font-medium text-indigo-100">
+                    Available Profit
                   </p>
 
-                  <p className="mt-2 text-3xl font-bold">
+                  <p className="mt-2 text-3xl font-bold tracking-tight">
                     {formatMoney(
                       availableBalance
                     )}
                   </p>
                 </div>
 
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm">
                   <Wallet className="h-6 w-6" />
                 </div>
               </div>
 
-              <p className="mt-4 text-xs text-indigo-200">
-                Profit currently available for
-                business withdrawal.
-              </p>
+              <div className="relative mt-5 border-t border-white/15 pt-4">
+                <p className="text-xs leading-5 text-indigo-100">
+                  Profit currently available for
+                  business withdrawal.
+                </p>
+              </div>
             </div>
 
             {/* TOTAL REVENUE */}
 
-            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Total Revenue
-              </p>
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-colors dark:border-gray-800 dark:bg-gray-900">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                    Total Revenue
+                  </p>
 
-              <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
-                {formatMoney(totalRevenue)}
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">
+                    {formatMoney(totalRevenue)}
+                  </p>
+                </div>
+
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 dark:bg-green-500/10">
+                  <TrendingUpIcon />
+                </div>
+              </div>
+
+              <p className="mt-4 text-xs leading-5 text-gray-500 dark:text-gray-500">
+                Total revenue generated from successful
+                platform services.
               </p>
             </div>
 
             {/* TOTAL WITHDRAWN */}
 
-            <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                Total Withdrawn
-              </p>
+            <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm transition-colors dark:border-gray-800 dark:bg-gray-900">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                    Total Withdrawn
+                  </p>
 
-              <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">
-                {formatMoney(totalWithdrawn)}
-              </p>
-            </div>
+                  <p className="mt-2 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">
+                    {formatMoney(totalWithdrawn)}
+                  </p>
+                </div>
 
-          </div>
-
-          {/* BANK ACCOUNT */}
-
-          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-
-            <div className="flex items-center gap-3">
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-950/60">
-                <Building2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-50 dark:bg-orange-500/10">
+                  <ArrowDownToLine className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                </div>
               </div>
 
-              <div>
-                <h2 className="font-bold text-gray-900 dark:text-white">
-                  Withdrawal Account
-                </h2>
-
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Bank account that will receive your
-                  business withdrawal.
-                </p>
-              </div>
-
-            </div>
-
-            <div className="mt-5 rounded-xl border border-gray-100 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-950">
-
-              {wallet?.recipientCode ? (
-                <>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Bank account
-                  </p>
-
-                  <p className="mt-1 font-semibold text-green-700 dark:text-green-400">
-                    Connected
-                  </p>
-
-                  <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-                    Paystack recipient connected successfully.
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowBankForm(true);
-                    }}
-                    className="mt-4 rounded-xl border border-indigo-200 bg-white px-5 py-3 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 dark:border-indigo-800 dark:bg-gray-900 dark:text-indigo-400 dark:hover:bg-indigo-950/50"
-                  >
-                    Change Bank Account
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Bank account
-                  </p>
-
-                  <p className="mt-1 font-semibold text-gray-900 dark:text-white">
-                    Not connected
-                  </p>
-
-                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    Connect your business bank account
-                    before making a withdrawal.
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowBankForm(true);
-                      setError("");
-                      setMessage("");
-                    }}
-                    className="mt-4 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
-                  >
-                    Connect Bank Account
-                  </button>
-                </>
-              )}
-
-              {showBankForm && (
-                <BankAccountForm
-                  onCancel={() =>
-                    setShowBankForm(false)
-                  }
-                  onSuccess={async () => {
-                    setShowBankForm(false);
-
-                    setMessage(
-                      "Bank account connected successfully."
-                    );
-
-                    await loadWallet();
-                  }}
-                />
-              )}
-
+              <p className="mt-4 text-xs leading-5 text-gray-500 dark:text-gray-500">
+                Total profit already withdrawn from the
+                business wallet.
+              </p>
             </div>
           </div>
 
-          {/* WITHDRAWAL */}
+          {/* =====================================================
+              PROFIT SUMMARY
+          ===================================================== */}
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-
-            <div className="flex items-center gap-3">
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-100 dark:bg-green-950/50">
-                <ArrowDownToLine className="h-5 w-5 text-green-600 dark:text-green-400" />
-              </div>
-
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="font-bold text-gray-900 dark:text-white">
-                  Withdraw Funds
-                </h2>
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                  Total Business Profit
+                </p>
 
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Withdraw available business profit to
-                  your connected bank account.
+                <p className="mt-1 text-2xl font-bold text-gray-950 dark:text-white">
+                  {formatMoney(totalProfit)}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-500">
+                  Revenue minus recorded provider costs.
                 </p>
               </div>
 
+              <div className="flex items-center gap-3 rounded-xl bg-gray-50 px-4 py-3 dark:bg-gray-800/70">
+                <Wallet className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Available to withdraw
+                  </p>
+
+                  <p className="font-semibold text-gray-900 dark:text-white">
+                    {formatMoney(availableBalance)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* =====================================================
+              BANK ACCOUNT
+          ===================================================== */}
+
+          <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+
+            <div className="border-b border-gray-100 p-5 dark:border-gray-800 sm:p-6">
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 dark:bg-indigo-500/10">
+                  <Building2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+
+                <div>
+                  <h2 className="font-bold text-gray-950 dark:text-white">
+                    Withdrawal Account
+                  </h2>
+
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Bank account that will receive your
+                    business withdrawals.
+                  </p>
+                </div>
+
+              </div>
             </div>
 
-            <div className="mt-6 max-w-xl">
+            <div className="p-5 sm:p-6">
+              <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-950/60">
 
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Withdrawal Amount
-              </label>
+                {wallet?.recipientCode ? (
+                  <>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 
-              <div className="relative mt-2">
+                      <div className="flex items-center gap-3">
 
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-medium text-gray-500 dark:text-gray-400">
-                  ₦
-                </span>
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-100 dark:bg-green-500/10">
+                          <Landmark className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        </div>
 
-                <input
-                  type="number"
-                  placeholder="Enter amount"
-                  min="100"
-                  step="0.01"
-                  value={amount}
-                  onChange={(event) =>
-                    setAmount(event.target.value)
-                  }
+                        <div>
+                          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                            Bank account
+                          </p>
+
+                          <p className="mt-0.5 font-semibold text-green-700 dark:text-green-400">
+                            Connected
+                          </p>
+                        </div>
+
+                      </div>
+
+                      <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-green-100 px-3 py-1.5 text-xs font-semibold text-green-700 dark:bg-green-500/10 dark:text-green-400">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Paystack Connected
+                      </span>
+
+                    </div>
+
+                    <div className="mt-5 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
+                      <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
+                        Your business bank account is connected
+                        and ready to receive withdrawals.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowBankForm(true);
+                        setError("");
+                        setMessage("");
+                      }}
+                      className="mt-4 inline-flex items-center justify-center rounded-xl border border-indigo-200 bg-white px-5 py-3 text-sm font-semibold text-indigo-700 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 dark:border-indigo-800 dark:bg-gray-900 dark:text-indigo-400 dark:hover:border-indigo-700 dark:hover:bg-indigo-950/50"
+                    >
+                      Change Bank Account
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-start gap-3">
+
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-200 dark:bg-gray-800">
+                        <Building2 className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                      </div>
+
+                      <div>
+                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                          Bank account
+                        </p>
+
+                        <p className="mt-0.5 font-semibold text-gray-900 dark:text-white">
+                          Not connected
+                        </p>
+
+                        <p className="mt-2 max-w-xl text-sm leading-6 text-gray-500 dark:text-gray-400">
+                          Connect your business bank account
+                          before making a withdrawal.
+                        </p>
+                      </div>
+
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowBankForm(true);
+                        setError("");
+                        setMessage("");
+                      }}
+                      className="mt-5 inline-flex items-center justify-center rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 dark:bg-indigo-500 dark:hover:bg-indigo-600"
+                    >
+                      Connect Bank Account
+                    </button>
+                  </>
+                )}
+
+                {showBankForm && (
+                  <div className="mt-6 border-t border-gray-200 pt-6 dark:border-gray-800">
+                    <BankAccountForm
+                      onCancel={() =>
+                        setShowBankForm(false)
+                      }
+                      onSuccess={async () => {
+                        setShowBankForm(false);
+
+                        setMessage(
+                          "Bank account connected successfully."
+                        );
+
+                        await loadWallet();
+                      }}
+                    />
+                  </div>
+                )}
+
+              </div>
+            </div>
+          </div>
+
+          {/* =====================================================
+              WITHDRAW FUNDS
+          ===================================================== */}
+
+          <div className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+
+            <div className="border-b border-gray-100 p-5 dark:border-gray-800 sm:p-6">
+              <div className="flex items-center gap-3">
+
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-green-50 dark:bg-green-500/10">
+                  <ArrowDownToLine className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+
+                <div>
+                  <h2 className="font-bold text-gray-950 dark:text-white">
+                    Withdraw Funds
+                  </h2>
+
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Withdraw available business profit to
+                    your connected bank account.
+                  </p>
+                </div>
+
+              </div>
+            </div>
+
+            <div className="p-5 sm:p-6">
+              <div className="max-w-xl">
+
+                <label
+                  htmlFor="withdrawal-amount"
+                  className="text-sm font-semibold text-gray-700 dark:text-gray-300"
+                >
+                  Withdrawal Amount
+                </label>
+
+                <div className="relative mt-2">
+
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-semibold text-gray-500 dark:text-gray-400">
+                    ₦
+                  </span>
+
+                  <input
+                    id="withdrawal-amount"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="Enter amount"
+                    min="100"
+                    step="0.01"
+                    value={amount}
+                    onChange={(event) =>
+                      setAmount(event.target.value)
+                    }
+                    disabled={
+                      withdrawing ||
+                      !wallet?.recipientCode
+                    }
+                    className="w-full rounded-xl border border-gray-300 bg-white py-3.5 pl-10 pr-4 text-gray-950 shadow-sm outline-none transition placeholder:text-gray-400 hover:border-gray-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500 dark:border-gray-700 dark:bg-gray-950 dark:text-white dark:placeholder:text-gray-600 dark:hover:border-gray-600 dark:focus:border-indigo-400 dark:focus:ring-indigo-500/10 dark:disabled:bg-gray-800 dark:disabled:text-gray-500"
+                  />
+
+                </div>
+
+                <div className="mt-3 flex flex-col gap-1 text-xs sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-gray-500 dark:text-gray-400">
+                    Minimum withdrawal:{" "}
+                    <span className="font-semibold text-gray-700 dark:text-gray-300">
+                      ₦100.00
+                    </span>
+                  </p>
+
+                  <p className="text-gray-500 dark:text-gray-400">
+                    Available:{" "}
+                    <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                      {formatMoney(
+                        availableBalance
+                      )}
+                    </span>
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleWithdrawal}
                   disabled={
                     withdrawing ||
-                    !wallet?.recipientCode
+                    !wallet?.recipientCode ||
+                    availableBalance < 100
                   }
-                  className="w-full rounded-xl border border-gray-200 bg-white py-3 pl-10 pr-4 text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-700 dark:bg-gray-950 dark:text-white dark:placeholder:text-gray-600 dark:focus:border-indigo-400 dark:focus:ring-indigo-950/50 dark:disabled:bg-gray-800"
-                />
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3.5 font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-600 dark:focus:ring-indigo-500/20"
+                >
+                  {withdrawing ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Processing withdrawal...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDownToLine className="h-4 w-4" />
+                      Withdraw Funds
+                    </>
+                  )}
+                </button>
+
+                {!wallet?.recipientCode && (
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/50 dark:bg-amber-950/20">
+                    <p className="text-center text-xs leading-5 text-amber-700 dark:text-amber-300">
+                      Connect your bank account before
+                      withdrawing funds.
+                    </p>
+                  </div>
+                )}
+
+                {wallet?.recipientCode &&
+                  availableBalance < 100 && (
+                    <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/50">
+                      <p className="text-center text-xs leading-5 text-gray-500 dark:text-gray-400">
+                        You need at least ₦100.00 of
+                        available profit before you can
+                        make a withdrawal.
+                      </p>
+                    </div>
+                  )}
 
               </div>
-
-              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                Available:{" "}
-                {formatMoney(
-                  availableBalance
-                )}
-              </p>
-
-              <button
-                type="button"
-                onClick={handleWithdrawal}
-                disabled={
-                  withdrawing ||
-                  !wallet?.recipientCode ||
-                  availableBalance < 100
-                }
-                className="mt-5 w-full rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-600"
-              >
-                {withdrawing
-                  ? "Processing withdrawal..."
-                  : "Withdraw Funds"}
-              </button>
-
-              {!wallet?.recipientCode && (
-                <p className="mt-3 text-center text-xs text-gray-400 dark:text-gray-500">
-                  Connect your bank account before
-                  withdrawing.
-                </p>
-              )}
-
             </div>
           </div>
 
-          {/* WITHDRAWAL HISTORY */}
+          {/* =====================================================
+              WITHDRAWAL HISTORY
+          ===================================================== */}
 
-          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
 
-            <div className="border-b border-gray-100 p-5 sm:p-6 dark:border-gray-800">
+            <div className="border-b border-gray-100 p-5 dark:border-gray-800 sm:p-6">
+              <div className="flex items-center justify-between gap-4">
 
-              <h2 className="font-bold text-gray-900 dark:text-white">
-                Withdrawal History
-              </h2>
+                <div>
+                  <h2 className="font-bold text-gray-950 dark:text-white">
+                    Withdrawal History
+                  </h2>
 
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Your recent business withdrawals.
-              </p>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Your recent business withdrawals.
+                  </p>
+                </div>
 
+                <div className="hidden h-10 w-10 items-center justify-center rounded-xl bg-gray-50 sm:flex dark:bg-gray-800">
+                  <Clock className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                </div>
+
+              </div>
             </div>
 
             {withdrawals.length === 0 ? (
-              <div className="p-8 text-center">
+              <div className="p-10 text-center">
 
-                <ArrowDownToLine className="mx-auto h-8 w-8 text-gray-300 dark:text-gray-700" />
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 dark:bg-gray-800">
+                  <ArrowDownToLine className="h-6 w-6 text-gray-400 dark:text-gray-500" />
+                </div>
 
-                <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-                  No withdrawals yet.
+                <p className="mt-4 font-medium text-gray-700 dark:text-gray-300">
+                  No withdrawals yet
+                </p>
+
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-500">
+                  Your withdrawal transactions will appear
+                  here.
                 </p>
 
               </div>
@@ -559,36 +784,62 @@ export default function BusinessWalletPage() {
                     return (
                       <div
                         key={withdrawal.id}
-                        className="flex flex-col gap-3 p-5 transition hover:bg-gray-50 sm:flex-row sm:items-center sm:justify-between sm:p-6 dark:hover:bg-gray-800/50"
+                        className="flex flex-col gap-4 p-5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40 sm:flex-row sm:items-center sm:justify-between sm:p-6"
                       >
 
-                        <div>
+                        <div className="min-w-0">
 
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            {withdrawal.description ||
-                              "Business withdrawal"}
-                          </p>
+                          <div className="flex items-start gap-3">
 
-                          <p className="mt-1 break-all text-xs text-gray-400 dark:text-gray-500">
-                            {withdrawal.reference ||
-                              "No reference"}
-                          </p>
+                            <div
+                              className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                                status === "success"
+                                  ? "bg-green-50 dark:bg-green-500/10"
+                                  : status === "failed"
+                                  ? "bg-red-50 dark:bg-red-500/10"
+                                  : "bg-yellow-50 dark:bg-yellow-500/10"
+                              }`}
+                            >
+                              {status ===
+                              "success" ? (
+                                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                              ) : status ===
+                                "failed" ? (
+                                <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                              ) : (
+                                <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                              )}
+                            </div>
 
-                          <p className="mt-1 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
-                            <Clock className="h-3 w-3" />
+                            <div className="min-w-0">
 
-                            {new Date(
-                              withdrawal.createdAt
-                            ).toLocaleString(
-                              "en-NG"
-                            )}
-                          </p>
+                              <p className="font-semibold text-gray-950 dark:text-white">
+                                {withdrawal.description ||
+                                  "Business withdrawal"}
+                              </p>
 
+                              <p className="mt-1 break-all text-xs text-gray-400 dark:text-gray-500">
+                                {withdrawal.reference ||
+                                  "No reference"}
+                              </p>
+
+                              <p className="mt-1 flex items-center gap-1 text-xs text-gray-400 dark:text-gray-500">
+                                <Clock className="h-3 w-3" />
+
+                                {new Date(
+                                  withdrawal.createdAt
+                                ).toLocaleString(
+                                  "en-NG"
+                                )}
+                              </p>
+
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="flex items-center justify-between gap-4 sm:block sm:text-right">
+                        <div className="flex items-center justify-between gap-5 border-t border-gray-100 pt-3 sm:block sm:border-0 sm:pt-0 sm:text-right">
 
-                          <p className="font-bold text-gray-900 dark:text-white">
+                          <p className="text-lg font-bold text-gray-950 dark:text-white">
                             {formatMoney(
                               Number(
                                 withdrawal.amount
@@ -598,18 +849,18 @@ export default function BusinessWalletPage() {
 
                           {status ===
                           "success" ? (
-                            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 sm:justify-end">
+                            <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-green-600 dark:text-green-400 sm:justify-end">
                               <CheckCircle2 className="h-3.5 w-3.5" />
                               Successful
                             </p>
                           ) : status ===
                             "failed" ? (
-                            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400 sm:justify-end">
+                            <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400 sm:justify-end">
                               <XCircle className="h-3.5 w-3.5" />
                               Failed
                             </p>
                           ) : (
-                            <p className="mt-1 flex items-center gap-1 text-xs font-medium text-yellow-600 dark:text-yellow-400 sm:justify-end">
+                            <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-yellow-600 dark:text-yellow-400 sm:justify-end">
                               <Clock className="h-3.5 w-3.5" />
                               Pending
                             </p>
@@ -631,3 +882,26 @@ export default function BusinessWalletPage() {
     </div>
   );
 }
+
+/* =========================================================
+   SMALL ICON COMPONENT
+   ========================================================= */
+
+function TrendingUpIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5 text-green-600 dark:text-green-400"
+      aria-hidden="true"
+    >
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
+    </svg>
+  );
+}
+

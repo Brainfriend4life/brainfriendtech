@@ -85,7 +85,7 @@ export default async function AdminDashboardPage() {
   ]);
 
   // =========================================================
-  // CHEAPDATAHUB PROVIDER BALANCE
+  // PROVIDER BALANCE
   // =========================================================
 
   let cheapDataHubBalance = 0;
@@ -124,7 +124,7 @@ export default async function AdminDashboardPage() {
       } else {
         cheapDataHubBalanceError =
           result?.message ||
-          "Unable to fetch CheapDataHub balance.";
+          "Unable to fetch provider balance.";
       }
     } catch (error) {
       console.error(
@@ -133,11 +133,11 @@ export default async function AdminDashboardPage() {
       );
 
       cheapDataHubBalanceError =
-        "Unable to connect to CheapDataHub.";
+        "Unable to connect to provider.";
     }
   } else {
     cheapDataHubBalanceError =
-      "CHEAPDATAHUB_API_KEY is not configured.";
+      "Provider API key is not configured.";
   }
 
   // =========================================================
@@ -178,6 +178,11 @@ export default async function AdminDashboardPage() {
     }
   }
 
+  /*
+   * Provider cost can be connected here later
+   * when the actual provider cost is stored
+   * on each transaction.
+   */
   const totalCost = 0;
 
   const totalProfit =
@@ -270,23 +275,24 @@ export default async function AdminDashboardPage() {
   ];
 
   return (
-    <div className="space-y-6 text-gray-900 dark:text-gray-100">
+    <div className="min-h-full space-y-6 bg-gray-50 px-4 py-6 text-gray-900 transition-colors dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-0">
 
       {/* =====================================================
           HEADER
       ===================================================== */}
 
       <div className="pl-14 lg:pl-0">
-        <p className="text-sm font-medium text-indigo-600 dark:text-indigo-400">
+        <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400">
           Admin Panel
         </p>
 
-        <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-3xl">
           Dashboard Overview
         </h1>
 
-        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 sm:text-base">
-          Manage Brainfriend Global Tech and monitor platform activity.
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-400 sm:text-base">
+          Manage Brainfriend Global Tech and monitor
+          platform activity.
         </p>
       </div>
 
@@ -301,12 +307,11 @@ export default async function AdminDashboardPage() {
           return (
             <div
               key={stat.title}
-              className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:shadow-none sm:p-6"
+              className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:shadow-none dark:hover:border-gray-700"
             >
               <div className="flex items-center justify-between gap-4">
-
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                     {stat.title}
                   </p>
 
@@ -322,7 +327,6 @@ export default async function AdminDashboardPage() {
                     className={`h-6 w-6 ${stat.iconColor}`}
                   />
                 </div>
-
               </div>
             </div>
           );
@@ -330,39 +334,38 @@ export default async function AdminDashboardPage() {
       </div>
 
       {/* =====================================================
-          PROVIDER BALANCE
+          PROVIDER WALLET
       ===================================================== */}
 
-      <div>
+      <section>
         <div className="mb-4">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">
             Provider Wallet
           </h2>
 
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Monitor the balance used to process customer service requests.
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Monitor the balance used to process customer
+            service requests.
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
-          {/* CHEAPDATAHUB */}
+          {/* PROVIDER BALANCE */}
 
-          <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-700 p-6 text-white shadow-sm dark:from-indigo-700 dark:to-indigo-900">
-
+          <div className="overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-600 via-indigo-600 to-indigo-700 p-6 text-white shadow-sm dark:from-indigo-700 dark:via-indigo-800 dark:to-indigo-950">
             <div className="flex items-center justify-between gap-4">
-
-              <div>
-                <p className="text-sm font-medium text-indigo-200">
-                  CheapDataHub Balance
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-indigo-100">
+                  Provider Balance
                 </p>
 
                 {cheapDataHubBalanceError ? (
-                  <p className="mt-2 text-sm font-medium text-red-200">
+                  <p className="mt-2 text-sm font-medium leading-5 text-red-100">
                     {cheapDataHubBalanceError}
                   </p>
                 ) : (
-                  <p className="mt-2 text-3xl font-bold">
+                  <p className="mt-2 break-words text-3xl font-bold tracking-tight">
                     {formatMoney(
                       cheapDataHubBalance
                     )}
@@ -370,65 +373,59 @@ export default async function AdminDashboardPage() {
                 )}
               </div>
 
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/10">
                 <Database className="h-6 w-6" />
               </div>
-
             </div>
 
-            <p className="mt-4 text-xs leading-5 text-indigo-200">
-              This is your actual CheapDataHub provider wallet balance.
-              It is separate from customer wallet balances.
+            <p className="mt-4 text-xs leading-5 text-indigo-100/90">
+              Current balance available for processing
+              customer service requests. This balance is
+              separate from customer wallet balances.
             </p>
-
           </div>
 
           {/* USER WALLET FUNDING */}
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
             <div className="flex items-center justify-between gap-4">
-
-              <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">
                   Successful User Wallet Funding
                 </p>
 
-                <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
+                <p className="mt-2 break-words text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
                   {formatMoney(
                     totalWalletFunding
                   )}
                 </p>
               </div>
 
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-100 dark:bg-green-500/15">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-100 dark:bg-green-500/15">
                 <Wallet className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
-
             </div>
 
             <p className="mt-4 text-xs leading-5 text-gray-500 dark:text-gray-400">
-              Total successful wallet funding transactions recorded
-              on the platform.
+              Total successful wallet funding transactions
+              recorded on the platform.
             </p>
-
           </div>
 
         </div>
-      </div>
+      </section>
 
       {/* =====================================================
           REVENUE / COST / PROFIT
       ===================================================== */}
 
-      <div>
-
+      <section>
         <div className="mb-4">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">
             Revenue & Profit
           </h2>
 
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
             Track money generated from platform services.
           </p>
         </div>
@@ -437,12 +434,10 @@ export default async function AdminDashboardPage() {
 
           {/* REVENUE */}
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:p-6">
-
-            <div className="flex items-center justify-between">
-
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:p-6">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">
                   Revenue
                 </p>
 
@@ -451,27 +446,23 @@ export default async function AdminDashboardPage() {
                 </p>
               </div>
 
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-100 dark:bg-green-500/15">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-green-100 dark:bg-green-500/15">
                 <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
-
             </div>
 
             <p className="mt-4 text-xs leading-5 text-gray-500 dark:text-gray-400">
-              Successful Airtime, Data, Electricity, Cable and
-              Exam PIN transactions.
+              Successful Airtime, Data, Electricity, Cable
+              and Exam PIN transactions.
             </p>
-
           </div>
 
           {/* COST */}
 
-          <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:p-6">
-
-            <div className="flex items-center justify-between">
-
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:p-6">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                <p className="text-sm font-semibold text-gray-500 dark:text-gray-400">
                   Provider Cost
                 </p>
 
@@ -480,27 +471,23 @@ export default async function AdminDashboardPage() {
                 </p>
               </div>
 
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-red-100 dark:bg-red-500/15">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-100 dark:bg-red-500/15">
                 <TrendingDown className="h-6 w-6 text-red-600 dark:text-red-400" />
               </div>
-
             </div>
 
             <p className="mt-4 text-xs leading-5 text-gray-500 dark:text-gray-400">
-              Provider costs will be calculated from the actual
-              API cost stored with each transaction.
+              Provider costs will be calculated from the
+              actual API cost stored with each transaction.
             </p>
-
           </div>
 
           {/* PROFIT */}
 
-          <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700 p-5 text-white shadow-sm dark:from-indigo-700 dark:to-purple-900 sm:p-6">
-
-            <div className="flex items-center justify-between">
-
+          <div className="rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-600 via-indigo-600 to-purple-700 p-5 text-white shadow-sm dark:from-indigo-700 dark:via-indigo-800 dark:to-purple-950 sm:p-6">
+            <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-sm font-medium text-indigo-200">
+                <p className="text-sm font-semibold text-indigo-100">
                   Estimated Profit
                 </p>
 
@@ -509,58 +496,50 @@ export default async function AdminDashboardPage() {
                 </p>
               </div>
 
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/10">
                 <PiggyBank className="h-6 w-6" />
               </div>
-
             </div>
 
-            <p className="mt-4 text-xs leading-5 text-indigo-200">
+            <p className="mt-4 text-xs leading-5 text-indigo-100/90">
               Revenue minus provider cost.
             </p>
-
           </div>
 
         </div>
-      </div>
+      </section>
 
       {/* =====================================================
           SERVICE REVENUE BREAKDOWN
       ===================================================== */}
 
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
 
-        <div className="border-b border-gray-100 p-5 dark:border-gray-800 sm:p-6">
-
+        <div className="border-b border-gray-200 p-5 dark:border-gray-800 sm:p-6">
           <h2 className="font-bold text-gray-900 dark:text-white">
             Service Revenue
           </h2>
 
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
             Revenue generated from each service.
           </p>
-
         </div>
 
-        <div className="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-800 sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-5">
+        <div className="grid grid-cols-1 divide-y divide-gray-200 dark:divide-gray-800 sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-5">
 
           {serviceBreakdown.map((service) => (
-
             <div
               key={service.type}
-              className="p-5 transition hover:bg-gray-50 dark:hover:bg-gray-800/50 sm:p-6"
+              className="p-5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 sm:p-6"
             >
-
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                 {service.name}
               </p>
 
               <p className="mt-2 text-xl font-bold text-gray-900 dark:text-white">
                 {formatMoney(service.amount)}
               </p>
-
             </div>
-
           ))}
 
         </div>
@@ -570,29 +549,31 @@ export default async function AdminDashboardPage() {
           RECENT TRANSACTIONS
       ===================================================== */}
 
-      <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
 
-        <div className="flex items-center justify-between border-b border-gray-100 p-5 dark:border-gray-800 sm:p-6">
+        <div className="flex items-center justify-between border-b border-gray-200 p-5 dark:border-gray-800 sm:p-6">
 
           <div>
             <h2 className="font-bold text-gray-900 dark:text-white">
               Recent Transactions
             </h2>
 
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
               Latest platform activity
             </p>
           </div>
 
-          <ReceiptText className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
+            <ReceiptText className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+          </div>
 
         </div>
 
-        <div className="divide-y divide-gray-100 dark:divide-gray-800">
+        <div className="divide-y divide-gray-200 dark:divide-gray-800">
 
           {recentTransactions.length === 0 ? (
 
-            <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">
+            <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
               No transactions yet.
             </div>
 
@@ -608,29 +589,26 @@ export default async function AdminDashboardPage() {
               return (
                 <div
                   key={transaction.id}
-                  className="flex flex-col gap-3 p-5 transition hover:bg-gray-50 dark:hover:bg-gray-800/50 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+                  className="flex flex-col gap-4 p-5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 sm:flex-row sm:items-center sm:justify-between sm:p-6"
                 >
 
                   <div className="min-w-0">
-
-                    <p className="truncate font-medium text-gray-900 dark:text-white">
+                    <p className="truncate font-semibold text-gray-900 dark:text-white">
                       {transaction.user.fullName}
                     </p>
 
-                    <p className="truncate text-xs text-gray-500 dark:text-gray-400">
+                    <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
                       {transaction.description}
                     </p>
 
                     <p className="mt-1 break-all text-xs text-gray-400 dark:text-gray-500">
                       {transaction.reference}
                     </p>
-
                   </div>
 
-                  <div className="flex items-center justify-between gap-4 sm:block sm:text-right">
+                  <div className="flex items-center justify-between gap-6 sm:block sm:min-w-[150px] sm:text-right">
 
                     <div>
-
                       <p className="font-bold text-gray-900 dark:text-white">
                         {formatMoney(
                           Number(
@@ -640,7 +618,7 @@ export default async function AdminDashboardPage() {
                       </p>
 
                       <p
-                        className={`mt-1 text-xs font-medium ${
+                        className={`mt-1 text-xs font-semibold ${
                           transactionStatus ===
                           "success"
                             ? "text-green-600 dark:text-green-400"
@@ -652,17 +630,14 @@ export default async function AdminDashboardPage() {
                       >
                         {transaction.status}
                       </p>
-
                     </div>
 
-                    <p className="mt-1 hidden items-center justify-end gap-1 text-xs text-gray-400 dark:text-gray-500 sm:flex">
-
+                    <p className="mt-2 hidden items-center justify-end gap-1 text-xs text-gray-400 dark:text-gray-500 sm:flex">
                       <Clock className="h-3 w-3" />
 
                       {new Date(
                         transaction.createdAt
                       ).toLocaleString("en-NG")}
-
                     </p>
 
                   </div>
@@ -680,95 +655,115 @@ export default async function AdminDashboardPage() {
           QUICK ADMIN ACTIONS
       ===================================================== */}
 
-      <div>
-
+      <section>
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">
           Administration
         </h2>
 
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
           Manage the major areas of your platform.
         </p>
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
+          {/* USERS */}
+
           <a
             href="/dashboard/admin/users"
-            className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
+            className="group rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-1 hover:border-indigo-200 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-indigo-800 dark:hover:bg-gray-900/80"
           >
-            <Users className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-500/15">
+              <Users className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+            </div>
 
             <h3 className="mt-4 font-semibold text-gray-900 dark:text-white">
               Manage Users
             </h3>
 
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">
               View and manage registered users.
             </p>
           </a>
 
+          {/* TRANSACTIONS */}
+
           <a
             href="/dashboard/admin/transactions"
-            className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
+            className="group rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-1 hover:border-blue-200 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-blue-800 dark:hover:bg-gray-900/80"
           >
-            <ReceiptText className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-500/15">
+              <ReceiptText className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+            </div>
 
             <h3 className="mt-4 font-semibold text-gray-900 dark:text-white">
               Transactions
             </h3>
 
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">
               Monitor all platform transactions.
             </p>
           </a>
 
+          {/* CBT */}
+
           <a
             href="/dashboard/admin/cbt"
-            className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
+            className="group rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-1 hover:border-purple-200 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-purple-800 dark:hover:bg-gray-900/80"
           >
-            <GraduationCap className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-100 dark:bg-purple-500/15">
+              <GraduationCap className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            </div>
 
             <h3 className="mt-4 font-semibold text-gray-900 dark:text-white">
               CBT Management
             </h3>
 
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">
               Manage exams, subjects and questions.
             </p>
           </a>
 
+          {/* RESULTS */}
+
           <a
             href="/dashboard/admin/results"
-            className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
+            className="group rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-1 hover:border-green-200 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-green-800 dark:hover:bg-gray-900/80"
           >
-            <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-green-100 dark:bg-green-500/15">
+              <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+            </div>
 
             <h3 className="mt-4 font-semibold text-gray-900 dark:text-white">
               CBT Results
             </h3>
 
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">
               Review students&apos; examination results.
             </p>
           </a>
 
+          {/* BUSINESS WALLET */}
+
           <a
             href="/dashboard/admin/business-wallet"
-            className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
+            className="group rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-1 hover:border-emerald-200 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-emerald-800 dark:hover:bg-gray-900/80"
           >
-            <Wallet className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-500/15">
+              <Wallet className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
 
             <h3 className="mt-4 font-semibold text-gray-900 dark:text-white">
               Business Wallet
             </h3>
 
-            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Manage business funds, connect bank account and withdraw profit.
+            <p className="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">
+              Manage business funds, connect bank account
+              and withdraw profit.
             </p>
           </a>
 
         </div>
-      </div>
+      </section>
 
     </div>
   );
