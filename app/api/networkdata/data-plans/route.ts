@@ -7,12 +7,6 @@ const NETWORKDATASUB_BASE_URL = "https://networkdatasub.com/api";
 
 // ============================================================
 // MARKUP
-//
-// Must match NETWORKDATASUB_MARKUP_PERCENT in
-// app/api/data/purchase/route.ts exactly, so the price shown in
-// this listing (dropdown, Plan Details) matches what the
-// purchase route will actually charge. If you change one, change
-// both — or better, move this into a shared constants file.
 // ============================================================
 
 const NETWORKDATASUB_MARKUP_PERCENT = Number(
@@ -95,7 +89,11 @@ function findPriceInObject(value: unknown, depth = 0): number {
     return direct;
   }
 
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value)
+  ) {
     return 0;
   }
 
@@ -128,9 +126,6 @@ function findPriceInObject(value: unknown, depth = 0): number {
 
     "buying_price",
     "buyingPrice",
-
-    "wholesale_price",
-    "wholesalePrice",
 
     "amount",
     "price",
@@ -217,7 +212,10 @@ function extractProviderPrice(plan: any): number {
 // SELLING PRICE
 // ============================================================
 
-function extractSellingPrice(plan: any, providerPrice: number): number {
+function extractSellingPrice(
+  plan: any,
+  providerPrice: number
+): number {
   const candidates = [
     plan.selling_price,
     plan.sellingPrice,
@@ -266,7 +264,10 @@ function toText(value: unknown, fallback = ""): string {
     return value.trim();
   }
 
-  if (typeof value === "number" || typeof value === "boolean") {
+  if (
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
     return String(value);
   }
 
@@ -324,13 +325,19 @@ function normalizeDuration(value: unknown): string {
       return `${toNumber(days)} Days`;
     }
 
-    const weeks = firstValue(object.weeks, object.week);
+    const weeks = firstValue(
+      object.weeks,
+      object.week
+    );
 
     if (weeks !== null) {
       return `${toNumber(weeks)} Weeks`;
     }
 
-    const months = firstValue(object.months, object.month);
+    const months = firstValue(
+      object.months,
+      object.month
+    );
 
     if (months !== null) {
       return `${toNumber(months)} Months`;
@@ -345,7 +352,11 @@ function normalizeDuration(value: unknown): string {
     );
 
     if (nestedValue !== null) {
-      const unit = firstValue(object.unit, object.type, object.period);
+      const unit = firstValue(
+        object.unit,
+        object.type,
+        object.period
+      );
 
       if (unit !== null) {
         return `${toText(nestedValue)} ${toText(unit)}`;
@@ -374,15 +385,25 @@ function normalizeProvider(plan: any): string {
     plan.operatorName
   );
 
-  if (typeof provider === "object" && provider !== null) {
+  if (
+    typeof provider === "object" &&
+    provider !== null &&
+    !Array.isArray(provider)
+  ) {
+    // FIX:
+    // TypeScript previously inferred this as `object`.
+    // Convert it to a Record so its properties can be accessed safely.
+    const providerObject =
+      provider as Record<string, unknown>;
+
     return toText(
       firstValue(
-        provider.name,
-        provider.network,
-        provider.network_name,
-        provider.networkName,
-        provider.title,
-        provider.code
+        providerObject.name,
+        providerObject.network,
+        providerObject.network_name,
+        providerObject.networkName,
+        providerObject.title,
+        providerObject.code
       )
     );
   }
@@ -408,7 +429,11 @@ function normalizeSize(plan: any): string {
     plan.dataVolume
   );
 
-  if (typeof size === "object" && size !== null) {
+  if (
+    typeof size === "object" &&
+    size !== null &&
+    !Array.isArray(size)
+  ) {
     const object = size as Record<string, unknown>;
 
     const value = firstValue(
@@ -420,7 +445,10 @@ function normalizeSize(plan: any): string {
       object.name
     );
 
-    const unit = firstValue(object.unit, object.type);
+    const unit = firstValue(
+      object.unit,
+      object.type
+    );
 
     if (value !== null && unit !== null) {
       return `${toText(value)} ${toText(unit)}`;
@@ -470,24 +498,33 @@ function normalizeStatus(plan: any): string {
     return status ? "ACTIVE" : "INACTIVE";
   }
 
-  if (status === null || status === undefined) {
+  if (
+    status === null ||
+    status === undefined
+  ) {
     return "ACTIVE";
   }
 
-  return toText(status, "ACTIVE").toUpperCase();
+  return toText(
+    status,
+    "ACTIVE"
+  ).toUpperCase();
 }
 
 // ============================================================
 // GET
 // ============================================================
 
-export async function GET(_request: NextRequest) {
+export async function GET(
+  _request: NextRequest
+) {
   try {
     // ========================================================
     // AUTHENTICATION
     // ========================================================
 
-    const session = await getServerSession(authOptions);
+    const session =
+      await getServerSession(authOptions);
 
     if (!session?.user?.id) {
       return NextResponse.json(
@@ -505,15 +542,19 @@ export async function GET(_request: NextRequest) {
     // API KEY
     // ========================================================
 
-    const apiKey = process.env.NETWORKDATASUB_API_KEY;
+    const apiKey =
+      process.env.NETWORKDATASUB_API_KEY;
 
     if (!apiKey) {
-      console.error("NETWORKDATASUB_API_KEY is missing.");
+      console.error(
+        "NETWORKDATASUB_API_KEY is missing."
+      );
 
       return NextResponse.json(
         {
           success: false,
-          message: "NetworkDataSub API key is not configured.",
+          message:
+            "NetworkDataSub API key is not configured.",
         },
         {
           status: 500,
@@ -525,35 +566,47 @@ export async function GET(_request: NextRequest) {
     // FETCH PLANS
     // ========================================================
 
-    const response = await fetch(`${NETWORKDATASUB_BASE_URL}/data/all-plans`, {
-      method: "GET",
+    const response = await fetch(
+      `${NETWORKDATASUB_BASE_URL}/data/all-plans`,
+      {
+        method: "GET",
 
-      headers: {
-        Authorization: `Token ${apiKey}`,
+        headers: {
+          Authorization: `Token ${apiKey}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
 
-        Accept: "application/json",
+        cache: "no-store",
 
-        "Content-Type": "application/json",
-      },
-
-      cache: "no-store",
-
-      signal: AbortSignal.timeout(30000),
-    });
+        signal: AbortSignal.timeout(30000),
+      }
+    );
 
     // ========================================================
     // READ RESPONSE
     // ========================================================
 
-    const responseText = await response.text();
+    const responseText =
+      await response.text();
 
-    console.log("======================================");
+    console.log(
+      "======================================"
+    );
 
-    console.log("NETWORKDATASUB DATA PLANS STATUS:", response.status);
+    console.log(
+      "NETWORKDATASUB DATA PLANS STATUS:",
+      response.status
+    );
 
-    console.log("NETWORKDATASUB DATA PLANS RESPONSE:", responseText);
+    console.log(
+      "NETWORKDATASUB DATA PLANS RESPONSE:",
+      responseText
+    );
 
-    console.log("======================================");
+    console.log(
+      "======================================"
+    );
 
     // ========================================================
     // PARSE RESPONSE
@@ -562,14 +615,20 @@ export async function GET(_request: NextRequest) {
     let result: any = null;
 
     try {
-      result = responseText.trim() ? JSON.parse(responseText) : null;
+      result = responseText.trim()
+        ? JSON.parse(responseText)
+        : null;
     } catch (error) {
-      console.error("NETWORKDATASUB JSON PARSE ERROR:", error);
+      console.error(
+        "NETWORKDATASUB JSON PARSE ERROR:",
+        error
+      );
 
       return NextResponse.json(
         {
           success: false,
-          message: "NetworkDataSub returned invalid JSON.",
+          message:
+            "NetworkDataSub returned invalid JSON.",
         },
         {
           status: 502,
@@ -581,7 +640,8 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: "NetworkDataSub returned an empty response.",
+          message:
+            "NetworkDataSub returned an empty response.",
         },
         {
           status: 502,
@@ -593,7 +653,10 @@ export async function GET(_request: NextRequest) {
     // PROVIDER ERROR
     // ========================================================
 
-    if (!response.ok || result.success === false) {
+    if (
+      !response.ok ||
+      result.success === false
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -603,13 +666,16 @@ export async function GET(_request: NextRequest) {
             result.error ||
             "Unable to retrieve NetworkDataSub data plans.",
 
-          providerStatus: response.status,
+          providerStatus:
+            response.status,
 
-          providerResponse: result,
+          providerResponse:
+            result,
         },
         {
           status:
-            response.status >= 400 && response.status <= 599
+            response.status >= 400 &&
+            response.status <= 599
               ? response.status
               : 502,
         }
@@ -620,272 +686,352 @@ export async function GET(_request: NextRequest) {
     // FIND RAW PLANS
     // ========================================================
 
-    const rawPlans = Array.isArray(result.data)
-      ? result.data
-      : Array.isArray(result.data?.plans)
-      ? result.data.plans
-      : Array.isArray(result.data?.data)
-      ? result.data.data
-      : Array.isArray(result.plans)
-      ? result.plans
-      : Array.isArray(result.results)
-      ? result.results
-      : Array.isArray(result)
-      ? result
-      : [];
+    const rawPlans =
+      Array.isArray(result.data)
+        ? result.data
+        : Array.isArray(result.data?.plans)
+        ? result.data.plans
+        : Array.isArray(result.data?.data)
+        ? result.data.data
+        : Array.isArray(result.plans)
+        ? result.plans
+        : Array.isArray(result.results)
+        ? result.results
+        : Array.isArray(result)
+        ? result
+        : [];
 
-    console.log("NETWORKDATASUB RAW PLAN COUNT:", rawPlans.length);
+    console.log(
+      "NETWORKDATASUB RAW PLAN COUNT:",
+      rawPlans.length
+    );
 
     // ========================================================
     // NORMALIZE PLANS
     // ========================================================
 
-    const plans: NormalizedPlan[] = rawPlans
-      .map((plan: any, index: number) => {
-        // ------------------------------------------------
-        // DATABASE ID
-        // ------------------------------------------------
+    const plans: NormalizedPlan[] =
+      rawPlans
+        .map(
+          (
+            plan: any,
+            index: number
+          ) => {
+            // ------------------------------------------------
+            // DATABASE ID
+            // ------------------------------------------------
 
-        const rawId = firstValue(
-          plan.id,
-          plan.bundle_id,
-          plan.bundleId,
-          plan.plan_id,
-          plan.planId,
-          plan.api_plan_id,
-          plan.apiPlanId
+            const rawId =
+              firstValue(
+                plan.id,
+                plan.bundle_id,
+                plan.bundleId,
+                plan.plan_id,
+                plan.planId,
+                plan.api_plan_id,
+                plan.apiPlanId
+              );
+
+            // ------------------------------------------------
+            // BUNDLE ID
+            // ------------------------------------------------
+
+            const rawBundleId =
+              firstValue(
+                plan.bundle_id,
+                plan.bundleId
+              );
+
+            // ------------------------------------------------
+            // PLAN ID
+            // ------------------------------------------------
+
+            const rawPlanId =
+              firstValue(
+                plan.plan_id,
+                plan.planId
+              );
+
+            const planId =
+              rawPlanId !== null &&
+              Number.isFinite(
+                toNumber(
+                  rawPlanId,
+                  NaN
+                )
+              )
+                ? toNumber(
+                    rawPlanId,
+                    0
+                  )
+                : null;
+
+            // ------------------------------------------------
+            // API PLAN ID
+            // ------------------------------------------------
+
+            const rawApiPlanId =
+              firstValue(
+                plan.api_plan_id,
+                plan.apiPlanId
+              );
+
+            const parsedApiPlanId =
+              rawApiPlanId !== null &&
+              Number.isFinite(
+                toNumber(
+                  rawApiPlanId,
+                  NaN
+                )
+              )
+                ? toNumber(
+                    rawApiPlanId,
+                    0
+                  )
+                : null;
+
+            // ------------------------------------------------
+            // BUNDLE ID FALLBACK
+            // ------------------------------------------------
+
+            const bundleId =
+              rawBundleId !== null
+                ? toNumber(
+                    rawBundleId,
+                    0
+                  )
+                : planId !== null
+                ? planId
+                : parsedApiPlanId !== null
+                ? parsedApiPlanId
+                : 0;
+
+            const apiPlanId =
+              parsedApiPlanId !== null
+                ? parsedApiPlanId
+                : planId !== null
+                ? planId
+                : bundleId > 0
+                ? bundleId
+                : null;
+
+            // ------------------------------------------------
+            // NETWORK ID
+            // ------------------------------------------------
+
+            const rawNetworkId =
+              firstValue(
+                plan.network_id,
+                plan.networkId,
+
+                typeof plan.network ===
+                  "object" &&
+                plan.network !== null &&
+                !Array.isArray(plan.network)
+                  ? (
+                      plan.network as Record<
+                        string,
+                        unknown
+                      >
+                    ).id
+                  : null
+              );
+
+            const networkId =
+              rawNetworkId !== null &&
+              Number.isFinite(
+                toNumber(
+                  rawNetworkId,
+                  NaN
+                )
+              )
+                ? toNumber(
+                    rawNetworkId,
+                    0
+                  )
+                : null;
+
+            // ------------------------------------------------
+            // BASIC INFORMATION
+            // ------------------------------------------------
+
+            const provider =
+              normalizeProvider(plan);
+
+            const name =
+              normalizeName(plan);
+
+            const size =
+              normalizeSize(plan);
+
+            const duration =
+              normalizeDuration(
+                firstValue(
+                  plan.duration,
+                  plan.validity,
+                  plan.validity_period,
+                  plan.validityPeriod,
+                  plan.duration_period,
+                  plan.durationPeriod
+                )
+              );
+
+            const status =
+              normalizeStatus(plan);
+
+            // ------------------------------------------------
+            // PRICES
+            // ------------------------------------------------
+
+            const providerPrice =
+              extractProviderPrice(plan);
+
+            let sellingPrice =
+              extractSellingPrice(
+                plan,
+                providerPrice
+              );
+
+            // ------------------------------------------------
+            // MARKUP
+            // ------------------------------------------------
+
+            if (
+              providerPrice > 0 &&
+              sellingPrice ===
+                providerPrice &&
+              NETWORKDATASUB_MARKUP_PERCENT > 0
+            ) {
+              sellingPrice =
+                Number(
+                  (
+                    providerPrice *
+                    (
+                      1 +
+                      NETWORKDATASUB_MARKUP_PERCENT /
+                        100
+                    )
+                  ).toFixed(2)
+                );
+            }
+
+            // ------------------------------------------------
+            // FRONTEND ID
+            // ------------------------------------------------
+
+            const finalId =
+              rawId !== null
+                ? String(rawId)
+                : `networkdatasub-${index}`;
+
+            // ------------------------------------------------
+            // DEBUG
+            // ------------------------------------------------
+
+            if (index < 10) {
+              console.log(
+                "NETWORKDATASUB NORMALIZED PLAN:",
+                {
+                  finalId,
+
+                  provider,
+
+                  bundleId,
+
+                  planId,
+
+                  apiPlanId,
+
+                  networkId,
+
+                  name,
+
+                  size,
+
+                  duration,
+
+                  providerPrice,
+
+                  sellingPrice,
+
+                  status,
+                }
+              );
+            }
+
+            return {
+              id: finalId,
+
+              provider,
+
+              bundleId,
+
+              planId,
+
+              apiPlanId,
+
+              networkId,
+
+              name,
+
+              size,
+
+              duration,
+
+              providerPrice,
+
+              sellingPrice,
+
+              status,
+
+              raw: plan,
+            };
+          }
+        )
+        .filter(
+          (
+            plan: NormalizedPlan
+          ) =>
+            plan.bundleId > 0 &&
+            plan.provider !== "" &&
+            plan.name !== ""
         );
-
-        // ------------------------------------------------
-        // BUNDLE ID
-        // ------------------------------------------------
-
-        const rawBundleId = firstValue(plan.bundle_id, plan.bundleId);
-
-        // ------------------------------------------------
-        // PLAN ID
-        // ------------------------------------------------
-
-        const rawPlanId = firstValue(plan.plan_id, plan.planId);
-
-        const planId =
-          rawPlanId !== null && Number.isFinite(toNumber(rawPlanId, NaN))
-            ? toNumber(rawPlanId, 0)
-            : null;
-
-        // ------------------------------------------------
-        // API PLAN ID
-        //
-        // Per NetworkDataSub's own docs (Purchase Data endpoint):
-        // "data_plan_id ... can be api_plan_id or plan_id" — these
-        // are interchangeable aliases for the same purchase ID, not
-        // two distinct concepts. When the provider doesn't send a
-        // literal api_plan_id/apiPlanId field, fall back to planId
-        // (then bundleId) instead of leaving this null, since a
-        // usable ID already exists.
-        // ------------------------------------------------
-
-        const rawApiPlanId = firstValue(plan.api_plan_id, plan.apiPlanId);
-
-        const parsedApiPlanId =
-          rawApiPlanId !== null && Number.isFinite(toNumber(rawApiPlanId, NaN))
-            ? toNumber(rawApiPlanId, 0)
-            : null;
-
-        // ------------------------------------------------
-        // BUNDLE ID FALLBACK
-        //
-        // Based on the response you showed:
-        //
-        // id = 212
-        // bundleId = 240
-        // planId = 240
-        //
-        // The purchase ID we want to preserve is 240.
-        // ------------------------------------------------
-
-        const bundleId =
-          rawBundleId !== null
-            ? toNumber(rawBundleId, 0)
-            : planId !== null
-            ? planId
-            : parsedApiPlanId !== null
-            ? parsedApiPlanId
-            : 0;
-
-        const apiPlanId =
-          parsedApiPlanId !== null
-            ? parsedApiPlanId
-            : planId !== null
-            ? planId
-            : bundleId > 0
-            ? bundleId
-            : null;
-
-        // ------------------------------------------------
-        // NETWORK ID
-        // ------------------------------------------------
-
-        const rawNetworkId = firstValue(
-          plan.network_id,
-          plan.networkId,
-
-          typeof plan.network === "object" ? plan.network?.id : null
-        );
-
-        const networkId =
-          rawNetworkId !== null && Number.isFinite(toNumber(rawNetworkId, NaN))
-            ? toNumber(rawNetworkId, 0)
-            : null;
-
-        // ------------------------------------------------
-        // BASIC INFORMATION
-        // ------------------------------------------------
-
-        const provider = normalizeProvider(plan);
-
-        const name = normalizeName(plan);
-
-        const size = normalizeSize(plan);
-
-        const duration = normalizeDuration(
-          firstValue(
-            plan.duration,
-            plan.validity,
-            plan.validity_period,
-            plan.validityPeriod,
-            plan.duration_period,
-            plan.durationPeriod
-          )
-        );
-
-        const status = normalizeStatus(plan);
-
-        // ------------------------------------------------
-        // PRICES
-        // ------------------------------------------------
-
-        const providerPrice = extractProviderPrice(plan);
-
-        let sellingPrice = extractSellingPrice(plan, providerPrice);
-
-        // ------------------------------------------------
-        // MARKUP FIX
-        //
-        // NetworkDataSub's /data/all-plans response only exposes
-        // ONE price field per plan — extractSellingPrice() has
-        // nothing distinct to find, so it falls back to
-        // providerPrice, and sellingPrice ends up identical (e.g.
-        // MTN SME 500MB: 360 / 360 — zero margin).
-        //
-        // Apply the same markup used in the purchase route so this
-        // listing shows the price customers will actually be
-        // charged (before the service fee, which is added
-        // separately at checkout).
-        // ------------------------------------------------
-
-        if (
-          providerPrice > 0 &&
-          sellingPrice === providerPrice &&
-          NETWORKDATASUB_MARKUP_PERCENT > 0
-        ) {
-          sellingPrice = Number(
-            (providerPrice * (1 + NETWORKDATASUB_MARKUP_PERCENT / 100)).toFixed(2)
-          );
-        }
-
-        // ------------------------------------------------
-        // FRONTEND ID
-        // ------------------------------------------------
-
-        const finalId = rawId !== null ? String(rawId) : `networkdatasub-${index}`;
-
-        // ------------------------------------------------
-        // DEBUG
-        // ------------------------------------------------
-
-        if (index < 10) {
-          console.log("NETWORKDATASUB NORMALIZED PLAN:", {
-            finalId,
-
-            provider,
-
-            bundleId,
-
-            planId,
-
-            apiPlanId,
-
-            networkId,
-
-            name,
-
-            size,
-
-            duration,
-
-            providerPrice,
-
-            sellingPrice,
-
-            status,
-          });
-        }
-
-        return {
-          id: finalId,
-
-          provider,
-
-          bundleId,
-
-          planId,
-
-          apiPlanId,
-
-          networkId,
-
-          name,
-
-          size,
-
-          duration,
-
-          providerPrice,
-
-          sellingPrice,
-
-          status,
-
-          raw: plan,
-        };
-      })
-      .filter(
-        (plan: NormalizedPlan) =>
-          plan.bundleId > 0 && plan.provider !== "" && plan.name !== ""
-      );
 
     // ========================================================
     // PRICE SUMMARY
     // ========================================================
 
-    const plansWithPrices = plans.filter((plan) => plan.providerPrice > 0).length;
+    const plansWithPrices =
+      plans.filter(
+        (plan) =>
+          plan.providerPrice > 0
+      ).length;
 
-    const plansWithoutPrices = plans.filter(
-      (plan) => plan.providerPrice <= 0
-    ).length;
+    const plansWithoutPrices =
+      plans.filter(
+        (plan) =>
+          plan.providerPrice <= 0
+      ).length;
 
-    console.log("======================================");
+    console.log(
+      "======================================"
+    );
 
-    console.log("NETWORKDATASUB PRICE SUMMARY:", {
-      totalPlans: plans.length,
+    console.log(
+      "NETWORKDATASUB PRICE SUMMARY:",
+      {
+        totalPlans:
+          plans.length,
 
-      plansWithPrices,
+        plansWithPrices,
 
-      plansWithoutPrices,
-    });
+        plansWithoutPrices,
+      }
+    );
 
-    console.log("======================================");
+    console.log(
+      "======================================"
+    );
 
     // ========================================================
     // SUCCESS
@@ -895,11 +1041,13 @@ export async function GET(_request: NextRequest) {
       {
         success: true,
 
-        provider: "NetworkDataSub",
+        provider:
+          "NetworkDataSub",
 
         data: plans,
 
-        count: plans.length,
+        count:
+          plans.length,
 
         priceSummary: {
           plansWithPrices,
@@ -911,24 +1059,36 @@ export async function GET(_request: NextRequest) {
         status: 200,
 
         headers: {
-          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Cache-Control":
+            "no-store, no-cache, must-revalidate",
         },
       }
     );
   } catch (error: any) {
-    console.error("======================================");
+    console.error(
+      "======================================"
+    );
 
-    console.error("NETWORKDATASUB DATA PLANS ERROR:", error?.message || error);
+    console.error(
+      "NETWORKDATASUB DATA PLANS ERROR:",
+      error?.message || error
+    );
 
-    console.error(error?.stack || "");
+    console.error(
+      error?.stack || ""
+    );
 
-    console.error("======================================");
+    console.error(
+      "======================================"
+    );
 
     return NextResponse.json(
       {
         success: false,
 
-        message: error?.message || "Unable to load NetworkDataSub data plans.",
+        message:
+          error?.message ||
+          "Unable to load NetworkDataSub data plans.",
       },
       {
         status: 500,
