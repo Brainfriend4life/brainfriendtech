@@ -16,11 +16,11 @@ export async function networkDataSubRequest<T>(
   data: T;
 }> {
   const apiToken =
-    process.env.NETWORKDATASUB_API_TOKEN;
+    process.env.NETWORKDATASUB_API_KEY;
 
   if (!apiToken) {
     throw new Error(
-      "NETWORKDATASUB_API_TOKEN is not configured."
+      "NETWORKDATASUB_API_KEY is not configured."
     );
   }
 
@@ -34,7 +34,7 @@ export async function networkDataSubRequest<T>(
       Accept: "application/json",
       "Content-Type": "application/json",
 
-      Authorization: `Token ${apiToken}`,
+      Authorization: `Token ${apiKey}`,
 
       ...(options.headers || {}),
     },
