@@ -28,6 +28,34 @@ const NETWORKDATASUB_PURCHASE_URL =
   `${NETWORKDATASUB_BASE_URL}/data/purchase`;
 
 // ============================================================
+// SMEPLUG
+// ============================================================
+
+const SMEPLUG_BASE_URL = "https://smeplug.ng/api/v1";
+
+const SMEPLUG_PLANS_URL = `${SMEPLUG_BASE_URL}/data/plans`;
+
+const SMEPLUG_PURCHASE_URL = `${SMEPLUG_BASE_URL}/data/purchase`;
+
+// Confirmed from SMEPlug's /api/v1/networks endpoint.
+// NOTE: Glo is 4, not 3 — this is NOT the usual convention.
+const SMEPLUG_NETWORK_NAMES: Record<number, string> = {
+  1: "mtn",
+  2: "airtel",
+  3: "9mobile",
+  4: "glo",
+};
+
+// 9mobile intentionally excluded per business decision.
+const SMEPLUG_ENABLED_NETWORK_IDS = [1, 2, 4];
+
+// Applied only when SMEPlug doesn't return a distinct selling
+// price separate from their cost price.
+const SMEPLUG_MARKUP_PERCENT = Number(
+  process.env.SMEPLUG_MARKUP_PERCENT ?? 5
+);
+
+// ============================================================
 // SETTINGS
 // ============================================================
 
@@ -1116,6 +1144,100 @@ function matchesNetworkDataSubPlan(
 }
 
 // ============================================================
+// SMEPLUG PLAN NORMALIZER / MATCHER
+// ============================================================
+
+function getSmePlugPlanId(
+  plan: any
+): string | number | null {
+  const candidates = [
+    plan.plan_id,
+    plan.planId,
+    plan.id,
+    plan.variation_id,
+    plan.code,
+  ];
+
+  for (const value of candidates) {
+    if (
+      value === undefined ||
+      value === null ||
+      value === ""
+    ) {
+      continue;
+    }
+
+    const numeric = toNumber(value, NaN);
+
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric;
+    }
+
+    if (typeof value === "string" && value.trim() !== "") {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function matchesSmePlugPlan(
+  plan: any,
+  requestedId: number | string
+): boolean {
+  const ids = [
+    plan.plan_id,
+    plan.planId,
+    plan.id,
+    plan.variation_id,
+    plan.code,
+  ];
+
+  return ids.some(
+    (value) =>
+      value !== undefined &&
+      value !== null &&
+      String(value).trim() === String(requestedId).trim()
+  );
+}
+
+function extractSmePlugSizeFromName(name: string): string {
+  const match = name.match(/(\d+(?:\.\d+)?\s?(?:GB|MB|TB))/i);
+  return match ? match[1].replace(/\s+/g, "") : "";
+}
+
+function extractSmePlugDurationFromName(name: string): string {
+  const match = name.match(
+    /(\d+\s?(?:day|days|week|weeks|month|months|year|years))/i
+  );
+  return match ? match[1].trim() : "";
+}
+
+// IMPORTANT: SMEPlug's `price` field (their "Wallet Price") is
+// inconsistently populated — many legitimate, purchasable plans
+// (dispense_method: "SIM") have price = 0 while telco_price is
+// always populated and matches their dashboard's "Network Price"
+// column. telco_price is the real, reliable cost — always prefer it.
+function extractSmePlugProviderPrice(plan: any): number {
+  const candidates = [
+    plan.telco_price,
+    plan.network_price,
+    plan.cost,
+    plan.price,
+    plan.amount,
+  ];
+
+  for (const candidate of candidates) {
+    const value = extractNumber(candidate, NaN);
+
+    if (Number.isFinite(value) && value > 0) {
+      return value;
+    }
+  }
+
+  return 0;
+}
+// ============================================================
 // REFERRAL COMMISSION
 // ============================================================
 
@@ -1437,6 +1559,154 @@ async function getNetworkDataSubPlan(
 
     status:
       normalizeStatus(plan),
+  };
+}
+
+// ============================================================
+// SMEPLUG PLANS
+// ============================================================
+
+async function getSmePlugPlans(
+  apiKey: string
+): Promise<Record<number, any[]>> {
+  const response = await fetch(SMEPLUG_PLANS_URL, {
+    method: "GET",
+
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: "application/json",
+    },
+
+    cache: "no-store",
+
+    signal: AbortSignal.timeout(30000),
+  });
+
+  const responseText = await response.text();
+
+  console.log("SMEPLUG PLANS STATUS:", response.status);
+
+  console.log("SMEPLUG PLANS RESPONSE:", responseText);
+
+  let result: any = null;
+
+  try {
+    result = responseText.trim() ? JSON.parse(responseText) : null;
+  } catch (error) {
+    console.error("SMEPLUG PLANS JSON ERROR:", error);
+  }
+
+  if (!result) {
+    throw new Error(
+      "SMEPlug returned an invalid plans response."
+    );
+  }
+
+  if (!response.ok || result.status === false) {
+    throw new Error(
+      result.msg ||
+        result.message ||
+        "Unable to retrieve SMEPlug data plans."
+    );
+  }
+
+  const grouped =
+    result.data && typeof result.data === "object"
+      ? result.data
+      : {};
+
+  const normalizedGroups: Record<number, any[]> = {};
+
+  for (const key of Object.keys(grouped)) {
+    const networkId = Number(key);
+
+    if (!Number.isFinite(networkId)) {
+      continue;
+    }
+
+    normalizedGroups[networkId] = Array.isArray(
+      grouped[key]
+    )
+      ? grouped[key]
+      : [];
+  }
+
+  return normalizedGroups;
+}
+
+// ============================================================
+// GET SMEPLUG PLAN
+// ============================================================
+
+async function getSmePlugPlan(
+  apiKey: string,
+  networkId: number,
+  requestedPlanId: number | string
+) {
+  const grouped = await getSmePlugPlans(apiKey);
+
+  const rawPlans = grouped[networkId] || [];
+
+  const plan = rawPlans.find((item) =>
+    matchesSmePlugPlan(item, requestedPlanId)
+  );
+
+   if (!plan) {
+    return null;
+  }
+
+  const name = String(
+    firstValue(plan.name, plan.plan, plan.plan_name, plan.title) ?? ""
+  ).trim();
+
+  const size = extractSmePlugSizeFromName(name) || name;
+
+  const duration = extractSmePlugDurationFromName(name);
+
+  const providerPrice = extractSmePlugProviderPrice(plan);
+
+  if (!(providerPrice > 0)) {
+    return null;
+  }
+
+  // We compute our own selling price — SMEPlug's `price` field
+  // is not reliable enough to use directly (many legitimate
+  // SIM-dispensed plans have price = 0 while telco_price is
+  // always populated). See extractSmePlugProviderPrice below.
+  const sellingPrice =
+    SMEPLUG_MARKUP_PERCENT > 0
+      ? Number(
+          (
+            providerPrice *
+            (1 + SMEPLUG_MARKUP_PERCENT / 100)
+          ).toFixed(2)
+        )
+      : providerPrice;
+
+  const planId = getSmePlugPlanId(plan);
+
+  return {
+    raw: plan,
+
+    id: String(planId ?? requestedPlanId),
+
+    planId,
+
+    networkId,
+
+    provider: SMEPLUG_NETWORK_NAMES[networkId] || "unknown",
+
+    name,
+
+    size,
+
+    duration,
+
+    providerPrice,
+
+    sellingPrice,
+
+    status: normalizeStatus(plan),
   };
 }
 
@@ -2536,6 +2806,703 @@ async function processNetworkDataSubPurchase(
 }
 
 // ============================================================
+// PROCESS SMEPLUG
+// ============================================================
+
+async function processSmePlugPurchase(
+  userId: string,
+  body: any
+) {
+  const apiKey = process.env.SMEPLUG_API_KEY;
+
+  if (!apiKey) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "SMEPlug API key is not configured.",
+      },
+      { status: 500 }
+    );
+  }
+
+  const rawNetworkId = body?.network_id ?? body?.networkId;
+
+  const networkId = Number(rawNetworkId);
+
+  if (
+    !Number.isInteger(networkId) ||
+    !SMEPLUG_ENABLED_NETWORK_IDS.includes(networkId)
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Invalid or unsupported SMEPlug network.",
+        receivedNetworkId: rawNetworkId,
+      },
+      { status: 400 }
+    );
+  }
+
+  const rawPlanId =
+    body?.plan_id ??
+    body?.planId ??
+    body?.data_plan_id ??
+    body?.dataPlanId;
+
+  if (
+    rawPlanId === undefined ||
+    rawPlanId === null ||
+    rawPlanId === ""
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Invalid SMEPlug data plan.",
+        receivedPlanId: rawPlanId,
+      },
+      { status: 400 }
+    );
+  }
+
+  const rawPhoneNumber =
+    body?.phone_number ??
+    body?.phoneNumber ??
+    body?.phone;
+
+  const cleanedPhone = normalizePhone(rawPhoneNumber);
+
+  if (!/^0\d{10}$/.test(cleanedPhone)) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Please enter a valid Nigerian phone number.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const user = await getActiveUser(userId);
+
+  if (!user) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "User not found.",
+      },
+      { status: 404 }
+    );
+  }
+
+  if (user.status !== "ACTIVE") {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Your account is not active.",
+      },
+      { status: 403 }
+    );
+  }
+
+  const transactionPin =
+    body?.transactionPin ??
+    body?.transaction_pin;
+
+  if (!transactionPin) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Transaction PIN is required.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const pinResult = await verifyTransactionPin(
+    user.id,
+    String(transactionPin)
+  );
+
+  if (!pinResult.success) {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          pinResult.message ||
+          "Invalid transaction PIN.",
+      },
+      { status: 403 }
+    );
+  }
+
+  const plan = await getSmePlugPlan(
+    apiKey,
+    networkId,
+    rawPlanId
+  );
+
+  if (!plan) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Invalid data plan.",
+        receivedPlanId: rawPlanId,
+      },
+      { status: 400 }
+    );
+  }
+
+  if (
+    plan.status !== "ACTIVE" &&
+    plan.status !== "ENABLED"
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "This data plan is currently unavailable.",
+      },
+      { status: 400 }
+    );
+  }
+
+  const providerCost = Number(plan.providerPrice);
+
+  const basePrice = Number(plan.sellingPrice);
+
+  if (
+    !Number.isFinite(providerCost) ||
+    providerCost <= 0
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Invalid SMEPlug provider price.",
+      },
+      { status: 500 }
+    );
+  }
+
+  if (
+    !Number.isFinite(basePrice) ||
+    basePrice <= 0
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Invalid SMEPlug selling price.",
+      },
+      { status: 500 }
+    );
+  }
+
+  const pricing = await calculatePurchasePricing({
+    basePrice,
+    providerCost,
+    hasReferrer: Boolean(user.referredBy),
+  });
+
+  const {
+    serviceFeePercentage,
+    serviceFee,
+    amount,
+    referralPercentage,
+    grossProfit,
+    referralCommission,
+    profit,
+  } = pricing;
+
+  const walletBalance = Number(user.walletBalance);
+
+  if (
+    !Number.isFinite(walletBalance) ||
+    walletBalance < amount
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Insufficient wallet balance.",
+        balance: walletBalance,
+        required: amount,
+        basePrice,
+        serviceFeePercentage,
+        serviceFee,
+        totalAmount: amount,
+      },
+      { status: 400 }
+    );
+  }
+
+  const reference =
+    `DATA-SMP-${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(2, 8)
+      .toUpperCase()}`;
+
+  const transaction = await prisma.transaction.create({
+    data: {
+      userId: user.id,
+
+      type: "DATA",
+
+      amount,
+
+      reference,
+
+      status: "PENDING",
+
+      provider: "SMEPlug",
+
+      cost: providerCost,
+
+      profit,
+
+      description: `${plan.provider.toUpperCase()} ${
+        plan.size || plan.name
+      } ${plan.duration} for ${cleanedPhone}`,
+    },
+  });
+
+  const providerBody = {
+    network_id: networkId,
+
+    plan_id: plan.planId ?? rawPlanId,
+
+    phone: cleanedPhone,
+  };
+
+  let providerResponse: Response;
+
+  try {
+    providerResponse = await fetch(
+      SMEPLUG_PURCHASE_URL,
+      {
+        method: "POST",
+
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+
+          "Content-Type": "application/json",
+
+          Accept: "application/json",
+        },
+
+        body: JSON.stringify(providerBody),
+
+        cache: "no-store",
+
+        signal: AbortSignal.timeout(30000),
+      }
+    );
+  } catch (error: any) {
+    await prisma.transaction.update({
+      where: { id: transaction.id },
+
+      data: {
+        status: "FAILED",
+        cost: 0,
+        profit: 0,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Unable to connect to SMEPlug.",
+        error:
+          error?.message ||
+          "Provider connection failed.",
+      },
+      { status: 502 }
+    );
+  }
+
+  const responseText = await providerResponse.text();
+
+  let providerResult: any = null;
+
+  try {
+    providerResult = responseText.trim()
+      ? JSON.parse(responseText)
+      : null;
+  } catch (error) {
+    console.error("SMEPLUG JSON ERROR:", error);
+  }
+
+  if (!providerResult) {
+    await prisma.transaction.update({
+      where: { id: transaction.id },
+
+      data: {
+        status: "FAILED",
+        cost: 0,
+        profit: 0,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        success: false,
+        message: "SMEPlug returned an invalid response.",
+        providerStatus: providerResponse.status,
+      },
+      { status: 502 }
+    );
+  }
+
+  if (
+    !providerResponse.ok ||
+    !isProviderSuccess(providerResult)
+  ) {
+    await prisma.transaction.update({
+      where: { id: transaction.id },
+
+      data: {
+        status: "FAILED",
+        cost: 0,
+        profit: 0,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        success: false,
+
+        message:
+          providerResult?.msg ||
+          providerResult?.message ||
+          providerResult?.error ||
+          "SMEPlug data purchase failed.",
+
+        providerStatus: providerResponse.status,
+
+        providerResponse: providerResult,
+      },
+      {
+        status:
+          providerResponse.status >= 400 &&
+          providerResponse.status <= 599
+            ? providerResponse.status
+            : 400,
+      }
+    );
+  }
+
+  const providerData = providerResult?.data || {};
+
+  const providerReference =
+    providerData?.reference ??
+    providerData?.transaction_id ??
+    providerData?.transactionId ??
+    providerResult?.reference ??
+    null;
+
+  let result: any;
+
+  try {
+    result = await prisma.$transaction(
+      async (tx) => {
+        const currentUser = await tx.user.findUnique({
+          where: { id: user.id },
+        });
+
+        if (!currentUser) {
+          throw new Error("User not found.");
+        }
+
+        const currentBalance = Number(
+          currentUser.walletBalance
+        );
+
+        if (
+          !Number.isFinite(currentBalance) ||
+          currentBalance < amount
+        ) {
+          throw new Error(
+            "Insufficient wallet balance."
+          );
+        }
+
+        let businessWallet =
+          await tx.businessWallet.findUnique({
+            where: { name: "Brainfriend Global Tech" },
+          });
+
+        if (!businessWallet) {
+          businessWallet =
+            await tx.businessWallet.create({
+              data: {
+                name: "Brainfriend Global Tech",
+                balance: 0,
+                totalRevenue: 0,
+                totalCost: 0,
+                totalProfit: 0,
+                withdrawnProfit: 0,
+                availableProfit: 0,
+              },
+            });
+        }
+
+        const newUserBalance = Number(
+          (currentBalance - amount).toFixed(2)
+        );
+
+        const newBusinessBalance = Number(
+          (
+            Number(businessWallet.balance) + profit
+          ).toFixed(2)
+        );
+
+        const newTotalRevenue = Number(
+          (
+            Number(businessWallet.totalRevenue) +
+            amount
+          ).toFixed(2)
+        );
+
+        const newTotalCost = Number(
+          (
+            Number(businessWallet.totalCost) +
+            providerCost
+          ).toFixed(2)
+        );
+
+        const newTotalProfit = Number(
+          (
+            Number(businessWallet.totalProfit) +
+            profit
+          ).toFixed(2)
+        );
+
+        const newAvailableProfit = Number(
+          (
+            Number(
+              businessWallet.availableProfit
+            ) + profit
+          ).toFixed(2)
+        );
+
+        await tx.user.update({
+          where: { id: user.id },
+
+          data: { walletBalance: newUserBalance },
+        });
+
+        await tx.businessWallet.update({
+          where: { id: businessWallet.id },
+
+          data: {
+            balance: newBusinessBalance,
+            totalRevenue: newTotalRevenue,
+            totalCost: newTotalCost,
+            totalProfit: newTotalProfit,
+            availableProfit: newAvailableProfit,
+          },
+        });
+
+        await tx.businessRevenue.create({
+          data: {
+            transactionId: transaction.id,
+
+            type: "DATA",
+
+            provider: "SMEPlug",
+
+            amount,
+
+            cost: providerCost,
+
+            profit,
+
+            reference,
+
+            description: `${plan.provider.toUpperCase()} ${
+              plan.size || plan.name
+            } ${plan.duration} for ${cleanedPhone} + ${serviceFeePercentage}% service fee`,
+
+            businessWalletId: businessWallet.id,
+          },
+        });
+
+        if (
+          user.referredBy &&
+          referralCommission > 0
+        ) {
+          await tx.user.update({
+            where: { id: user.referredBy.id },
+
+            data: {
+              referralBalance: {
+                increment: referralCommission,
+              },
+            },
+          });
+
+          await tx.referralEarning.create({
+            data: {
+              referrerId: user.referredBy.id,
+
+              referredUserId: user.id,
+
+              transactionId: transaction.id,
+
+              amount: referralCommission,
+
+              percentage: referralPercentage,
+
+              transactionAmount: basePrice,
+
+              type: "DATA",
+
+              status: "SUCCESS",
+
+              description: `Referral earning from ${
+                user.fullName
+              }'s ${plan.provider.toUpperCase()} ${
+                plan.size || plan.name
+              } SMEPlug data purchase of ₦${basePrice}`,
+
+              reference: `REF-${reference}`,
+            },
+          });
+        }
+
+        await tx.transaction.update({
+          where: { id: transaction.id },
+
+          data: {
+            status: "SUCCESS",
+
+            cost: providerCost,
+
+            profit,
+
+            description: `${plan.provider.toUpperCase()} ${
+              plan.size || plan.name
+            } ${plan.duration} for ${cleanedPhone} + ${serviceFeePercentage}% service fee`,
+          },
+        });
+
+        const updatedUser = await tx.user.findUnique({
+          where: { id: user.id },
+
+          select: {
+            walletBalance: true,
+            referralBalance: true,
+          },
+        });
+
+        return {
+          walletBalance: Number(
+            updatedUser?.walletBalance ?? 0
+          ),
+
+          referralBalance: Number(
+            updatedUser?.referralBalance ?? 0
+          ),
+
+          businessBalance: newBusinessBalance,
+
+          grossProfit,
+
+          referralCommission,
+
+          profit,
+        };
+      },
+
+      {
+        maxWait: 10000,
+
+        timeout: 30000,
+      }
+    );
+  } catch (error: any) {
+    console.error("SMEPLUG LEDGER ERROR:", error);
+
+    try {
+      await prisma.transaction.update({
+        where: { id: transaction.id },
+
+        data: { status: "FAILED" },
+      });
+    } catch (updateError) {
+      console.error(
+        "FAILED TO MARK SMEPLUG TRANSACTION:",
+        updateError
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+
+        message:
+          "Data was delivered, but recording the transaction failed. Please contact support with reference " +
+          reference,
+
+        reference,
+
+        providerReference,
+      },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+
+    message:
+      providerData?.msg ||
+      providerResult?.msg ||
+      "Data purchase successful.",
+
+    reference,
+
+    providerReference,
+
+    server: "SMEPLUG",
+
+    network_id: networkId,
+
+    plan_id: rawPlanId,
+
+    phone_number: cleanedPhone,
+
+    provider: plan.provider,
+
+    plan_name: plan.name,
+
+    size: plan.size,
+
+    duration: plan.duration,
+
+    basePrice,
+
+    serviceFeePercentage,
+
+    serviceFee,
+
+    amount,
+
+    providerCost,
+
+    grossProfit,
+
+    referralPercentage,
+
+    referralCommission,
+
+    profit,
+
+    walletBalance: result.walletBalance,
+
+    referralBalance: result.referralBalance,
+
+    providerResponse: providerResult,
+  });
+}
+
+// ============================================================
 // POST
 // ============================================================
 
@@ -2613,6 +3580,40 @@ export async function POST(
                 Error
                 ? error.message
                 : "NetworkDataSub purchase failed.",
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    // ========================================================
+    // SMEPLUG
+    // ========================================================
+
+    if (
+      requestedServer === "SMEPLUG" ||
+      requestedServer === "SME_PLUG" ||
+      requestedServer === "SMP"
+    ) {
+      try {
+        return await processSmePlugPurchase(
+          session.user.id,
+          body
+        );
+      } catch (error: any) {
+        console.error(
+          "SMEPLUG PURCHASE ERROR:",
+          error
+        );
+
+        return NextResponse.json(
+          {
+            success: false,
+
+            message:
+              error instanceof Error
+                ? error.message
+                : "SMEPlug purchase failed.",
           },
           { status: 500 }
         );
