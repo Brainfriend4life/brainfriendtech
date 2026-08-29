@@ -15,10 +15,10 @@ export async function networkDataSubRequest<T>(
   response: Response;
   data: T;
 }> {
-  const apiToken =
+  const apiKey =
     process.env.NETWORKDATASUB_API_KEY;
 
-  if (!apiToken) {
+  if (!apiKey) {
     throw new Error(
       "NETWORKDATASUB_API_KEY is not configured."
     );
