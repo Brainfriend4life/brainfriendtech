@@ -204,7 +204,7 @@ async function fetchAndFilterPlans() {
     }
     groupedByProvider[plan.provider].push(plan);
   }
-
+async function fetchAndFilterPlans() {
   return groupedByProvider;
 }
 
