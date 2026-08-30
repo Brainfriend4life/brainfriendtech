@@ -469,7 +469,7 @@ async function fetchAndFilterPlans() {
 }
 
 export async function GET() {
-  try 
+  try {
     if (cachedData && Date.now() - lastFetch < CACHE_DURATION) {
       console.log("SMEPLUG PLANS: Returning cached data");
       return NextResponse.json({ success: true, data: cachedData, cached: true });
