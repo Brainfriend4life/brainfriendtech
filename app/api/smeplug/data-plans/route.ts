@@ -196,7 +196,7 @@ async function fetchAndFilterPlans() {
       });
     }
   }
-
+  async function fetchAndFilterPlans() {
   const groupedByProvider: Record<string, any[]> = {};
   for (const plan of allPlans) {
     if (!groupedByProvider[plan.provider]) {
@@ -204,10 +204,8 @@ async function fetchAndFilterPlans() {
     }
     groupedByProvider[plan.provider].push(plan);
   }
-async function fetchAndFilterPlans() {
   return groupedByProvider;
 }
-
 export async function GET() {
   try {
     if (cachedData && Date.now() - lastFetch < CACHE_DURATION) {
