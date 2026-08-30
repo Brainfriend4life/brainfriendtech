@@ -331,7 +331,8 @@ export async function GET() {
       data,
       cached: false,
     });
-  } catch (error: any) {
+  } 
+  catch (error: any) {
     console.error("SMEPLUG DATA PLANS ERROR:", error);
     return NextResponse.json(
       {
@@ -342,7 +343,8 @@ export async function GET() {
     );
   }
 }
-     }function extractNumber(value: unknown, fallback = 0): number {
+     }
+function extractNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
