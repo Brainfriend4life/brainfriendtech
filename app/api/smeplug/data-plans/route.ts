@@ -187,7 +187,8 @@ export async function GET() {
       { status: 500 }
     );
   }
-      }    throw new Error(result?.msg || result?.message || "Unable to load SMEPlug data plans.");
+      }   
+throw new Error(result?.msg || result?.message || "Unable to load SMEPlug data plans.");
   }
 
   const grouped = result.data && typeof result.data === "object"? result.data : {};
@@ -589,7 +590,8 @@ export async function GET() {
       data,
       cached: false,
     });
-  } catch (error: any) {
+  } 
+  catch (error: any) {
     console.error("SMEPLUG DATA PLANS ERROR:", error);
     return NextResponse.json(
       {
