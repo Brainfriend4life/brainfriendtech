@@ -186,7 +186,6 @@ export async function GET() {
       },
       { status: 500 }
     );
-  }
       }   
 throw new Error(result?.msg || result?.message || "Unable to load SMEPlug data plans.");
   }
