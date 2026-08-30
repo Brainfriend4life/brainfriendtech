@@ -5,16 +5,15 @@ const SMEPLUG_PLANS_URL = "https://smeplug.ng/api/v1/data/plans";
 const SMEPLUG_NETWORK_NAMES: Record<number, string> = {
  1: "MTN",
   2: "AIRTEL",
-  3: "9MOBILE",
-  4: "GLO",
+ 3: "9MOBILE",
+ 4: "GLO",
 };
 
 // 9mobile intentionally excluded per business decision.
 const ENABLED_NETWORK_IDS = [1, 2, 4];
 
-// Skip routers, broadband, voice bundles, corporate/enterprise plans.
-const EXCLUDED_NAME_PATTERN =
-  /router|broadband|fibrex|odu|flexi|talk\s*more|corporate|mbps/i;
+// Only exclude routers/broadband. Removed "flexi, talk more, corporate" to avoid over-filtering
+const EXCLUDED_NAME_PATTERN = /router|broadband|fibrex|odu/i;
 
 const SMEPLUG_MARKUP_PERCENT = Number(
   process.env.SMEPLUG_MARKUP_PERCENT?? 5
@@ -92,14 +91,15 @@ async function fetchAndFilterPlans() {
 
   for (const networkId of ENABLED_NETWORK_IDS) {
     const rawList = Array.isArray(grouped[String(networkId)])
-     ? grouped[String(networkId)]
+    ? grouped[String(networkId)]
       : Array.isArray(grouped[networkId])
-     ? grouped[networkId]
+    ? grouped[networkId]
       : [];
 
     for (const raw of rawList) {
       const name = String(firstValue(raw.name, raw.plan, raw.plan_name, raw.title)?? "").trim();
 
+      // Only exclude routers/broadband
       if (name && EXCLUDED_NAME_PATTERN.test(name)) {
         continue;
       }
@@ -109,14 +109,9 @@ async function fetchAndFilterPlans() {
         continue;
       }
 
-      // CRITICAL: SMEPLUG "price" = 0 means plan is disabled/unavailable
-      const smeplugWalletPrice = extractNumber(raw.price, 0);
-      if (smeplugWalletPrice <= 0) {
-        continue; // This removes 6.5GB Awoof etc
-      }
-
+      // USE telco_price first. Fall back to price if telco_price is 0
       const providerPrice = extractNumber(
-        firstValue(raw.telco_price, raw.network_price, raw.cost),
+        firstValue(raw.telco_price, raw.network_price, raw.cost, raw.price),
         0
       );
 
@@ -126,7 +121,7 @@ async function fetchAndFilterPlans() {
 
       const sellingPrice =
         SMEPLUG_MARKUP_PERCENT > 0
-         ? Number((providerPrice * (1 + SMEPLUG_MARKUP_PERCENT / 100)).toFixed(2))
+        ? Number((providerPrice * (1 + SMEPLUG_MARKUP_PERCENT / 100)).toFixed(2))
           : providerPrice;
 
       const size = extractSizeFromName(name) || name;
@@ -188,4 +183,4 @@ export async function GET() {
       { status: 500 }
     );
   }
-    }
+   }
