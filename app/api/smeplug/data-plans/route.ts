@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 const SMEPLUG_PLANS_URL = "https://smeplug.ng/api/v1/data/plans";
 
 const SMEPLUG_NETWORK_NAMES: Record<number, string> = {
-  1: "MTN",
+ 1: "MTN",
   2: "AIRTEL",
   3: "9MOBILE",
   4: "GLO",
@@ -35,6 +35,55 @@ function firstValue(...values: unknown[]): unknown {
 }
 
 function extractNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()!== "") {
+    const cleaned = value.replace(/₦/g, "").replace(/NGN/gi, "").replace(/,/g, "").trim();
+    const number = Number(cleaned);
+    if (Number.isFinite(number)) {
+      return number;
+    }
+  }
+  return fallback;
+}
+
+function extractSizeFromName(name: string): string {
+  const match = name.match(/(\d+(?:\.\d+)?\s?(?:GB|MB|TB))/i);
+  return match? match[1].replace(/\s+/g, "") : "";
+}
+
+function extractDurationFromName(name: string): string {
+  const numericMatch = name.match(/(\d+\s?(?:day|days|week|weeks|month|months|year|years))/i);
+  if (numericMatch) {
+    return numericMatch[1].trim();
+  }
+  const adjectiveMatch = name.match(/\b(daily|weekly|monthly|yearly)\b/i);
+  if (adjectiveMatch) {
+    return adjectiveMatch[1].charAt(0).toUpperCase() + adjectiveMatch[1].slice(1).toLowerCase();
+  }
+  return "";
+}
+
+async function fetchAndFilterPlans() {
+  const apiKey = process.env.SMEPLUG_API_KEY;
+  if (!apiKey) {
+    throw new Error("SMEPlug API key is not configured.");
+  }
+
+  const response = await fetch(SMEPLUG_PLANS_URL, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(30000),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok || result.status === false) {function extractNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
