@@ -342,7 +342,6 @@ export async function GET() {
       { status: 500 }
     );
   }
-}
      }
 function extractNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) {
