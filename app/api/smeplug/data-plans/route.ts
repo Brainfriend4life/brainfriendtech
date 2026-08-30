@@ -4,20 +4,14 @@ const SMEPLUG_PLANS_URL = "https://smeplug.ng/api/v1/data/plans";
 
 const SMEPLUG_NETWORK_NAMES: Record<number, string> = {
  1: "MTN",
-  2: "AIRTEL",
- 3: "9MOBILE",
+ 2: "AIRTEL",
+  3: "9MOBILE",
  4: "GLO",
 };
 
-// 9mobile intentionally excluded per business decision.
 const ENABLED_NETWORK_IDS = [1, 2, 4];
 
-// Only exclude routers/broadband. Removed "flexi, talk more, corporate" to avoid over-filtering
-const EXCLUDED_NAME_PATTERN = /router|broadband|fibrex|odu/i;
-
-const SMEPLUG_MARKUP_PERCENT = Number(
-  process.env.SMEPLUG_MARKUP_PERCENT?? 5
-);
+const SMEPLUG_MARKUP_PERCENT = Number(process.env.SMEPLUG_MARKUP_PERCENT?? 5);
 
 // Cache for 30 minutes
 let cachedData: Record<string, any[]> | null = null;
@@ -34,41 +28,31 @@ function firstValue(...values: unknown[]): unknown {
 }
 
 function extractNumber(value: unknown, fallback = 0): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
+  if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()!== "") {
     const cleaned = value.replace(/₦/g, "").replace(/NGN/gi, "").replace(/,/g, "").trim();
     const number = Number(cleaned);
-    if (Number.isFinite(number)) {
-      return number;
-    }
+    if (Number.isFinite(number)) return number;
   }
   return fallback;
 }
 
 function extractSizeFromName(name: string): string {
   const match = name.match(/(\d+(?:\.\d+)?\s?(?:GB|MB|TB))/i);
-  return match? match[1].replace(/\s+/g, "") : "";
+  return match? match[1].replace(/\s+/g, "") : name;
 }
 
 function extractDurationFromName(name: string): string {
   const numericMatch = name.match(/(\d+\s?(?:day|days|week|weeks|month|months|year|years))/i);
-  if (numericMatch) {
-    return numericMatch[1].trim();
-  }
+  if (numericMatch) return numericMatch[1].trim();
   const adjectiveMatch = name.match(/\b(daily|weekly|monthly|yearly)\b/i);
-  if (adjectiveMatch) {
-    return adjectiveMatch[1].charAt(0).toUpperCase() + adjectiveMatch[1].slice(1).toLowerCase();
-  }
+  if (adjectiveMatch) return adjectiveMatch[1].charAt(0).toUpperCase() + adjectiveMatch[1].slice(1).toLowerCase();
   return "";
 }
 
 async function fetchAndFilterPlans() {
   const apiKey = process.env.SMEPLUG_API_KEY;
-  if (!apiKey) {
-    throw new Error("SMEPlug API key is not configured.");
-  }
+  if (!apiKey) throw new Error("SMEPlug API key is not configured.");
 
   const response = await fetch(SMEPLUG_PLANS_URL, {
     method: "GET",
@@ -86,56 +70,46 @@ async function fetchAndFilterPlans() {
     throw new Error(result?.msg || result?.message || "Unable to load SMEPlug data plans.");
   }
 
-  const grouped = result.data && typeof result.data === "object"? result.data : {};
+  // HANDLE BOTH result.data AND result.plans
+  const sourceData = result.data || result.plans || {};
   const allPlans: any[] = [];
 
   for (const networkId of ENABLED_NETWORK_IDS) {
-    const rawList = Array.isArray(grouped[String(networkId)])
-    ? grouped[String(networkId)]
-      : Array.isArray(grouped[networkId])
-    ? grouped[networkId]
-      : [];
+    // Handle both "1" and 1 as keys
+    const rawList = sourceData[String(networkId)] || sourceData[networkId] || [];
+    if (!Array.isArray(rawList)) continue;
 
     for (const raw of rawList) {
       const name = String(firstValue(raw.name, raw.plan, raw.plan_name, raw.title)?? "").trim();
+      if (!name) continue;
 
-      // Only exclude routers/broadband
-      if (name && EXCLUDED_NAME_PATTERN.test(name)) {
-        continue;
-      }
+      // Skip only routers/broadband
+      if (/router|broadband|fibrex|odu/i.test(name)) continue;
 
       const planId = firstValue(raw.id, raw.plan_id, raw.planId);
-      if (planId === null || planId === undefined || planId === "") {
-        continue;
-      }
+      if (!planId) continue;
 
-      // USE telco_price first. Fall back to price if telco_price is 0
+      // Use whatever price is available. Don't block price=0
       const providerPrice = extractNumber(
-        firstValue(raw.telco_price, raw.network_price, raw.cost, raw.price),
+        firstValue(raw.telco_price, raw.network_price, raw.cost, raw.price, raw.amount),
         0
       );
-
-      if (!(providerPrice > 0)) {
-        continue;
-      }
+      if (providerPrice <= 0) continue; // Only skip if truly 0
 
       const sellingPrice =
         SMEPLUG_MARKUP_PERCENT > 0
-        ? Number((providerPrice * (1 + SMEPLUG_MARKUP_PERCENT / 100)).toFixed(2))
-          : providerPrice;
-
-      const size = extractSizeFromName(name) || name;
-      const duration = extractDurationFromName(name);
+       ? Number((providerPrice * (1 + SMEPLUG_MARKUP_PERCENT / 100)).toFixed(2))
+        : providerPrice;
 
       allPlans.push({
         id: `SMEPLUG-${networkId}-${planId}`,
         provider: SMEPLUG_NETWORK_NAMES[networkId],
         networkId,
-        planId: planId as string | number,
-        plan_id: planId as string | number,
+        planId,
+        plan_id: planId,
         name,
-        size,
-        duration,
+        size: extractSizeFromName(name),
+        duration: extractDurationFromName(name),
         providerPrice,
         sellingPrice,
         status: "ACTIVE",
@@ -145,9 +119,7 @@ async function fetchAndFilterPlans() {
 
   const groupedByProvider: Record<string, any[]> = {};
   for (const plan of allPlans) {
-    if (!groupedByProvider[plan.provider]) {
-      groupedByProvider[plan.provider] = [];
-    }
+    if (!groupedByProvider[plan.provider]) groupedByProvider[plan.provider] = [];
     groupedByProvider[plan.provider].push(plan);
   }
 
@@ -157,30 +129,20 @@ async function fetchAndFilterPlans() {
 export async function GET() {
   try {
     if (cachedData && Date.now() - lastFetch < CACHE_DURATION) {
-      console.log("SMEPLUG PLANS: Returning cached data");
       return NextResponse.json({ success: true, data: cachedData, cached: true });
     }
 
-    console.log("SMEPLUG PLANS: Fetching fresh data");
     const data = await fetchAndFilterPlans();
-
     cachedData = data;
     lastFetch = Date.now();
 
-    return NextResponse.json({
-      success: true,
-      data,
-      cached: false,
-    });
+    return NextResponse.json({ success: true, data, cached: false });
   } 
   catch (error: any) {
     console.error("SMEPLUG DATA PLANS ERROR:", error);
     return NextResponse.json(
-      {
-        success: false,
-        message: error?.message || "Unable to load SMEPlug data plans.",
-      },
+      { success: false, message: error?.message || "Unable to load SMEPlug data plans." },
       { status: 500 }
     );
   }
-   }
+}
