@@ -30,6 +30,11 @@ type DataPlan = {
   sellingPrice?: number;
 
   status: string;
+
+  // Present on SMEPlug (server 3) plans. Other servers may not
+  // send this field at all — treat "missing" as available so
+  // servers 1 & 2 keep behaving exactly as before.
+  isAvailable?: boolean;
 };
 
 type ServerType = "CHEAPDATAHUB" | "NETWORKDATASUB" | "SMEPLUG";
@@ -55,6 +60,13 @@ const NETWORK_ACCENT: Record<string, string> = {
 
 function networkAccent(network: string) {
   return NETWORK_ACCENT[network.toUpperCase()] || "border-l-indigo-500";
+}
+
+// A plan is treated as available unless it explicitly says
+// isAvailable === false. This keeps servers 1 & 2 (which don't
+// send this field) working exactly as before.
+function planIsAvailable(plan: DataPlan) {
+  return plan.isAvailable !== false;
 }
 
 export default function BuyDataPage() {
@@ -310,10 +322,19 @@ export default function BuyDataPage() {
 
     const selectedNetwork = network.trim().toUpperCase();
 
-    return currentPlans.filter(
+    const matches = currentPlans.filter(
       (plan) =>
         String(plan.provider).trim().toUpperCase() === selectedNetwork
     );
+
+    // Available plans first, unavailable ones pushed to the
+    // bottom — still visible, just deprioritized and (below)
+    // rendered disabled/labeled so people don't try to buy them.
+    return [...matches].sort((a, b) => {
+      const aAvailable = planIsAvailable(a) ? 0 : 1;
+      const bAvailable = planIsAvailable(b) ? 0 : 1;
+      return aAvailable - bAvailable;
+    });
   }, [currentPlans, network]);
 
   // ============================================================
@@ -491,6 +512,11 @@ export default function BuyDataPage() {
       return;
     }
 
+    if (!planIsAvailable(selectedPlan)) {
+      setError("This plan is currently unavailable. Please pick another.");
+      return;
+    }
+
     const cleanedPhone = cleanPhone(phone);
 
     if (!cleanedPhone) {
@@ -528,6 +554,11 @@ export default function BuyDataPage() {
   async function processBuyData(pin: string) {
     if (!selectedPlan) {
       setError("Please select a valid data plan.");
+      return;
+    }
+
+    if (!planIsAvailable(selectedPlan)) {
+      setError("This plan is currently unavailable. Please pick another.");
       return;
     }
 
@@ -821,7 +852,7 @@ export default function BuyDataPage() {
                 setMessage("");
               }}
               disabled={!network || loadingCurrentPlans || buying}
-              className="mb-6 w-full rounded-xl border border-border bg-background px-3.5 py-3 text-sm text-foreground outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mb-3 w-full rounded-xl border border-border bg-background px-3.5 py-3 text-sm text-foreground outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <option value="">
                 {loadingCurrentPlans
@@ -833,17 +864,33 @@ export default function BuyDataPage() {
 
               {filteredPlans.map((plan) => {
                 const displayPrice = getCustomerPrice(plan);
+                const available = planIsAvailable(plan);
 
                 return (
-                  <option key={String(plan.id)} value={String(plan.id)}>
+                  <option
+                    key={String(plan.id)}
+                    value={String(plan.id)}
+                    disabled={!available}
+                    // Native <option> elements can't be styled with
+                    // classNames in most browsers, but `disabled`
+                    // does render them greyed out and unselectable
+                    // — which covers the "grey out" requirement here.
+                  >
                     {plan.size || plan.name}
                     {plan.duration ? ` — ${plan.duration}` : ""}
                     {" — ₦"}
                     {formatPrice(displayPrice)}
+                    {!available ? " (Unavailable)" : ""}
                   </option>
                 );
               })}
             </select>
+
+            {selectedPlan && !planIsAvailable(selectedPlan) && (
+              <p className="mb-6 text-xs font-medium text-red-600 dark:text-red-400">
+                This plan is currently unavailable. Please choose another.
+              </p>
+            )}
 
             {/* PLAN DETAILS */}
 
@@ -851,7 +898,9 @@ export default function BuyDataPage() {
               <div
                 className={`mb-6 rounded-xl border-l-[3px] bg-muted/60 p-4 ${networkAccent(
                   selectedPlan.provider
-                )}`}
+                )} ${
+                  !planIsAvailable(selectedPlan) ? "opacity-50 grayscale" : ""
+                }`}
               >
                 <div className="mb-3.5 flex items-center justify-between">
                   <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -860,6 +909,7 @@ export default function BuyDataPage() {
 
                   <span className="text-xs font-bold text-foreground">
                     {String(selectedPlan.provider).toUpperCase()}
+                    {!planIsAvailable(selectedPlan) ? " · UNAVAILABLE" : ""}
                   </span>
                 </div>
 
@@ -939,11 +989,18 @@ export default function BuyDataPage() {
 
             <button
               type="submit"
-              disabled={buying || loadingCurrentPlans || !selectedPlan}
+              disabled={
+                buying ||
+                loadingCurrentPlans ||
+                !selectedPlan ||
+                !planIsAvailable(selectedPlan)
+              }
               className="w-full rounded-xl bg-gradient-to-b from-indigo-600 to-indigo-700 py-3.5 text-sm font-semibold text-white shadow-sm shadow-indigo-600/25 transition hover:from-indigo-500 hover:to-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none sm:text-base"
             >
               {buying
                 ? "Processing..."
+                : selectedPlan && !planIsAvailable(selectedPlan)
+                ? "Unavailable"
                 : selectedPlan
                 ? `Buy Data — ₦${formatPrice(customerTotal)}`
                 : "Buy Data"}

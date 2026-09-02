@@ -11,6 +11,12 @@ import {
   calculateServiceFee,
 } from "@/lib/service-fee";
 
+import {
+  looksLikeStockFailure,
+  markSmePlugPlanUnavailable,
+  markSmePlugPlanAvailable,
+} from "@/lib/smeplug-availability";
+
 // ============================================================
 // PROVIDER URLS
 // ============================================================
@@ -3122,6 +3128,9 @@ async function processSmePlugPurchase(
 
   const responseText = await providerResponse.text();
 
+  console.log("SMEPLUG PURCHASE STATUS:", providerResponse.status);
+  console.log("SMEPLUG PURCHASE RAW RESPONSE:", responseText);
+
   let providerResult: any = null;
 
   try {
@@ -3167,15 +3176,50 @@ async function processSmePlugPurchase(
       },
     });
 
+    // Broadened beyond top-level msg/message/error since a real
+    // failure came back with none of those populated — SMEPlug
+    // may nest the error, use an array, or a different key.
+    const failureMessage = String(
+      providerResult?.msg ??
+        providerResult?.message ??
+        providerResult?.error ??
+        providerResult?.errors ??
+        providerResult?.data?.msg ??
+        providerResult?.data?.message ??
+        providerResult?.data?.error ??
+        providerResult?.description ??
+        providerResult?.reason ??
+        ""
+    );
+
+    // Logged unconditionally (not just on a match) so you can
+    // tune the keyword list in /lib/smeplug-availability.ts if
+    // SMEPlug's real out-of-stock wording isn't being caught.
+    // ALSO logs the full raw providerResult object — if the
+    // message above is still blank, check this to find whatever
+    // field SMEPlug actually used.
+    console.log(
+      "SMEPLUG PURCHASE FAILURE MESSAGE (for stock-classifier tuning):",
+      failureMessage
+    );
+    console.log(
+      "SMEPLUG PURCHASE FAILURE FULL BODY:",
+      JSON.stringify(providerResult)
+    );
+
+    if (looksLikeStockFailure(failureMessage)) {
+      await markSmePlugPlanUnavailable(
+        networkId,
+        plan.planId ?? rawPlanId
+      );
+    }
+
     return NextResponse.json(
       {
         success: false,
 
         message:
-          providerResult?.msg ||
-          providerResult?.message ||
-          providerResult?.error ||
-          "SMEPlug data purchase failed.",
+          failureMessage || "SMEPlug data purchase failed.",
 
         providerStatus: providerResponse.status,
 
@@ -3451,6 +3495,11 @@ async function processSmePlugPurchase(
       { status: 500 }
     );
   }
+
+  // A successful purchase proves this plan is currently in
+  // stock — clear any stale unavailable flag immediately rather
+  // than waiting for it to expire on its own.
+  await markSmePlugPlanAvailable(networkId, plan.planId ?? rawPlanId);
 
   return NextResponse.json({
     success: true,

@@ -9,111 +9,64 @@ export async function POST(req: Request) {
 
     if (!session?.user?.email) {
       return NextResponse.json(
-        {
-          error: "Unauthorized",
-        },
-        {
-          status: 401,
-        }
+        { error: "Unauthorized" },
+        { status: 401 }
       );
     }
-
 
     // Check admin
     const admin = await prisma.user.findUnique({
-      where: {
-        email: session.user.email,
-      },
+      where: { email: session.user.email },
     });
-
 
     if (!admin || admin.role !== "ADMIN") {
       return NextResponse.json(
-        {
-          error: "Admin access required",
-        },
-        {
-          status: 403,
-        }
+        { error: "Admin access required" },
+        { status: 403 }
       );
     }
 
-
-
     const body = await req.json();
-
-    const {
-      userId,
-      status,
-    } = body;
-
-
+    const { userId, status } = body;
 
     if (!userId || !status) {
       return NextResponse.json(
-        {
-          error: "Missing data",
-        },
-        {
-          status: 400,
-        }
+        { error: "Missing data" },
+        { status: 400 }
       );
     }
 
-
-
-    if (
-      status !== "ACTIVE" &&
-      status !== "SUSPENDED"
-    ) {
+    if (status !== "ACTIVE" && status !== "SUSPENDED") {
       return NextResponse.json(
-        {
-          error: "Invalid status",
-        },
-        {
-          status: 400,
-        }
+        { error: "Invalid status" },
+        { status: 400 }
       );
     }
 
+    // Optional but matches change-role's safeguard:
+    // prevent an admin from suspending themselves
+    if (userId === admin.id && status === "SUSPENDED") {
+      return NextResponse.json(
+        { error: "You cannot suspend your own account." },
+        { status: 400 }
+      );
+    }
 
-
-    const updatedUser =
-      await prisma.user.update({
-        where: {
-          id: userId,
-        },
-
-        data: {
-          status,
-        },
-      });
-
-
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { status },
+    });
 
     return NextResponse.json({
       success: true,
       user: updatedUser,
     });
-
-
-
   } catch (error) {
-
-    console.error(
-      "CHANGE STATUS ERROR:",
-      error
-    );
-
+    console.error("CHANGE STATUS ERROR:", error);
 
     return NextResponse.json(
-      {
-        error:
-          "Failed to update user status",
-      },
-      {
-        status: 500,
-      }
+      { error: "Failed to update user status" },
+      { status: 500 }
     );
   }
 }

@@ -1,4 +1,5 @@
 import UserActions from "./UserActions";
+import WalletActions from "./WalletActions";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 
@@ -144,6 +145,15 @@ export default async function AdminUserDetails({
           currentRole={user.role}
           currentStatus={user.status}
         />
+
+        <div className="mt-6 border-t border-gray-100 pt-6">
+          <WalletActions
+            userId={user.id}
+            currentBalance={Number(
+              user.walletBalance
+            )}
+          />
+        </div>
       </div>
     </div>
   );

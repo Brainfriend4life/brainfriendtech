@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 
+import {
+  getUnavailableSmePlugPlanKeys,
+  smePlugPlanKey,
+} from "@/lib/smeplug-availability";
+
 // ============================================================
 // SMEPLUG — DATA PLANS (GET)
 //
@@ -19,8 +24,24 @@ import { NextResponse } from "next/server";
 // Relying on `price` silently drops ~80% of legitimate plans and
 // is not reliable enough to use for billing.
 //
-// So: providerCost = telco_price. We compute our OWN selling
-// price with our own markup, same pattern as NetworkDataSub.
+// So: providerCost = telco_price. Selling price checks the
+// SMEPLUG_PRICE_OVERRIDES table first (exact prices you've set
+// per plan); anything not listed falls back to our own markup,
+// same pattern as NetworkDataSub.
+//
+// AVAILABILITY NOTE (confirmed):
+// SMEPlug's raw plan objects carry NO availability/stock field —
+// every plan across every network has exactly the same shape
+// (id, name, dispense_method, input_type, telco_price, price),
+// with dispense_method always "SIM" and input_type always 0.
+// There is nothing to read here.
+//
+// So availability is INFERRED from real purchase attempts instead
+// (see /lib/smeplug-availability.ts): when a purchase against a
+// plan fails with a message that looks like a stock-out, that
+// plan is flagged unavailable for a while. This route reads those
+// flags and returns `isAvailable` per plan so the frontend can
+// grey out plans instead of hiding them.
 // ============================================================
 
 const SMEPLUG_PLANS_URL = "https://smeplug.ng/api/v1/data/plans";
@@ -44,6 +65,29 @@ const EXCLUDED_NAME_PATTERN =
 const SMEPLUG_MARKUP_PERCENT = Number(
   process.env.SMEPLUG_MARKUP_PERCENT ?? 5
 );
+
+// Custom per-plan prices (Airtel, confirmed). Any plan_id NOT
+// listed here falls back automatically to the markup formula.
+const SMEPLUG_PRICE_OVERRIDES: Record<number, number> = {
+  320: 80,
+  321: 150,
+  322: 300,
+  407: 550,
+  411: 550,
+  448: 600,
+  409: 850,
+  449: 1100,
+  450: 2100,
+  325: 3200,
+  327: 5200,
+  451: 10200,
+  284: 70,
+  285: 85,
+  286: 150,
+  287: 150,
+  288: 250,
+  289: 350,
+};
 
 // ============================================================
 // HELPERS
@@ -177,6 +221,10 @@ export async function GET() {
     const grouped =
       result.data && typeof result.data === "object" ? result.data : {};
 
+    // Plans flagged unavailable from real purchase failures — see
+    // /lib/smeplug-availability.ts. Fetched once per request.
+    const unavailableKeys = await getUnavailableSmePlugPlanKeys();
+
     const plans: Array<{
       id: string;
       provider: string;
@@ -189,6 +237,7 @@ export async function GET() {
       providerPrice: number;
       sellingPrice: number;
       status: string;
+      isAvailable: boolean;
     }> = [];
 
     for (const networkId of ENABLED_NETWORK_IDS) {
@@ -229,15 +278,20 @@ export async function GET() {
 
         if (!(providerPrice > 0)) {
           // No usable cost at all for this plan — skip it rather
-          // than risk selling at ₦0 cost basis.
+          // than risk selling at ₦0 cost basis. (Data integrity
+          // skip, unrelated to stock availability.)
           continue;
         }
 
-        // Our own selling price. We deliberately do NOT trust
-        // SMEPlug's "price" field as the customer price — it's
-        // inconsistently populated (see file header note).
+        // Selling price: check the override table first — any
+        // plan_id listed there uses the exact price you set.
+        // Everything else falls back to the markup formula.
+        const overridePrice = SMEPLUG_PRICE_OVERRIDES[Number(planId)];
+
         const sellingPrice =
-          SMEPLUG_MARKUP_PERCENT > 0
+          Number.isFinite(overridePrice) && overridePrice > 0
+            ? overridePrice
+            : SMEPLUG_MARKUP_PERCENT > 0
             ? Number(
                 (
                   providerPrice *
@@ -248,6 +302,10 @@ export async function GET() {
 
         const size = extractSizeFromName(name) || name;
         const duration = extractDurationFromName(name);
+
+        const isAvailable = !unavailableKeys.has(
+          smePlugPlanKey(networkId, planId as string | number)
+        );
 
         plans.push({
           id: `SMEPLUG-${networkId}-${planId}`,
@@ -260,7 +318,8 @@ export async function GET() {
           duration,
           providerPrice,
           sellingPrice,
-          status: "ACTIVE",
+          status: isAvailable ? "ACTIVE" : "UNAVAILABLE",
+          isAvailable,
         });
       }
     }

@@ -11,6 +11,12 @@ import {
   calculateServiceFee,
 } from "@/lib/service-fee";
 
+import {
+  looksLikeStockFailure,
+  markSmePlugPlanUnavailable,
+  markSmePlugPlanAvailable,
+} from "@/lib/smeplug-availability";
+
 // ============================================================
 // PROVIDER URLS
 // ============================================================
@@ -1201,6 +1207,9 @@ function matchesSmePlugPlan(
   );
 }
 
+// SMEPlug's raw plan objects have no separate size/duration
+// fields — both are embedded in the name string, e.g.
+// "150MB - 1 Day [Awoof]" or "Monthly Plan 5000 - Data - 13GB [Gifting]".
 function extractSmePlugSizeFromName(name: string): string {
   const match = name.match(/(\d+(?:\.\d+)?\s?(?:GB|MB|TB))/i);
   return match ? match[1].replace(/\s+/g, "") : "";
@@ -1217,7 +1226,9 @@ function extractSmePlugDurationFromName(name: string): string {
 // inconsistently populated — many legitimate, purchasable plans
 // (dispense_method: "SIM") have price = 0 while telco_price is
 // always populated and matches their dashboard's "Network Price"
-// column. telco_price is the real, reliable cost — always prefer it.
+// column. telco_price is the real, reliable cost to us — always
+// prefer it. See /api/smeplug/data-plans/route.ts for the same
+// reasoning.
 function extractSmePlugProviderPrice(plan: any): number {
   const candidates = [
     plan.telco_price,
@@ -1237,6 +1248,7 @@ function extractSmePlugProviderPrice(plan: any): number {
 
   return 0;
 }
+
 // ============================================================
 // REFERRAL COMMISSION
 // ============================================================
@@ -1651,7 +1663,7 @@ async function getSmePlugPlan(
     matchesSmePlugPlan(item, requestedPlanId)
   );
 
-   if (!plan) {
+  if (!plan) {
     return null;
   }
 
@@ -1670,9 +1682,7 @@ async function getSmePlugPlan(
   }
 
   // We compute our own selling price — SMEPlug's `price` field
-  // is not reliable enough to use directly (many legitimate
-  // SIM-dispensed plans have price = 0 while telco_price is
-  // always populated). See extractSmePlugProviderPrice below.
+  // is not reliable enough to use directly (see note above).
   const sellingPrice =
     SMEPLUG_MARKUP_PERCENT > 0
       ? Number(
@@ -3163,6 +3173,27 @@ async function processSmePlugPurchase(
       },
     });
 
+    const failureMessage =
+      providerResult?.msg ||
+      providerResult?.message ||
+      providerResult?.error ||
+      "";
+
+    // Logged unconditionally (not just on a match) so you can
+    // tune the keyword list in /lib/smeplug-availability.ts if
+    // SMEPlug's real out-of-stock wording isn't being caught.
+    console.log(
+      "SMEPLUG PURCHASE FAILURE MESSAGE (for stock-classifier tuning):",
+      failureMessage
+    );
+
+    if (looksLikeStockFailure(failureMessage)) {
+      await markSmePlugPlanUnavailable(
+        networkId,
+        plan.planId ?? rawPlanId
+      );
+    }
+
     return NextResponse.json(
       {
         success: false,
@@ -3447,6 +3478,11 @@ async function processSmePlugPurchase(
       { status: 500 }
     );
   }
+
+  // A successful purchase proves this plan is currently in
+  // stock — clear any stale unavailable flag immediately rather
+  // than waiting for it to expire on its own.
+  await markSmePlugPlanAvailable(networkId, plan.planId ?? rawPlanId);
 
   return NextResponse.json({
     success: true,
