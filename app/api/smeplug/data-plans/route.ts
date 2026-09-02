@@ -328,7 +328,8 @@ export async function GET() {
       success: true,
       data: plans,
     });
-  } catch (error: any) {
+  } 
+  catch (error: any) {
     console.error("SMEPLUG DATA PLANS ERROR:", error);
 
     return NextResponse.json(
