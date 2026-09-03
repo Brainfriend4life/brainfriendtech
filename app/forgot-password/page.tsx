@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -67,13 +66,13 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-lg">
+    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg dark:bg-slate-900 dark:shadow-black/30 sm:p-8">
 
-      <h1 className="mb-2 text-center text-3xl font-bold">
+      <h1 className="mb-2 text-center text-3xl font-bold text-gray-900 dark:text-white">
         Forgot Password
       </h1>
 
-      <p className="mb-8 text-center text-gray-500">
+      <p className="mb-8 text-center text-gray-500 dark:text-slate-400">
         Enter your email address and we’ll
         send you a link to reset your password.
       </p>
@@ -104,11 +103,11 @@ export default function ForgotPasswordPage() {
 
       </form>
 
-      <p className="mt-6 text-center text-sm">
+      <p className="mt-6 text-center text-sm text-gray-600 dark:text-slate-400">
         Remember your password?{" "}
         <Link
           href="/login"
-          className="font-semibold text-indigo-600"
+          className="font-semibold text-indigo-600 dark:text-indigo-400"
         >
           Back to Login
         </Link>
@@ -117,4 +116,3 @@ export default function ForgotPasswordPage() {
     </div>
   );
 }
-
