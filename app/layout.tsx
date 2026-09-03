@@ -6,6 +6,7 @@ import AuthProvider from "@/components/providers/AuthProvider";
 import ThemeProvider from "@/components/providers/ThemeProvider";
 import { Toaster } from "react-hot-toast";
 import UpdatePrompt from "@/components/pwa/UpdatePrompt";
+import SplashGate from "@/components/SplashGate";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -143,7 +144,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider>
           <AuthProvider>
-            {children}
+            <SplashGate>{children}</SplashGate>
           </AuthProvider>
 
           <Toaster position="top-right" />
