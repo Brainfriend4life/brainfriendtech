@@ -265,11 +265,11 @@ export default function BusinessWalletPage() {
           Administration
         </p>
 
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-950 dark:text-white sm:text-3xl">
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-950 dark:text-black sm:text-3xl">
           Business Wallet
         </h1>
 
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400 sm:text-base">
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-600 sm:text-base">
           Manage your business funds, monitor revenue,
           connect your bank account and withdraw available
           profit.

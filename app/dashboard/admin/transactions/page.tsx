@@ -71,7 +71,7 @@ export default async function AdminTransactionsPage() {
               Administration
             </p>
 
-            <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">
+            <h1 className="mt-1 text-2xl font-bold text-gray-900 dark:text-black">
               Transactions
             </h1>
 
