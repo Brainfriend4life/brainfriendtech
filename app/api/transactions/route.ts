@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
-import  {prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
+import { sanitizeDescription } from "@/lib/transactionLabel";
 
 export async function GET() {
   try {
@@ -37,7 +38,22 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(transactions);
+    // Never send internal fulfillment details to the client:
+    // - `provider` reveals which backend vendor handled the transaction
+    // - `cost` / `profit` reveal your internal margins
+    // `description` is sanitized as a safety net in case it was ever
+    // generated with a vendor name embedded in it.
+    const sanitized = transactions.map((tx) => ({
+      id: tx.id,
+      type: tx.type,
+      amount: tx.amount,
+      description: sanitizeDescription(tx.description),
+      status: tx.status,
+      reference: tx.reference,
+      createdAt: tx.createdAt,
+    }));
+
+    return NextResponse.json(sanitized);
   } catch (error) {
     console.error(error);
 

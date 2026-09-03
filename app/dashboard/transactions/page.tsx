@@ -5,11 +5,34 @@ import { useEffect, useState } from "react";
 interface Transaction {
   id: string;
   type: string;
-  provider: string;
   amount: number;
   status: string;
   description: string;
   createdAt: string;
+}
+
+// Maps raw enum values (as stored in the DB) to a clean, customer-facing
+// label. Add new TransactionType values here as you introduce them.
+const TYPE_LABELS: Record<string, string> = {
+  FUND_WALLET: "Wallet Funding",
+  AIRTIME: "Airtime",
+  DATA: "Data",
+  ELECTRICITY: "Electricity",
+  CABLE: "Cable TV",
+  EXAM_PIN: "Exam Pin",
+  WITHDRAWAL: "Withdrawal",
+  NIN: "NIN Verification",
+};
+
+function getTypeLabel(type: string): string {
+  return (
+    TYPE_LABELS[type] ||
+    type
+      .toLowerCase()
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
+  );
 }
 
 export default function TransactionsPage() {
@@ -212,7 +235,7 @@ export default function TransactionsPage() {
                     </th>
 
                     <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      Provider
+                      Description
                     </th>
 
                     <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -221,10 +244,6 @@ export default function TransactionsPage() {
 
                     <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                       Status
-                    </th>
-
-                    <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      Description
                     </th>
 
                     <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -261,14 +280,16 @@ export default function TransactionsPage() {
 
                         <td className="px-4 py-4">
                           <span className="font-semibold text-gray-900 dark:text-white">
-                            {tx.type}
+                            {getTypeLabel(tx.type)}
                           </span>
                         </td>
 
-                        {/* PROVIDER */}
+                        {/* DESCRIPTION */}
 
-                        <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">
-                          {tx.provider || "-"}
+                        <td className="max-w-xs px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
+                          <div className="max-w-xs truncate">
+                            {tx.description || "-"}
+                          </div>
                         </td>
 
                         {/* AMOUNT */}
@@ -297,14 +318,6 @@ export default function TransactionsPage() {
                           >
                             {tx.status || "Pending"}
                           </span>
-                        </td>
-
-                        {/* DESCRIPTION */}
-
-                        <td className="max-w-xs px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
-                          <div className="max-w-xs truncate">
-                            {tx.description || "-"}
-                          </div>
                         </td>
 
                         {/* DATE */}
@@ -353,11 +366,11 @@ export default function TransactionsPage() {
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <p className="font-bold text-gray-900 dark:text-white">
-                          {tx.type}
+                          {getTypeLabel(tx.type)}
                         </p>
 
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          {tx.provider || "No provider"}
+                        <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                          {tx.description || "-"}
                         </p>
                       </div>
 
@@ -395,16 +408,6 @@ export default function TransactionsPage() {
                             })
                           : "-"}
                       </span>
-                    </div>
-
-                    <div className="mt-3 rounded-xl bg-gray-50 p-3 dark:bg-gray-800/60">
-                      <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
-                        Description
-                      </p>
-
-                      <p className="mt-1 text-sm text-gray-700 dark:text-gray-300">
-                        {tx.description || "-"}
-                      </p>
                     </div>
                   </div>
                 );
