@@ -44,8 +44,8 @@ export default async function AdminUserDetails({
 
       {/* PROFILE CARD */}
 
-      <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-bold text-gray-900">
+      <div className="rounded-2xl bg-black p-6 shadow-sm">
+        <h2 className="text-lg font-bold text-white-900">
           {user.fullName}
         </h2>
 
@@ -135,8 +135,8 @@ export default async function AdminUserDetails({
 
       {/* ACTIONS */}
 
-      <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <h2 className="mb-4 font-bold text-gray-900">
+      <div className="rounded-2xl bg-black p-6 shadow-sm">
+        <h2 className="mb-4 font-bold text-white-900">
           Actions
         </h2>
 
@@ -146,7 +146,7 @@ export default async function AdminUserDetails({
           currentStatus={user.status}
         />
 
-        <div className="mt-6 border-t border-gray-100 pt-6">
+        <div className="mt-6 border-t border-green-500 pt-6">
           <WalletActions
             userId={user.id}
             currentBalance={Number(

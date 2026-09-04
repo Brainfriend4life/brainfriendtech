@@ -103,7 +103,7 @@ export default function WalletActions({
       onSubmit={handleSubmit}
       className="space-y-4 rounded-xl border border-gray-200 p-4"
     >
-      <h3 className="font-semibold text-gray-900">
+      <h3 className="font-semibold text-white">
         Fund / Deduct Wallet
       </h3>
 
