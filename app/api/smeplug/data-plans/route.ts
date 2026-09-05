@@ -5,6 +5,8 @@ import {
   smePlugPlanKey,
 } from "@/lib/smeplug-availability";
 
+import { getCached } from "@/lib/provider-cache";
+
 // ============================================================
 // SMEPLUG — DATA PLANS (GET)
 //
@@ -45,6 +47,14 @@ import {
 // ============================================================
 
 const SMEPLUG_PLANS_URL = "https://smeplug.ng/api/v1/data/plans";
+
+// How long the fetched plan list is reused before hitting SMEPlug
+// again. Plans rarely change minute-to-minute, so a few minutes
+// is a safe balance between freshness and not making every
+// dashboard load wait 15-20+ seconds on a live provider call.
+const SMEPLUG_PLANS_CACHE_TTL_MS = Number(
+  process.env.SMEPLUG_PLANS_CACHE_TTL_MS ?? 3 * 60 * 1000
+);
 
 // Confirmed from SMEPlug's /api/v1/networks endpoint.
 // NOTE: Glo is 4, not 3 — this is NOT the usual convention.
@@ -172,54 +182,58 @@ export async function GET() {
       );
     }
 
-    const response = await fetch(SMEPLUG_PLANS_URL, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(30000),
-    });
+    // The actual network call + JSON parse is the slow, mostly-
+    // static part — this is what gets cached. Availability flags
+    // (below, outside this cached block) still read fresh on
+    // every request.
+    const grouped = await getCached(
+      "smeplug-plans",
+      SMEPLUG_PLANS_CACHE_TTL_MS,
+      async () => {
+        const response = await fetch(SMEPLUG_PLANS_URL, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            Accept: "application/json",
+          },
+          cache: "no-store",
+          signal: AbortSignal.timeout(30000),
+        });
 
-    const responseText = await response.text();
+        const responseText = await response.text();
 
-    console.log("SMEPLUG DATA PLANS STATUS:", response.status);
-    console.log("SMEPLUG DATA PLANS RESPONSE:", responseText);
+        console.log("SMEPLUG DATA PLANS STATUS:", response.status);
+        console.log("SMEPLUG DATA PLANS RESPONSE:", responseText);
 
-    let result: any = null;
+        let result: any = null;
 
-    try {
-      result = responseText.trim() ? JSON.parse(responseText) : null;
-    } catch (error) {
-      console.error("SMEPLUG DATA PLANS JSON ERROR:", error);
-    }
+        try {
+          result = responseText.trim()
+            ? JSON.parse(responseText)
+            : null;
+        } catch (error) {
+          console.error("SMEPLUG DATA PLANS JSON ERROR:", error);
+        }
 
-    if (!result) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "SMEPlug returned an invalid plans response.",
-        },
-        { status: 502 }
-      );
-    }
+        if (!result) {
+          throw new Error(
+            "SMEPlug returned an invalid plans response."
+          );
+        }
 
-    if (!response.ok || result.status === false) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
+        if (!response.ok || result.status === false) {
+          throw new Error(
             result?.msg ||
-            result?.message ||
-            "Unable to load SMEPlug data plans.",
-        },
-        { status: 502 }
-      );
-    }
+              result?.message ||
+              "Unable to load SMEPlug data plans."
+          );
+        }
 
-    const grouped =
-      result.data && typeof result.data === "object" ? result.data : {};
+        return result.data && typeof result.data === "object"
+          ? result.data
+          : {};
+      }
+    );
 
     // Plans flagged unavailable from real purchase failures — see
     // /lib/smeplug-availability.ts. Fetched once per request.
@@ -328,8 +342,7 @@ export async function GET() {
       success: true,
       data: plans,
     });
-  } 
-  catch (error: any) {
+  } catch (error: any) {
     console.error("SMEPLUG DATA PLANS ERROR:", error);
 
     return NextResponse.json(

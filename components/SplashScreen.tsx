@@ -51,7 +51,7 @@ export default function SplashScreen() {
         {/* NAME + TAGLINE */}
         <div className="mt-7 space-y-2 text-center">
           <h1 className="text-[22px] font-bold tracking-tight text-white">
-            BF Global Tech Brainfriend
+            Brainfriend Global Tech
           </h1>
           <p className="max-w-[240px] text-[13px] leading-5 text-slate-400">
             Fast, reliable VTU platform and NIN verification
