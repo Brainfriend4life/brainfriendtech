@@ -90,7 +90,7 @@ export default function Navbar() {
           </Link>
 
           <Link
-            href="#services"
+            href="/services"
             className="
               font-medium
               text-foreground/80
@@ -245,7 +245,7 @@ export default function Navbar() {
             </Link>
 
             <Link
-              href="#services"
+              href="/services"
               onClick={() => setMobileOpen(false)}
               className="
                 rounded-lg
