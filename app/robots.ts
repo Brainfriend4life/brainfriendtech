@@ -20,6 +20,6 @@ export default function robots(): MetadataRoute.Robots {
     ],
 
     sitemap:
-      "https://brainfriendglobaltech.vercel.app/sitemap.xml",
+      "https://brainfriendglobaltech.com/sitemap.xml",
   };
 }

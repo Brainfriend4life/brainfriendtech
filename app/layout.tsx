@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(
-    "https://brainfriendglobaltech.vercel.app"
+    "https://brainfriendglobaltech.com"
   ),
 
   verification: {
@@ -63,7 +63,7 @@ export const metadata: Metadata = {
   authors: [
     {
       name: "Brainfriend Global Tech",
-      url: "https://brainfriendglobaltech.vercel.app",
+      url: "https://brainfriendglobaltech.com",
     },
   ],
 
@@ -72,13 +72,13 @@ export const metadata: Metadata = {
 
   alternates: {
     canonical:
-      "https://brainfriendglobaltech.vercel.app",
+      "https://brainfriendglobaltech.com",
   },
 
   openGraph: {
     type: "website",
     locale: "en_NG",
-    url: "https://brainfriendglobaltech.vercel.app",
+    url: "https://brainfriendglobaltech.com",
     siteName: "Brainfriend Global Tech",
 
     title:

@@ -37,7 +37,7 @@ export const metadata: Metadata = {
   ],
 
   alternates: {
-    canonical: "https://brainfriendglobaltech.vercel.app",
+    canonical: "https://brainfriendglobaltech.com",
   },
 
   openGraph: {
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
     description:
       "Access fast and reliable data, airtime, NIN verification, electricity, cable TV and examination services in Nigeria.",
 
-    url: "https://brainfriendglobaltech.vercel.app",
+    url: "https://brainfriendglobaltech.com",
 
     siteName: "Brainfriend Global Tech",
 

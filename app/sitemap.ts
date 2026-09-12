@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const baseUrl =
-    "https://brainfriendglobaltech.vercel.app";
+    "https://brainfriendglobaltech.com";
 
   return [
     {
