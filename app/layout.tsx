@@ -7,6 +7,7 @@ import ThemeProvider from "@/components/providers/ThemeProvider";
 import { Toaster } from "react-hot-toast";
 import UpdatePrompt from "@/components/pwa/UpdatePrompt";
 import SplashGate from "@/components/SplashGate";
+import WhatsAppButton from "@/components/WhatsAppButton";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -150,6 +151,7 @@ export default function RootLayout({
           <Toaster position="top-right" />
           <UpdatePrompt />
         </ThemeProvider>
+         <WhatsAppButton />
       </body>
     </html>
   );
