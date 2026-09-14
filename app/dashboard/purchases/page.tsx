@@ -66,6 +66,18 @@ type NinVerification = {
   updatedAt: string;
 };
 
+// ============================================================
+// DISPLAY PROVIDER
+//
+// The real upstream providers (CheapDataHub, SMEPlug,
+// NetworkDataSub, NaijaResultPins, etc.) are never surfaced to
+// customers — only our own brand name is shown, everywhere a
+// provider would otherwise appear (table, mobile card, modal,
+// and downloaded receipt text).
+// ============================================================
+
+const DISPLAY_PROVIDER = "Brainfriend Global Tech";
+
 const serviceFilters = [
   { label: "All", value: "ALL", icon: ReceiptText },
   { label: "Airtime", value: "AIRTIME", icon: Smartphone },
@@ -257,9 +269,6 @@ export default function PurchasesHistoryPage() {
             .includes(query) ||
           purchase.reference
             ?.toLowerCase()
-            .includes(query) ||
-          purchase.provider
-            ?.toLowerCase()
             .includes(query);
 
         return (
@@ -347,7 +356,7 @@ export default function PurchasesHistoryPage() {
               onChange={(e) =>
                 setSearch(e.target.value)
               }
-              placeholder="Search by service, provider or reference..."
+              placeholder="Search by service or reference..."
               className="
                 w-full
                 rounded-xl
@@ -563,7 +572,7 @@ export default function PurchasesHistoryPage() {
                             </td>
 
                             <td className="px-6 py-4 text-sm font-medium text-gray-700 dark:text-gray-300">
-                              {purchase.provider || "—"}
+                              {DISPLAY_PROVIDER}
                             </td>
 
                             <td className="px-6 py-4 text-sm font-bold text-gray-900 dark:text-white">
@@ -678,7 +687,7 @@ export default function PurchasesHistoryPage() {
                                 </p>
 
                                 <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
-                                  {purchase.provider}
+                                  {DISPLAY_PROVIDER}
                                 </p>
 
                               </div>
@@ -809,10 +818,7 @@ export default function PurchasesHistoryPage() {
 
                 <DetailRow
                   label="Provider"
-                  value={
-                    selectedPurchase.provider ||
-                    "—"
-                  }
+                  value={DISPLAY_PROVIDER}
                 />
 
                 <DetailRow
@@ -922,7 +928,7 @@ export default function PurchasesHistoryPage() {
                       onClick={() =>
                         downloadText(
                           `exam-pin-${selectedPurchase.reference}.txt`,
-                          `Brainfriend Global Tech - Exam PIN\n\nProvider: ${selectedPurchase.provider}\nPIN: ${selectedPurchase.details.pin}\nSerial: ${selectedPurchase.details.serial}\nReference: ${selectedPurchase.reference}\nDate: ${formatDate(selectedPurchase.createdAt)}`
+                          `${DISPLAY_PROVIDER} - Exam PIN\n\nPIN: ${selectedPurchase.details.pin}\nSerial: ${selectedPurchase.details.serial}\nReference: ${selectedPurchase.reference}\nDate: ${formatDate(selectedPurchase.createdAt)}`
                         )
                       }
                       className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-indigo-700"
@@ -1122,7 +1128,7 @@ export default function PurchasesHistoryPage() {
                       onClick={() =>
                         downloadText(
                           `nin-verification-${selectedPurchase.reference}.txt`,
-                          `Brainfriend Global Tech - NIN Verification\n\nNIN: ${selectedPurchase.details.nin}\nCard Type: ${selectedPurchase.details.cardType}\nName: ${[
+                          `${DISPLAY_PROVIDER} - NIN Verification\n\nNIN: ${selectedPurchase.details.nin}\nCard Type: ${selectedPurchase.details.cardType}\nName: ${[
                             selectedPurchase
                               .details
                               .firstName,
