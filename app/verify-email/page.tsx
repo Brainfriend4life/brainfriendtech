@@ -1,19 +1,22 @@
+
 "use client";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function VerifyEmailPage() {
+  const router = useRouter();
+
   const [loading, setLoading] =
     useState(true);
 
   const [success, setSuccess] =
     useState(false);
 
-  const [message, setMessage] =
-    useState(
-      "Verifying your email..."
-    );
+  const [message, setMessage] = useState(
+    "Verifying your email..."
+  );
 
   useEffect(() => {
     async function verifyEmail() {
@@ -63,6 +66,11 @@ export default function VerifyEmailPage() {
           data.message ||
             "Email verified successfully."
         );
+
+        // Redirect to login after 3 seconds
+        setTimeout(() => {
+          router.push("/login");
+        }, 3000);
       } catch (error) {
         console.error(
           "EMAIL VERIFICATION ERROR:",
@@ -78,11 +86,11 @@ export default function VerifyEmailPage() {
     }
 
     verifyEmail();
-  }, []);
+  }, [router]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-lg">
+    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-slate-950">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-lg dark:bg-slate-900">
 
         <div className="mb-6 text-4xl">
           {loading
@@ -92,7 +100,7 @@ export default function VerifyEmailPage() {
             : "❌"}
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-900">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           {loading
             ? "Verifying Email"
             : success
@@ -100,17 +108,23 @@ export default function VerifyEmailPage() {
             : "Verification Failed"}
         </h1>
 
-        <p className="mt-4 text-gray-600">
+        <p className="mt-4 text-gray-600 dark:text-gray-400">
           {message}
         </p>
 
         {!loading && success && (
-          <Link
-            href="/login"
-            className="mt-6 inline-block rounded-xl bg-indigo-600 px-6 py-3 font-semibold text-white transition hover:bg-indigo-700"
-          >
-            Go to Login
-          </Link>
+          <>
+            <p className="mt-4 text-sm text-gray-500 dark:text-gray-500">
+              Redirecting you to the login page...
+            </p>
+
+            <Link
+              href="/login"
+              className="mt-6 inline-block rounded-xl bg-indigo-600 px-6 py-3 font-semibold text-white transition hover:bg-indigo-700"
+            >
+              Go to Login
+            </Link>
+          </>
         )}
 
         {!loading && !success && (
@@ -126,3 +140,4 @@ export default function VerifyEmailPage() {
     </main>
   );
 }
+

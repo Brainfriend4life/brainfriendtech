@@ -1,4 +1,3 @@
-
 import { compare } from "bcryptjs";
 import { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -67,6 +66,16 @@ export const authOptions: AuthOptions = {
         }
 
         // -----------------------------------------
+        // CHECK EMAIL VERIFICATION
+        // -----------------------------------------
+
+        if (!user.emailVerified) {
+          throw new Error(
+            "Please verify your email address before signing in."
+          );
+        }
+
+        // -----------------------------------------
         // CHECK PASSWORD
         // -----------------------------------------
 
@@ -101,13 +110,7 @@ export const authOptions: AuthOptions = {
 
   session: {
     strategy: "jwt",
-
-    // Keep the user logged in for 30 days
-    // unless they explicitly sign out.
     maxAge: 30 * 24 * 60 * 60,
-
-    // Refresh the session periodically
-    // while the user is actively using the site.
     updateAge: 24 * 60 * 60,
   },
 
@@ -116,7 +119,6 @@ export const authOptions: AuthOptions = {
   // -----------------------------------------
 
   jwt: {
-    // JWT remains valid for 30 days.
     maxAge: 30 * 24 * 60 * 60,
   },
 
@@ -126,7 +128,6 @@ export const authOptions: AuthOptions = {
 
   callbacks: {
     async jwt({ token, user }) {
-      // Runs when the user first logs in.
       if (user) {
         token.id = user.id;
         token.role = user.role;
@@ -136,7 +137,6 @@ export const authOptions: AuthOptions = {
     },
 
     async session({ session, token }) {
-      // Attach user information to the session.
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
@@ -163,10 +163,6 @@ export const authOptions: AuthOptions = {
   // -----------------------------------------
   // COOKIES
   // -----------------------------------------
-  //
-  // This makes the authentication cookie persistent
-  // instead of depending entirely on browser defaults.
-  //
 
   cookies: {
     sessionToken: {
@@ -185,10 +181,8 @@ export const authOptions: AuthOptions = {
         secure:
           process.env.NODE_ENV === "production",
 
-        // Keep cookie for 30 days.
         maxAge: 30 * 24 * 60 * 60,
       },
     },
   },
 };
-

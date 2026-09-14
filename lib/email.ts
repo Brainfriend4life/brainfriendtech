@@ -17,7 +17,7 @@ export async function sendVerificationEmail({
 }: VerificationEmailProps) {
   const appUrl =
     process.env.NEXTAUTH_URL ||
-    "http://localhost:3000";
+    "https://brainfriendglobaltech.com";
 
   const verificationUrl =
     `${appUrl}/verify-email?token=${encodeURIComponent(
@@ -28,7 +28,7 @@ export async function sendVerificationEmail({
     await resend.emails.send({
       from:
         process.env.EMAIL_FROM ||
-        "Brainfriend Global Tech <onboarding@resend.dev>",
+        "Brainfriend Global Tech <brainfriendglobaltech@gmail.com>",
 
       to: email,
 

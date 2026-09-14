@@ -1,8 +1,13 @@
 
 import { NextResponse } from "next/server";
+
 import { prisma } from "@/lib/prisma";
+
 import bcrypt from "bcryptjs";
+
 import crypto from "crypto";
+
+import { sendVerificationEmail } from "@/lib/email";
 
 export async function POST(req: Request) {
   try {
@@ -167,7 +172,9 @@ export async function POST(req: Request) {
       });
 
     if (existingUser) {
-      if (existingUser.email === normalizedEmail) {
+      if (
+        existingUser.email === normalizedEmail
+      ) {
         return NextResponse.json(
           {
             success: false,
@@ -178,7 +185,9 @@ export async function POST(req: Request) {
         );
       }
 
-      if (existingUser.phone === finalPhone) {
+      if (
+        existingUser.phone === finalPhone
+      ) {
         return NextResponse.json(
           {
             success: false,
@@ -209,7 +218,8 @@ export async function POST(req: Request) {
       const referrer =
         await prisma.user.findUnique({
           where: {
-            referralCode: normalizedReferralCode,
+            referralCode:
+              normalizedReferralCode,
           },
           select: {
             id: true,
@@ -243,9 +253,10 @@ export async function POST(req: Request) {
     const verificationToken =
       crypto.randomBytes(32).toString("hex");
 
-    const verificationExpires = new Date(
-      Date.now() + 30 * 60 * 1000
-    );
+    const verificationExpires =
+      new Date(
+        Date.now() + 30 * 60 * 1000
+      );
 
     // ==========================================
     // GENERATE UNIQUE REFERRAL CODE
@@ -253,7 +264,11 @@ export async function POST(req: Request) {
 
     let generatedReferralCode = "";
 
-    for (let attempt = 0; attempt < 10; attempt++) {
+    for (
+      let attempt = 0;
+      attempt < 10;
+      attempt++
+    ) {
       const candidate = `BF${crypto
         .randomBytes(5)
         .toString("hex")
@@ -297,19 +312,24 @@ export async function POST(req: Request) {
     const user = await prisma.user.create({
       data: {
         fullName: normalizedFullName,
+
         email: normalizedEmail,
+
         phone: finalPhone,
+
         password: hashedPassword,
 
         walletBalance: 0,
+
         referralBalance: 0,
 
-        referralCode: generatedReferralCode,
+        referralCode:
+          generatedReferralCode,
+
         referredById: referrerId,
 
-        // Keeping your current behavior:
-        // users can log in immediately after registration.
-        emailVerified: true,
+        // User MUST verify email before login
+        emailVerified: false,
 
         emailVerificationToken:
           verificationToken,
@@ -320,9 +340,25 @@ export async function POST(req: Request) {
 
       select: {
         id: true,
+
         email: true,
+
+        fullName: true,
+
         referralCode: true,
       },
+    });
+
+    // ==========================================
+    // SEND VERIFICATION EMAIL
+    // ==========================================
+
+    await sendVerificationEmail({
+      email: user.email,
+
+      fullName: user.fullName,
+
+      token: verificationToken,
     });
 
     // ==========================================
@@ -332,15 +368,22 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         success: true,
+
         message:
-          "Account created successfully. You can now log in.",
+          "Account created successfully. Please check your email to verify your account.",
+
         email: user.email,
-        referralCode: user.referralCode,
+
+        referralCode:
+          user.referralCode,
       },
       { status: 201 }
     );
   } catch (error: unknown) {
-    console.error("REGISTER ERROR:", error);
+    console.error(
+      "REGISTER ERROR:",
+      error
+    );
 
     // ==========================================
     // PRISMA UNIQUE CONSTRAINT ERROR
@@ -350,7 +393,8 @@ export async function POST(req: Request) {
       typeof error === "object" &&
       error !== null &&
       "code" in error &&
-      (error as { code?: string }).code === "P2002"
+      (error as { code?: string }).code ===
+        "P2002"
     ) {
       return NextResponse.json(
         {
