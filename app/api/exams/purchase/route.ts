@@ -448,21 +448,21 @@ export async function POST(req: NextRequest) {
     // -------------------------------------------------------
 
     const pinResult = await verifyTransactionPin(
-  user.id,
-  transactionPin
-);
+      user.id,
+      transactionPin
+    );
 
-if (!pinResult.success) {
-  return NextResponse.json(
-    {
-      success: false,
-      message:
-        pinResult.message ||
-        "Invalid transaction PIN.",
-    },
-    { status: 403 }
-  );
-}
+    if (!pinResult.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            pinResult.message ||
+            "Invalid transaction PIN.",
+        },
+        { status: 403 }
+      );
+    }
 
     // -------------------------------------------------------
     // CHECK WALLET
@@ -515,8 +515,6 @@ if (!pinResult.success) {
     // -------------------------------------------------------
     // BUY FROM NAIJARESULTPINS
     // -------------------------------------------------------
-
-    
 
     let purchaseResult;
 
@@ -880,10 +878,15 @@ if (!pinResult.success) {
 
           // -------------------------------------------------
           // BUSINESS REVENUE
+          //
+          // NOTE: schema field is `businessWalletId`, not
+          // `walletId` (was causing a TS2353 build error).
           // -------------------------------------------------
 
           await tx.businessRevenue.create({
             data: {
+              transactionId:
+                transaction.id,
               type: "EXAM_PIN",
               provider:
                 "NaijaResultPins",
@@ -895,13 +898,18 @@ if (!pinResult.success) {
               reference,
               description:
                 `Exam PIN purchase - ${providerProduct.card_name} x${quantity}`,
-              walletId:
+              businessWalletId:
                 businessWallet.id,
             },
           });
 
           // -------------------------------------------------
           // SAVE EXAM PINS
+          //
+          // NOTE: `ExamPin` has no `examName` column in the
+          // schema (was causing a TS2353 build error). The
+          // exam/card name is still preserved on the parent
+          // Transaction's `description` field above.
           // -------------------------------------------------
 
           for (const card of cards) {
@@ -909,8 +917,6 @@ if (!pinResult.success) {
               data: {
                 userId:
                   freshUser.id,
-                examName:
-                  providerProduct.card_name,
                 provider:
                   "NaijaResultPins",
                 pin:
@@ -981,7 +987,7 @@ if (!pinResult.success) {
       cards,
 
       pins: cards.map(
-        (card) => card.pin
+        (card: { pin: string; serial: string }) => card.pin
       ),
 
       status: "SUCCESS",
