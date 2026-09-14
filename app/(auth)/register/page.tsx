@@ -14,8 +14,6 @@ import {
   EyeOff,
   Gift,
   LockKeyhole,
-  Mail,
-  Phone,
   ShieldCheck,
   User,
 } from "lucide-react";
@@ -148,26 +146,47 @@ function RegisterForm() {
         from-slate-50
         via-white
         to-indigo-50
-        px-4 py-6
+        px-3 py-4
         transition-colors duration-300
         dark:from-slate-950
         dark:via-slate-950
         dark:to-indigo-950/40
-        sm:px-6 sm:py-10
+        sm:px-6 sm:py-8
+        lg:px-8 lg:py-10
       "
     >
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl items-center justify-center">
+      <div
+        className="
+          mx-auto
+          flex
+          min-h-[calc(100vh-2rem)]
+          w-full
+          max-w-6xl
+          items-center
+          justify-center
+          sm:min-h-[calc(100vh-4rem)]
+          lg:min-h-[calc(100vh-5rem)]
+        "
+      >
         <div
           className="
-            grid w-full overflow-hidden rounded-3xl
+            grid
+            w-full
+            max-w-md
+            overflow-hidden
+            rounded-2xl
             border border-gray-200
             bg-white
-            shadow-2xl shadow-indigo-100/50
+            shadow-xl
+            shadow-indigo-100/40
             transition-colors duration-300
             dark:border-slate-800
             dark:bg-slate-900
             dark:shadow-black/30
+            sm:rounded-3xl
+            lg:max-w-none
             lg:grid-cols-2
+            lg:rounded-3xl
           "
         >
           {/* ================================================= */}
@@ -304,10 +323,10 @@ function RegisterForm() {
               relative flex
               flex-col justify-center
               bg-white
-              p-5
+              px-4 py-6
               transition-colors duration-300
               dark:bg-slate-900
-              sm:p-8
+              sm:px-8 sm:py-10
               md:p-10
               lg:p-12
               xl:p-14
@@ -319,7 +338,7 @@ function RegisterForm() {
               {/* BACK TO HOME */}
               {/* ================================================= */}
 
-              <div className="mb-7">
+              <div className="mb-6 sm:mb-7">
                 <Link
                   href="/"
                   className="
@@ -327,7 +346,7 @@ function RegisterForm() {
                     rounded-xl
                     border border-gray-200
                     bg-white
-                    px-4 py-2.5
+                    px-3.5 py-2.5
                     text-sm font-semibold
                     text-gray-700
                     shadow-sm
@@ -352,16 +371,19 @@ function RegisterForm() {
               {/* MOBILE LOGO */}
               {/* ================================================= */}
 
-              <div className="mb-7 flex items-center gap-3 lg:hidden">
+              <div className="mb-6 flex items-center gap-3 lg:hidden">
                 <div
                   className="
-                    flex h-14 w-14
+                    flex h-12 w-12
+                    shrink-0
                     items-center justify-center
-                    overflow-hidden rounded-2xl
+                    overflow-hidden rounded-xl
                     bg-white shadow-md
                     ring-1 ring-gray-100
                     dark:bg-slate-800
                     dark:ring-slate-700
+                    sm:h-14 sm:w-14
+                    sm:rounded-2xl
                   "
                 >
                   <Image
@@ -375,11 +397,11 @@ function RegisterForm() {
                 </div>
 
                 <div>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  <p className="text-lg font-bold text-gray-900 dark:text-white sm:text-xl">
                     Brainfriend
                   </p>
 
-                  <p className="text-xs font-semibold tracking-wide text-indigo-600 dark:text-indigo-400">
+                  <p className="text-[11px] font-semibold tracking-wide text-indigo-600 dark:text-indigo-400 sm:text-xs">
                     TECH SERVICES
                   </p>
                 </div>
@@ -389,7 +411,7 @@ function RegisterForm() {
               {/* HEADING */}
               {/* ================================================= */}
 
-              <div className="mb-7">
+              <div className="mb-6 sm:mb-7">
                 <div
                   className="
                     mb-3 inline-flex items-center gap-2
@@ -408,10 +430,11 @@ function RegisterForm() {
 
                 <h1
                   className="
-                    text-3xl font-bold tracking-tight
+                    text-2xl font-bold tracking-tight
                     text-gray-900
                     dark:text-white
-                    sm:text-4xl
+                    sm:text-3xl
+                    md:text-4xl
                   "
                 >
                   Create your account
@@ -419,10 +442,10 @@ function RegisterForm() {
 
                 <p
                   className="
-                    mt-3 text-sm leading-6
+                    mt-2 text-sm leading-6
                     text-gray-500
                     dark:text-slate-400
-                    sm:text-base
+                    sm:mt-3 sm:text-base
                   "
                 >
                   Register with Brainfriend Global Tech
@@ -436,7 +459,7 @@ function RegisterForm() {
 
               <form
                 onSubmit={handleSubmit}
-                className="space-y-5"
+                className="space-y-4 sm:space-y-5"
               >
 
                 {/* FULL NAME */}
@@ -778,63 +801,63 @@ function RegisterForm() {
                 {/* PASSWORD REQUIREMENTS */}
                 {/* ================================================= */}
 
-                <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
-  <p className="mb-3 text-xs font-bold text-slate-700 dark:text-slate-200">
-    Password requirements
-  </p>
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-700 dark:bg-slate-800/60 sm:mt-5 sm:p-4">
+                  <p className="mb-3 text-xs font-bold text-slate-700 dark:text-slate-200">
+                    Password requirements
+                  </p>
 
-  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-    {[
-      {
-        label: "At least 6 characters",
-        valid: passwordRequirements.length,
-      },
-      {
-        label: "Uppercase letter",
-        valid: passwordRequirements.uppercase,
-      },
-      {
-        label: "Lowercase letter",
-        valid: passwordRequirements.lowercase,
-      },
-      {
-        label: "Number",
-        valid: passwordRequirements.number,
-      },
-      {
-        label: "Special character",
-        valid: passwordRequirements.special,
-      },
-    ].map((item) => (
-      <div
-        key={item.label}
-        className="flex min-w-0 items-center gap-2"
-      >
-        <div
-          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-            item.valid
-              ? "bg-emerald-500"
-              : "bg-slate-300 dark:bg-slate-600"
-          }`}
-        >
-          {item.valid && (
-            <Check className="h-3 w-3 text-white" />
-          )}
-        </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-3 sm:gap-x-4">
+                    {[
+                      {
+                        label: "At least 6 characters",
+                        valid: passwordRequirements.length,
+                      },
+                      {
+                        label: "Uppercase letter",
+                        valid: passwordRequirements.uppercase,
+                      },
+                      {
+                        label: "Lowercase letter",
+                        valid: passwordRequirements.lowercase,
+                      },
+                      {
+                        label: "Number",
+                        valid: passwordRequirements.number,
+                      },
+                      {
+                        label: "Special character",
+                        valid: passwordRequirements.special,
+                      },
+                    ].map((item) => (
+                      <div
+                        key={item.label}
+                        className="flex min-w-0 items-center gap-2"
+                      >
+                        <div
+                          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+                            item.valid
+                              ? "bg-emerald-500"
+                              : "bg-slate-300 dark:bg-slate-600"
+                          }`}
+                        >
+                          {item.valid && (
+                            <Check className="h-3 w-3 text-white" />
+                          )}
+                        </div>
 
-        <span
-          className={`truncate text-xs ${
-            item.valid
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-slate-500 dark:text-slate-400"
-          }`}
-        >
-          {item.label}
-        </span>
-      </div>
-    ))}
-  </div>
-</div>
+                        <span
+                          className={`truncate text-xs ${
+                            item.valid
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-slate-500 dark:text-slate-400"
+                          }`}
+                        >
+                          {item.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
                 {/* ================================================= */}
                 {/* CREATE ACCOUNT */}
@@ -855,16 +878,17 @@ function RegisterForm() {
               {/* LOGIN LINK */}
               {/* ================================================= */}
 
-              <div className="my-7 flex items-center gap-4">
+              <div className="my-6 flex items-center gap-3 sm:my-7 sm:gap-4">
                 <div className="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
 
                 <span
                   className="
                     whitespace-nowrap
-                    text-[10px] font-semibold
+                    text-[9px] font-semibold
                     tracking-wider
                     text-gray-400
                     dark:text-slate-500
+                    sm:text-[10px]
                   "
                 >
                   ALREADY A MEMBER?
@@ -896,10 +920,11 @@ function RegisterForm() {
 
               <p
                 className="
-                  mt-7 text-center
-                  text-xs leading-5
+                  mt-6 text-center
+                  text-[11px] leading-5
                   text-gray-400
                   dark:text-slate-500
+                  sm:mt-7 sm:text-xs
                 "
               >
                 By creating an account, you agree to use

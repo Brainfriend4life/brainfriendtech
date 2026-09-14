@@ -1,4 +1,3 @@
-
 "use client";
 
 import Image from "next/image";
@@ -65,25 +64,37 @@ export default function LoginPage() {
         from-slate-50
         via-white
         to-indigo-50
-        px-4 py-6
+        px-3 py-4
         transition-colors duration-300
         dark:from-slate-950
         dark:via-slate-950
         dark:to-indigo-950/40
-        sm:px-6 sm:py-10
+        sm:px-6 sm:py-8
+        lg:px-8 lg:py-10
       "
     >
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl items-center justify-center">
+      <div
+        className="
+          mx-auto flex
+          min-h-[calc(100vh-2rem)]
+          w-full max-w-6xl
+          items-center justify-center
+          sm:min-h-[calc(100vh-4rem)]
+          lg:min-h-[calc(100vh-5rem)]
+        "
+      >
         <div
           className="
-            grid w-full overflow-hidden rounded-3xl
+            grid w-full overflow-hidden
+            rounded-2xl
             border border-gray-200
             bg-white
-            shadow-2xl shadow-indigo-100/50
+            shadow-xl shadow-indigo-100/40
             transition-colors duration-300
             dark:border-slate-800
             dark:bg-slate-900
             dark:shadow-black/30
+            sm:rounded-3xl
             lg:grid-cols-2
           "
         >
@@ -199,13 +210,18 @@ export default function LoginPage() {
 
           <div
             className="
-              relative flex min-h-[680px]
+              relative flex
+              min-h-[600px]
               flex-col justify-center
               bg-white
-              p-5
+              px-4 py-7
               transition-colors duration-300
               dark:bg-slate-900
-              sm:p-8 md:p-10 lg:p-12 xl:p-16
+              sm:min-h-[680px]
+              sm:px-8 sm:py-10
+              md:p-10
+              lg:p-12
+              xl:p-14
             "
           >
             <div className="mx-auto w-full max-w-md">
@@ -213,7 +229,7 @@ export default function LoginPage() {
               {/* BACK TO HOME */}
               {/* ================================================= */}
 
-              <div className="mb-7">
+              <div className="mb-6 sm:mb-7">
                 <Link
                   href="/"
                   className="
@@ -221,7 +237,7 @@ export default function LoginPage() {
                     rounded-xl
                     border border-gray-200
                     bg-white
-                    px-4 py-2.5
+                    px-3.5 py-2.5
                     text-sm font-semibold
                     text-gray-700
                     shadow-sm
@@ -235,6 +251,7 @@ export default function LoginPage() {
                     dark:hover:border-indigo-500/50
                     dark:hover:bg-indigo-950/50
                     dark:hover:text-indigo-300
+                    sm:px-4
                   "
                 >
                   <ArrowLeft className="h-4 w-4" />
@@ -246,16 +263,17 @@ export default function LoginPage() {
               {/* MOBILE LOGO */}
               {/* ================================================= */}
 
-              <div className="mb-8 flex items-center gap-3 lg:hidden">
+              <div className="mb-7 flex items-center gap-3 lg:hidden sm:mb-8">
                 <div
                   className="
-                    flex h-14 w-14
+                    flex h-12 w-12
                     items-center justify-center
                     overflow-hidden rounded-2xl
                     bg-white shadow-md
                     ring-1 ring-gray-100
                     dark:bg-slate-800
                     dark:ring-slate-700
+                    sm:h-14 sm:w-14
                   "
                 >
                   <Image
@@ -269,11 +287,11 @@ export default function LoginPage() {
                 </div>
 
                 <div>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">
+                  <p className="text-lg font-bold text-gray-900 dark:text-white sm:text-xl">
                     Brainfriend
                   </p>
 
-                  <p className="text-xs font-semibold tracking-wide text-indigo-600 dark:text-indigo-400">
+                  <p className="text-[11px] font-semibold tracking-wide text-indigo-600 dark:text-indigo-400 sm:text-xs">
                     TECH SERVICES
                   </p>
                 </div>
@@ -283,7 +301,7 @@ export default function LoginPage() {
               {/* HEADING */}
               {/* ================================================= */}
 
-              <div className="mb-8">
+              <div className="mb-7 sm:mb-8">
                 <div
                   className="
                     mb-3 inline-flex items-center gap-2
@@ -302,10 +320,11 @@ export default function LoginPage() {
 
                 <h1
                   className="
-                    text-3xl font-bold tracking-tight
+                    text-2xl font-bold tracking-tight
                     text-gray-900
                     dark:text-white
-                    sm:text-4xl
+                    sm:text-3xl
+                    md:text-4xl
                   "
                 >
                   Welcome back
@@ -330,7 +349,7 @@ export default function LoginPage() {
 
               <form
                 onSubmit={handleSubmit}
-                className="space-y-5"
+                className="space-y-4 sm:space-y-5"
               >
                 <AuthInput
                   label="Email Address"
@@ -387,16 +406,17 @@ export default function LoginPage() {
               {/* REGISTER DIVIDER */}
               {/* ================================================= */}
 
-              <div className="my-7 flex items-center gap-4">
+              <div className="my-6 flex items-center gap-3 sm:my-7 sm:gap-4">
                 <div className="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
 
                 <span
                   className="
                     whitespace-nowrap
-                    text-[10px] font-semibold
+                    text-[9px] font-semibold
                     tracking-wider
                     text-gray-400
                     dark:text-slate-500
+                    sm:text-[10px]
                   "
                 >
                   NEW TO BRAINFRIEND?
@@ -428,10 +448,12 @@ export default function LoginPage() {
 
               <p
                 className="
-                  mt-8 text-center
-                  text-xs leading-5
+                  mt-7 text-center
+                  text-[11px] leading-5
                   text-gray-400
                   dark:text-slate-500
+                  sm:mt-8
+                  sm:text-xs
                 "
               >
                 By signing in, you agree to use
@@ -445,4 +467,3 @@ export default function LoginPage() {
     </main>
   );
 }
-
