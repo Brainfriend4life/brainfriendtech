@@ -76,14 +76,14 @@ export async function POST(req: NextRequest) {
 
       to: normalizedEmail,
 
-      subject: "Reset Your Brainfriend VTU Password",
+      subject: "Reset Your Brainfriend Global Tech Password",
 
       html: `
         <div style="font-family: Arial, sans-serif; background:#f5f7ff; padding:40px 20px;">
           <div style="max-width:600px; margin:auto; background:white; border-radius:16px; padding:35px;">
 
             <h1 style="color:#4f46e5; margin-bottom:10px;">
-              Brainfriend VTU
+              Brainfriend Global Tech
             </h1>
 
             <h2 style="color:#111827;">
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
 
             <p style="color:#4b5563; font-size:15px; line-height:1.6;">
               We received a request to reset the password
-              for your Brainfriend VTU account.
+              for your Brainfriend Global Tech account.
             </p>
 
             <p style="color:#4b5563; font-size:15px; line-height:1.6;">
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
             <hr style="border:none; border-top:1px solid #e5e7eb; margin:30px 0;" />
 
             <p style="color:#9ca3af; font-size:12px;">
-              © ${new Date().getFullYear()} Brainfriend VTU.
+              © ${new Date().getFullYear()} Brainfriend Global Tech.
               All rights reserved.
             </p>
 

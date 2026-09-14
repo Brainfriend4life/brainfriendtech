@@ -297,7 +297,7 @@ export default function ChangePasswordPage() {
 
             <p className="mt-1 text-sm leading-6 text-indigo-700 dark:text-indigo-300">
               Never share your password with anyone.
-              Brainfriend VTU will never ask you to
+              Brainfriend Global Tech will never ask you to
               disclose your password.
             </p>
 
