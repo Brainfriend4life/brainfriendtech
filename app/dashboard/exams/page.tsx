@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { toast } from "react-hot-toast";
-import TransactionPinModal from "@/components/TransactionPinModal";
+import { useEffect, useMemo, useState } from "react";
 
 type ExamProduct = {
   id: number;
@@ -10,204 +8,280 @@ type ExamProduct = {
   price: number;
   reseller_price: number;
   api_price: number;
+  availability?: string;
   is_active: boolean;
 };
 
-type PurchaseResult = {
-  examName: string;
-  quantity: number;
-  unitPrice: number;
-  serviceFee: number;
-  totalAmount: number;
-  pins: string[];
-  reference: string;
-  walletBalance: number;
-  status: string;
-  serviceFeePercent: number;
+type ExamCard = {
+  pin: string;
+  serial: string;
 };
 
-export default function ExamPinPage() {
-  const [products, setProducts] = useState<ExamProduct[]>([]);
-  const [productId, setProductId] = useState("");
-  const [quantity, setQuantity] = useState("1");
+type PurchaseResult = {
+  success: boolean;
+  message?: string;
+  examName?: string;
+  quantity?: number;
+  unitPrice?: number;
+  baseAmount?: number;
+  serviceFee?: number;
+  serviceFeePercent?: number;
+  totalAmount?: number;
+  profit?: number;
+  pins?: string[];
+  cards?: ExamCard[];
+  reference?: string;
+  providerReference?: string | null;
+  walletBalance?: number;
+  provider?: string;
+  status?: string;
+};
 
-  const [loadingProducts, setLoadingProducts] = useState(true);
-  const [loadingFee, setLoadingFee] = useState(true);
+const DEFAULT_SERVICE_FEE_PERCENT = 5;
+
+export default function ExamPinsPage() {
+  const [products, setProducts] = useState<ExamProduct[]>([]);
+  const [selectedProductId, setSelectedProductId] =
+    useState<number | null>(null);
+
+  const [quantity, setQuantity] = useState(1);
+
+  const [serviceFeePercent, setServiceFeePercent] =
+    useState(DEFAULT_SERVICE_FEE_PERCENT);
+
+  const [transactionPin, setTransactionPin] = useState("");
+
+  const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
 
   const [error, setError] = useState("");
-
-  const [serviceFeePercent, setServiceFeePercent] = useState(5);
+  const [success, setSuccess] = useState("");
 
   const [purchaseResult, setPurchaseResult] =
     useState<PurchaseResult | null>(null);
 
-  const [showPinModal, setShowPinModal] = useState(false);
+  // -------------------------------------------------------
+  // LOAD PRODUCTS + SERVICE FEE
+  // -------------------------------------------------------
 
   useEffect(() => {
-    loadProducts();
-    loadServiceFee();
+    let cancelled = false;
+
+    async function loadData() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const [productsResponse, serviceFeeResponse] =
+          await Promise.all([
+            fetch("/api/exams/products", {
+              cache: "no-store",
+            }),
+
+            fetch("/api/settings/service-fee", {
+              cache: "no-store",
+            }),
+          ]);
+
+        // ---------------------------------------------------
+        // PRODUCTS
+        // ---------------------------------------------------
+
+        const productsText = await productsResponse.text();
+
+        let productsResult: any;
+
+        try {
+          productsResult = JSON.parse(productsText);
+        } catch {
+          throw new Error(
+            "Invalid response received from Exam PIN provider."
+          );
+        }
+
+        if (
+          !productsResponse.ok ||
+          !productsResult?.success
+        ) {
+          throw new Error(
+            productsResult?.message ||
+              "Unable to load Exam PIN products."
+          );
+        }
+
+        const activeProducts = Array.isArray(
+          productsResult?.data
+        )
+          ? productsResult.data.filter(
+              (product: ExamProduct) =>
+                product.is_active
+            )
+          : [];
+
+        if (activeProducts.length === 0) {
+          throw new Error(
+            "No Exam PIN products are currently available."
+          );
+        }
+
+        // ---------------------------------------------------
+        // SERVICE FEE
+        // ---------------------------------------------------
+
+        let feePercent =
+          DEFAULT_SERVICE_FEE_PERCENT;
+
+        if (serviceFeeResponse.ok) {
+          try {
+            const feeResult =
+              await serviceFeeResponse.json();
+
+            const possibleFee =
+              feeResult?.data?.percentage ??
+              feeResult?.data?.serviceFeePercent ??
+              feeResult?.percentage ??
+              feeResult?.serviceFeePercent;
+
+            const parsedFee = Number(
+              possibleFee
+            );
+
+            if (
+              Number.isFinite(parsedFee) &&
+              parsedFee >= 0 &&
+              parsedFee <= 100
+            ) {
+              feePercent = parsedFee;
+            }
+          } catch (feeError) {
+            console.error(
+              "SERVICE FEE RESPONSE ERROR:",
+              feeError
+            );
+          }
+        }
+
+        if (cancelled) return;
+
+        setProducts(activeProducts);
+
+        setSelectedProductId(
+          Number(activeProducts[0].id)
+        );
+
+        setServiceFeePercent(feePercent);
+      } catch (err: any) {
+        if (cancelled) return;
+
+        console.error(
+          "Exam PIN loading error:",
+          err
+        );
+
+        setError(
+          err?.message ||
+            "Unable to connect to the Exam PIN provider."
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  async function loadProducts() {
-    try {
-      setLoadingProducts(true);
-      setError("");
+  // -------------------------------------------------------
+  // SELECTED PRODUCT
+  // -------------------------------------------------------
 
-      const response = await fetch("/api/exams/products", {
-        cache: "no-store",
-      });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.error ||
-            "Unable to load exam products."
-        );
-      }
-
-      const activeProducts = (result.data || []).filter(
-        (item: ExamProduct) => item.is_active
-      );
-
-      setProducts(activeProducts);
-
-      if (activeProducts.length > 0) {
-        setProductId(String(activeProducts[0].id));
-      }
-    } catch (error) {
-      console.error("LOAD EXAM ERROR:", error);
-
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to load exam products.";
-
-      setError(message);
-      toast.error(message);
-    } finally {
-      setLoadingProducts(false);
-    }
-  }
-
-  async function loadServiceFee() {
-    try {
-      setLoadingFee(true);
-
-      const response = await fetch(
-        "/api/settings/service-fee",
-        {
-          method: "GET",
-          cache: "no-store",
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message ||
-            "Unable to load service fee."
-        );
-      }
-
-      const percentage = Number(result.percentage);
-
-      if (
-        Number.isFinite(percentage) &&
-        percentage >= 0 &&
-        percentage <= 100
-      ) {
-        setServiceFeePercent(percentage);
-      }
-    } catch (error) {
-      console.error(
-        "LOAD SERVICE FEE ERROR:",
-        error
-      );
-    } finally {
-      setLoadingFee(false);
-    }
-  }
-
-  const selectedProduct = products.find(
-    (product) =>
-      String(product.id) === productId
+  const selectedProduct = useMemo(
+    () =>
+      products.find(
+        (product) =>
+          product.id === selectedProductId
+      ) || null,
+    [products, selectedProductId]
   );
 
-  const numericQuantity = Number(quantity);
+  // -------------------------------------------------------
+  // PRICE CALCULATIONS
+  // -------------------------------------------------------
 
   const unitPrice = Number(
-    selectedProduct?.reseller_price ||
-      selectedProduct?.price ||
+    selectedProduct?.reseller_price ??
+      selectedProduct?.price ??
       0
   );
 
-  const subtotal =
-    unitPrice * numericQuantity;
+  const subtotal = Number(
+    (unitPrice * quantity).toFixed(2)
+  );
 
-  const serviceFee =
-    subtotal * (serviceFeePercent / 100);
+  const serviceFee = Number(
+    (
+      subtotal *
+      (serviceFeePercent / 100)
+    ).toFixed(2)
+  );
 
-  const totalAmount =
-    subtotal + serviceFee;
+  const totalAmount = Number(
+    (subtotal + serviceFee).toFixed(2)
+  );
 
-  function openPinModal(
-    e: React.FormEvent
-  ) {
-    e.preventDefault();
+  // -------------------------------------------------------
+  // FORMAT MONEY
+  // -------------------------------------------------------
 
-    setError("");
-
-    if (!productId) {
-      toast.error("Select examination.");
-      return;
-    }
-
-    if (![1, 2, 5].includes(numericQuantity)) {
-      toast.error(
-        "Quantity must be 1, 2 or 5."
-      );
-      return;
-    }
-
-    if (!selectedProduct) {
-      toast.error(
-        "Invalid exam selected."
-      );
-      return;
-    }
-
-    setShowPinModal(true);
+  function formatMoney(amount: number) {
+    return `₦${Number(
+      amount || 0
+    ).toLocaleString("en-NG", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
   }
 
-  function closePinModal() {
-    if (purchasing) return;
+  // -------------------------------------------------------
+  // PURCHASE
+  // -------------------------------------------------------
 
-    setShowPinModal(false);
-  }
-
-  async function confirmPurchase(pin: string) {
-    setError("");
-
-    if (!/^\d{4}$/.test(pin)) {
-      toast.error(
-        "Enter your 4 digit transaction PIN."
-      );
-      return;
-    }
-
-    if (!selectedProduct) {
-      toast.error(
-        "Invalid exam product."
-      );
-      return;
-    }
-
-    setPurchasing(true);
-
+  async function handlePurchase() {
     try {
+      setError("");
+      setSuccess("");
+      setPurchaseResult(null);
+
+      if (!selectedProduct) {
+        setError("Please select an Exam PIN.");
+        return;
+      }
+
+      if (
+        !Number.isInteger(quantity) ||
+        quantity <= 0 ||
+        quantity > 100
+      ) {
+        setError(
+          "Quantity must be between 1 and 100."
+        );
+        return;
+      }
+
+      if (!transactionPin.trim()) {
+        setError(
+          "Please enter your transaction PIN."
+        );
+        return;
+      }
+
+      setPurchasing(true);
+
       const response = await fetch(
         "/api/exams/purchase",
         {
@@ -216,424 +290,537 @@ export default function ExamPinPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            productId: Number(productId),
-            quantity: numericQuantity,
-            transactionPin: pin,
+            productId: selectedProduct.id,
+            quantity,
+            transactionPin:
+              transactionPin.trim(),
           }),
         }
       );
 
-      const result = await response.json();
+      const responseText =
+        await response.text();
 
-      if (!response.ok || !result.success) {
+      let result: PurchaseResult;
+
+      try {
+        result = JSON.parse(
+          responseText
+        );
+      } catch {
         throw new Error(
-          result.error ||
-            result.message ||
+          "Invalid response received from server."
+        );
+      }
+
+      if (
+        !response.ok ||
+        !result.success
+      ) {
+        throw new Error(
+          result?.message ||
             "Exam PIN purchase failed."
         );
       }
 
-      const pins = Array.isArray(result.pins)
-        ? result.pins
-        : [];
+      setPurchaseResult(result);
 
-      setPurchaseResult({
-        examName:
-          result.examName ||
-          selectedProduct.exam_name,
-
-        quantity: Number(
-          result.quantity ||
-            numericQuantity
-        ),
-
-        unitPrice: Number(
-          result.unitPrice ||
-            unitPrice
-        ),
-
-        serviceFee: Number(
-          result.serviceFee ||
-            serviceFee
-        ),
-
-        totalAmount: Number(
-          result.totalAmount ||
-            totalAmount
-        ),
-
-        pins,
-
-        reference:
-          result.reference || "N/A",
-
-        walletBalance: Number(
-          result.walletBalance || 0
-        ),
-
-        status:
-          result.status || "SUCCESS",
-
-        serviceFeePercent: Number(
-          result.serviceFeePercent ??
-            serviceFeePercent
-        ),
-      });
-
-      setShowPinModal(false);
-
-      toast.success(
-        "Exam PIN purchase successful."
+      setSuccess(
+        result.message ||
+          "Exam PIN purchase successful."
       );
-    } catch (error) {
+
+      setTransactionPin("");
+    } catch (err: any) {
       console.error(
-        "EXAM PURCHASE ERROR:",
-        error
+        "Exam PIN purchase error:",
+        err
       );
 
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Exam purchase failed.";
-
-      setError(message);
-      toast.error(message);
+      setError(
+        err?.message ||
+          "Unable to complete Exam PIN purchase."
+      );
     } finally {
       setPurchasing(false);
     }
   }
 
-  function closeReceipt() {
-    setPurchaseResult(null);
-    setQuantity("1");
-  }
+  // -------------------------------------------------------
+  // LOADING
+  // -------------------------------------------------------
 
-  if (purchaseResult) {
+  if (loading) {
     return (
-      <div className="w-full">
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl text-green-600 dark:bg-green-950/40 dark:text-green-400">
-            ✓
-          </div>
+      <div className="p-3 sm:p-5">
+        <div className="mx-auto max-w-2xl rounded-xl border border-gray-200 bg-white p-6 text-center shadow-sm dark:border-gray-700 dark:bg-gray-900">
+          <div className="mx-auto mb-3 h-7 w-7 animate-spin rounded-full border-4 border-gray-300 border-t-black dark:border-gray-700 dark:border-t-white" />
 
-          <h1 className="text-2xl font-bold text-foreground">
-            Purchase Successful
-          </h1>
-
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your examination PIN is ready.
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Loading Exam PINs...
           </p>
         </div>
-
-        <div className="space-y-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <div className="flex justify-between gap-4">
-            <span className="text-muted-foreground">
-              Examination
-            </span>
-
-            <span className="text-right font-semibold text-foreground">
-              {purchaseResult.examName}
-            </span>
-          </div>
-
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">
-              Quantity
-            </span>
-
-            <span className="font-semibold text-foreground">
-              {purchaseResult.quantity}
-            </span>
-          </div>
-
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">
-              Price
-            </span>
-
-            <span className="font-semibold text-foreground">
-              ₦
-              {purchaseResult.unitPrice.toLocaleString(
-                "en-NG"
-              )}
-            </span>
-          </div>
-
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">
-              Service Fee (
-              {purchaseResult.serviceFeePercent}
-              %)
-            </span>
-
-            <span className="font-semibold text-foreground">
-              ₦
-              {purchaseResult.serviceFee.toLocaleString(
-                "en-NG"
-              )}
-            </span>
-          </div>
-
-          <div className="flex justify-between border-t border-border pt-3">
-            <span className="font-bold text-foreground">
-              Total Deducted
-            </span>
-
-            <span className="font-bold text-indigo-600 dark:text-indigo-400">
-              ₦
-              {purchaseResult.totalAmount.toLocaleString(
-                "en-NG"
-              )}
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="mb-4 text-lg font-bold text-foreground">
-            Your Exam PIN
-            {purchaseResult.quantity > 1
-              ? "s"
-              : ""}
-          </h2>
-
-          <div className="space-y-3">
-            {purchaseResult.pins.length > 0 ? (
-              purchaseResult.pins.map(
-                (pin, index) => (
-                  <div
-                    key={`${pin}-${index}`}
-                    className="rounded-xl bg-muted p-4"
-                  >
-                    <p className="text-xs text-muted-foreground">
-                      PIN {index + 1}
-                    </p>
-
-                    <p className="break-all font-mono font-bold text-foreground">
-                      {pin}
-                    </p>
-                  </div>
-                )
-              )
-            ) : (
-              <div className="rounded-xl bg-yellow-50 p-4 text-sm text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-400">
-                Provider did not return PIN
-                details.
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-5 rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <h2 className="mb-4 font-bold text-foreground">
-            Transaction Details
-          </h2>
-
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">
-                Status
-              </span>
-
-              <span className="font-semibold text-green-600 dark:text-green-400">
-                {purchaseResult.status}
-              </span>
-            </div>
-
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">
-                Reference
-              </span>
-
-              <span className="break-all text-right font-medium text-foreground">
-                {purchaseResult.reference}
-              </span>
-            </div>
-
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">
-                Wallet Balance
-              </span>
-
-              <span className="font-semibold text-foreground">
-                ₦
-                {purchaseResult.walletBalance.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={closeReceipt}
-          className="mt-6 w-full rounded-xl bg-indigo-600 p-3 font-semibold text-white hover:bg-indigo-700"
-        >
-          Done
-        </button>
       </div>
     );
   }
 
+  // -------------------------------------------------------
+  // MAIN UI
+  // -------------------------------------------------------
+
   return (
-    <div className="w-full">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
-          Exam PIN
-        </h1>
+    <div className="px-3 py-4 sm:px-5 sm:py-6">
+      <div className="mx-auto max-w-2xl">
+        {/* HEADER */}
 
-        <p className="mt-1 text-sm text-muted-foreground">
-          Purchase WAEC, NECO and NABTEB PIN
-          instantly.
-        </p>
-      </div>
+        <div className="mb-4">
+          <h1 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-2xl">
+            Exam PINs
+          </h1>
 
-      {error && (
-        <div className="mb-5 rounded-xl bg-red-50 p-4 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-400">
-          {error}
-        </div>
-      )}
-
-      <form
-        onSubmit={openPinModal}
-        className="max-w-2xl space-y-5 rounded-2xl bg-card p-5 shadow-sm"
-      >
-        <div>
-          <label className="mb-2 block text-sm font-medium text-foreground">
-            Examination
-          </label>
-
-          <select
-            value={productId}
-            onChange={(e) =>
-              setProductId(e.target.value)
-            }
-            disabled={
-              loadingProducts ||
-              purchasing
-            }
-            className="w-full rounded-xl border border-border bg-background p-3 text-foreground"
-          >
-            <option value="">
-              {loadingProducts
-                ? "Loading..."
-                : "Select examination"}
-            </option>
-
-            {products.map((product) => (
-              <option
-                key={product.id}
-                value={product.id}
-              >
-                {product.exam_name} - ₦
-                {Number(
-                  product.reseller_price ||
-                    product.price
-                ).toLocaleString(
-                  "en-NG"
-                )}
-              </option>
-            ))}
-          </select>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 sm:text-sm">
+            Buy WAEC, NECO and other examination
+            PINs instantly.
+          </p>
         </div>
 
-        <div>
-          <label className="mb-2 block text-sm font-medium text-foreground">
-            Quantity
-          </label>
+        {/* ERROR */}
 
-          <select
-            value={quantity}
-            onChange={(e) =>
-              setQuantity(e.target.value)
-            }
-            disabled={purchasing}
-            className="w-full rounded-xl border border-border bg-background p-3 text-foreground"
-          >
-            <option value="1">
-              1 PIN
-            </option>
-
-            <option value="2">
-              2 PINs
-            </option>
-
-            <option value="5">
-              5 PINs
-            </option>
-          </select>
-        </div>
-
-        {selectedProduct && (
-          <div className="rounded-xl bg-muted p-4">
-            <div className="flex justify-between text-foreground">
-              <span>
-                Subtotal
-              </span>
-
-              <span>
-                ₦
-                {subtotal.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-            </div>
-
-            <div className="mt-2 flex justify-between text-foreground">
-              <span>
-                Service Fee (
-                {loadingFee
-                  ? "..."
-                  : serviceFeePercent}
-                %)
-              </span>
-
-              <span>
-                ₦
-                {serviceFee.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-            </div>
-
-            <div className="mt-3 flex justify-between border-t border-border pt-3 font-bold text-foreground">
-              <span>
-                Total
-              </span>
-
-              <span className="text-indigo-600 dark:text-indigo-400">
-                ₦
-                {totalAmount.toLocaleString(
-                  "en-NG"
-                )}
-              </span>
-            </div>
+        {error && (
+          <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-900/50 dark:bg-red-950/40">
+            <p className="text-xs font-medium text-red-700 dark:text-red-300">
+              {error}
+            </p>
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={
-            loadingProducts ||
-            loadingFee ||
-            purchasing ||
-            !productId
-          }
-          className="w-full rounded-xl bg-indigo-600 p-3.5 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
-          {purchasing
-            ? "Processing..."
-            : "Buy Exam PIN"}
-        </button>
-      </form>
+        {/* SUCCESS */}
 
-      {showPinModal && (
-        <TransactionPinModal
-          open={showPinModal}
-          onClose={closePinModal}
-          onSuccess={confirmPurchase}
-        />
-      )}
+        {success && (
+          <div className="mb-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2.5 dark:border-green-900/50 dark:bg-green-950/40">
+            <p className="text-xs font-medium text-green-700 dark:text-green-300">
+              {success}
+            </p>
+          </div>
+        )}
+
+        {/* PURCHASE CARD */}
+
+        <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900 sm:p-5">
+          {/* EXAM + QUANTITY */}
+
+          <div className="grid gap-3 sm:grid-cols-[1fr_130px]">
+            {/* EXAM */}
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-gray-700 dark:text-gray-300">
+                Examination
+              </label>
+
+              <select
+                value={
+                  selectedProductId ?? ""
+                }
+                onChange={(event) =>
+                  setSelectedProductId(
+                    Number(
+                      event.target.value
+                    )
+                  )
+                }
+                className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-black focus:ring-2 focus:ring-black/10 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:focus:border-white dark:focus:ring-white/10"
+              >
+                {products.map(
+                  (product) => (
+                    <option
+                      key={product.id}
+                      value={product.id}
+                    >
+                      {product.exam_name} —{" "}
+                      {formatMoney(
+                        product.reseller_price ??
+                          product.price
+                      )}
+                    </option>
+                  )
+                )}
+              </select>
+
+              {selectedProduct && (
+                <p className="mt-1 text-[11px] text-gray-400">
+                  {selectedProduct.availability ||
+                    "Available"}
+                </p>
+              )}
+            </div>
+
+            {/* QUANTITY */}
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-gray-700 dark:text-gray-300">
+                Quantity
+              </label>
+
+              <select
+                value={quantity}
+                onChange={(event) =>
+                  setQuantity(
+                    Number(
+                      event.target.value
+                    )
+                  )
+                }
+                className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-black focus:ring-2 focus:ring-black/10 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:focus:border-white dark:focus:ring-white/10"
+              >
+                {[1, 2, 5, 10, 20, 50, 100].map(
+                  (value) => (
+                    <option
+                      key={value}
+                      value={value}
+                    >
+                      {value}
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+          </div>
+
+          {/* TRANSACTION PIN */}
+
+          <div className="mt-3">
+            <label className="mb-1.5 block text-xs font-medium text-gray-700 dark:text-gray-300">
+              Transaction PIN
+            </label>
+
+            <input
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={10}
+              value={transactionPin}
+              onChange={(event) =>
+                setTransactionPin(
+                  event.target.value.replace(
+                    /\D/g,
+                    ""
+                  )
+                )
+              }
+              placeholder="Enter transaction PIN"
+              className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-black focus:ring-2 focus:ring-black/10 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500 dark:focus:border-white dark:focus:ring-white/10"
+            />
+          </div>
+
+          {/* SUMMARY */}
+
+          <div className="mt-4 rounded-lg bg-gray-50 px-3 py-2.5 dark:bg-gray-800">
+            <div className="space-y-1.5">
+              {/* UNIT PRICE */}
+
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Unit price
+                </span>
+
+                <span className="text-xs font-medium text-gray-900 dark:text-white">
+                  {formatMoney(
+                    unitPrice
+                  )}
+                </span>
+              </div>
+
+              {/* QUANTITY */}
+
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Quantity
+                </span>
+
+                <span className="text-xs font-medium text-gray-900 dark:text-white">
+                  {quantity}
+                </span>
+              </div>
+
+              {/* SUBTOTAL */}
+
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Subtotal
+                </span>
+
+                <span className="text-xs font-medium text-gray-900 dark:text-white">
+                  {formatMoney(
+                    subtotal
+                  )}
+                </span>
+              </div>
+
+              {/* SERVICE FEE */}
+
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  Service fee ({serviceFeePercent}%)
+                </span>
+
+                <span className="text-xs font-medium text-gray-900 dark:text-white">
+                  {formatMoney(
+                    serviceFee
+                  )}
+                </span>
+              </div>
+
+              {/* DIVIDER */}
+
+              <div className="my-1.5 border-t border-gray-200 dark:border-gray-700" />
+
+              {/* TOTAL */}
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Total
+                </span>
+
+                <span className="text-base font-bold text-gray-900 dark:text-white">
+                  {formatMoney(
+                    totalAmount
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* BUY BUTTON */}
+
+          <button
+            type="button"
+            onClick={handlePurchase}
+            disabled={
+              purchasing ||
+              !selectedProduct
+            }
+            className="mt-4 h-11 w-full rounded-lg bg-black px-4 text-sm font-semibold text-white transition hover:bg-gray-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black dark:hover:bg-gray-200"
+          >
+            {purchasing
+              ? "Processing..."
+              : `Buy ${
+                  selectedProduct?.exam_name ||
+                  "Exam PIN"
+                }`}
+          </button>
+
+          <p className="mt-2 text-center text-[11px] text-gray-400">
+            Your PIN will be delivered immediately
+            after a successful purchase.
+          </p>
+        </div>
+
+        {/* RECEIPT */}
+
+        {purchaseResult && (
+          <div className="mt-4 rounded-xl border border-green-200 bg-white p-4 shadow-sm dark:border-green-900/50 dark:bg-gray-900 sm:p-5">
+            {/* RECEIPT HEADER */}
+
+            <div className="mb-4 flex items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-100 text-sm font-bold text-green-700 dark:bg-green-950/50 dark:text-green-300">
+                ✓
+              </div>
+
+              <div className="min-w-0">
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white">
+                  Purchase Successful
+                </h2>
+
+                <p className="text-[11px] text-gray-400">
+                  Your Exam PIN has been generated.
+                </p>
+              </div>
+            </div>
+
+            {/* DETAILS */}
+
+            <div className="mb-4 rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] text-gray-400">
+                    Examination
+                  </p>
+
+                  <p className="mt-0.5 truncate text-xs font-semibold text-gray-900 dark:text-white">
+                    {purchaseResult.examName}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-gray-400">
+                    Quantity
+                  </p>
+
+                  <p className="mt-0.5 text-xs font-semibold text-gray-900 dark:text-white">
+                    {purchaseResult.quantity}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-gray-400">
+                    Unit price
+                  </p>
+
+                  <p className="mt-0.5 text-xs font-semibold text-gray-900 dark:text-white">
+                    {formatMoney(
+                      purchaseResult.unitPrice ??
+                        0
+                    )}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-gray-400">
+                    Subtotal
+                  </p>
+
+                  <p className="mt-0.5 text-xs font-semibold text-gray-900 dark:text-white">
+                    {formatMoney(
+                      purchaseResult.baseAmount ??
+                        0
+                    )}
+                  </p>
+                </div>
+
+                {/* RECEIPT SERVICE FEE */}
+
+                <div>
+                  <p className="text-[11px] text-gray-400">
+                    Service fee
+                    {purchaseResult.serviceFeePercent !==
+                      undefined &&
+                      ` (${purchaseResult.serviceFeePercent}%)`}
+                  </p>
+
+                  <p className="mt-0.5 text-xs font-semibold text-gray-900 dark:text-white">
+                    {formatMoney(
+                      purchaseResult.serviceFee ??
+                        0
+                    )}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] text-gray-400">
+                    Total paid
+                  </p>
+
+                  <p className="mt-0.5 text-xs font-bold text-gray-900 dark:text-white">
+                    {formatMoney(
+                      purchaseResult.totalAmount ??
+                        0
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* PINS */}
+
+            {purchaseResult.cards &&
+              purchaseResult.cards.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-xs font-semibold text-gray-900 dark:text-white">
+                    Exam PIN Details
+                  </h3>
+
+                  <div className="space-y-2">
+                    {purchaseResult.cards.map(
+                      (card, index) => (
+                        <div
+                          key={`${card.pin}-${index}`}
+                          className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
+                        >
+                          <div className="mb-2 text-[11px] font-medium text-gray-400">
+                            Card {index + 1}
+                          </div>
+
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <div className="min-w-0">
+                              <p className="text-[11px] text-gray-400">
+                                PIN
+                              </p>
+
+                              <p className="mt-0.5 break-all font-mono text-xs font-bold text-gray-900 dark:text-white">
+                                {card.pin}
+                              </p>
+                            </div>
+
+                            <div className="min-w-0">
+                              <p className="text-[11px] text-gray-400">
+                                Serial Number
+                              </p>
+
+                              <p className="mt-0.5 break-all font-mono text-xs font-semibold text-gray-900 dark:text-white">
+                                {card.serial ||
+                                  "N/A"}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              )}
+
+            {/* REFERENCES */}
+
+            {(purchaseResult.reference ||
+              purchaseResult.providerReference ||
+              purchaseResult.walletBalance !==
+                undefined) && (
+              <div className="mt-4 space-y-2 border-t border-gray-200 pt-3 dark:border-gray-700">
+                {purchaseResult.reference && (
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
+                    <span className="text-[11px] text-gray-400">
+                      Reference
+                    </span>
+
+                    <span className="break-all font-mono text-[11px] text-gray-700 dark:text-gray-300 sm:text-right">
+                      {purchaseResult.reference}
+                    </span>
+                  </div>
+                )}
+
+                {purchaseResult.providerReference && (
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
+                    <span className="text-[11px] text-gray-400">
+                      Provider Reference
+                    </span>
+
+                    <span className="break-all font-mono text-[11px] text-gray-700 dark:text-gray-300 sm:text-right">
+                      {
+                        purchaseResult.providerReference
+                      }
+                    </span>
+                  </div>
+                )}
+
+                {purchaseResult.walletBalance !==
+                  undefined && (
+                  <div className="flex justify-between">
+                    <span className="text-[11px] text-gray-400">
+                      Wallet Balance
+                    </span>
+
+                    <span className="text-[11px] font-semibold text-gray-900 dark:text-white">
+                      {formatMoney(
+                        purchaseResult.walletBalance
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

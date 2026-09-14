@@ -27,6 +27,7 @@ import {
   Banknote,
   CircleDollarSign,
   SlidersHorizontal,
+  Star,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -72,6 +73,11 @@ const managementItems: NavItem[] = [
     label: "NIN Verifications",
     href: "/dashboard/admin/nin",
     icon: Fingerprint,
+  },
+  {
+    label: "Reviews",
+    href: "/dashboard/admin/reviews",
+    icon: Star,
   },
 ];
 
@@ -181,7 +187,8 @@ export default function AdminSidebar() {
 
   const [managementOpen, setManagementOpen] = useState(
     pathname.startsWith("/dashboard/admin/purchases") ||
-      pathname.startsWith("/dashboard/admin/nin")
+      pathname.startsWith("/dashboard/admin/nin") ||
+      pathname.startsWith("/dashboard/admin/reviews")
   );
 
   const [educationOpen, setEducationOpen] = useState(

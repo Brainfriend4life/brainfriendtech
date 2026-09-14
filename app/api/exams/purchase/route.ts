@@ -1,1033 +1,862 @@
-
-import bcrypt from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const CHEAPDATAHUB_EXAM_PRODUCTS_URL =
-  "https://www.cheapdatahub.ng/api/v1/resellers/exam-pin/products/";
+import {
+  getServiceFeePercent,
+  calculateServiceFee,
+} from "@/lib/service-fee";
 
-const CHEAPDATAHUB_EXAM_PURCHASE_URL =
-  "https://www.cheapdatahub.ng/api/v1/resellers/exam-pin/purchase/";
+import { verifyTransactionPin } from "@/lib/security/verifyTransactionPin";
 
-const SERVICE_FEE_SETTING_KEY = "SERVICE_FEE_PERCENT";
-const DEFAULT_SERVICE_FEE_PERCENT = 5;
+const NAIJARESULTPINS_API_URL =
+  "https://www.naijaresultpins.com/api/v1";
 
-export async function POST(request: NextRequest) {
-  let pendingTransactionId: string | null = null;
-  let reservedAmount = 0;
-  let userId: string | null = null;
+const NAIJARESULTPINS_PURCHASE_URL =
+  "https://www.naijaresultpins.com/api/v1/exam-card/buy";
+
+const PROVIDER_TIMEOUT = 15000;
+
+function generateReference() {
+  return `EXAMPIN-${Date.now()}-${Math.random()
+    .toString(36)
+    .substring(2, 8)
+    .toUpperCase()}`;
+}
+
+function isProviderSuccessful(result: any) {
+  return (
+    result?.status === true ||
+    result?.status === "true" ||
+    result?.code === "000" ||
+    result?.success === true
+  );
+}
+
+function extractCards(result: any) {
+  if (!Array.isArray(result?.cards)) {
+    return [];
+  }
+
+  return result.cards
+    .map((card: any) => ({
+      pin: String(card?.pin || "").trim(),
+      serial: String(card?.serial_no || "").trim(),
+    }))
+    .filter(
+      (card: { pin: string; serial: string }) =>
+        card.pin.length > 0
+    );
+}
+
+async function fetchProviderResponse(
+  url: string,
+  options: RequestInit
+) {
+  let response: Response;
 
   try {
-    // ==========================================================
-    // AUTHENTICATION
-    // ==========================================================
+    response = await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(PROVIDER_TIMEOUT),
+      cache: "no-store",
+    });
+  } catch (error: any) {
+    console.error(
+      "NaijaResultPins connection error:",
+      error
+    );
 
-    const session = await getServerSession(authOptions);
+    if (
+      error?.name === "TimeoutError" ||
+      error?.code === "UND_ERR_CONNECT_TIMEOUT"
+    ) {
+      throw new Error(
+        "Exam PIN provider connection timed out. Please try again."
+      );
+    }
+
+    throw new Error(
+      "Unable to connect to Exam PIN provider."
+    );
+  }
+
+  const contentType =
+    response.headers.get("content-type") || "";
+
+  const text = await response.text();
+
+  let data: any = null;
+
+  if (text.trim()) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // Provider returned non-JSON data.
+    }
+  }
+
+  return {
+    response,
+    contentType,
+    text,
+    data,
+  };
+}
+
+function getProviderErrorMessage(
+  status: number,
+  contentType: string,
+  data: any,
+  text: string
+) {
+  if (status === 401) {
+    return "Exam PIN provider authorization failed. Please check the API configuration.";
+  }
+
+  if (status === 403) {
+    return "Exam PIN provider denied the API request. Please contact NaijaResultPins support to enable server-to-server API access.";
+  }
+
+  if (
+    !contentType
+      .toLowerCase()
+      .includes("application/json")
+  ) {
+    return "Exam PIN provider returned an invalid response.";
+  }
+
+  return (
+    data?.message ||
+    data?.error ||
+    text ||
+    "Unable to communicate with Exam PIN provider."
+  );
+}
+
+export async function POST(req: NextRequest) {
+  let localTransactionId: string | null = null;
+
+  /*
+   * These flags help us handle an important situation:
+   *
+   * If NaijaResultPins has already processed the purchase,
+   * but our own database fails afterward, we must NOT mark
+   * the transaction as FAILED automatically.
+   *
+   * The transaction should remain PENDING for reconciliation.
+   */
+ 
+  let providerPurchaseSucceeded = false;
+
+  try {
+    // -------------------------------------------------------
+    // AUTHENTICATION
+    // -------------------------------------------------------
+
+    const session =
+      await getServerSession(authOptions);
 
     if (!session?.user?.email) {
       return NextResponse.json(
         {
           success: false,
-          error: "Unauthorized",
+          message: "Please login to continue.",
         },
         { status: 401 }
       );
     }
 
-    // ==========================================================
+    // -------------------------------------------------------
     // REQUEST BODY
-    // ==========================================================
+    // -------------------------------------------------------
 
-    const body = await request.json();
+    let body: any;
 
-    const productId = Number(
-      body.productId ?? body.product_id
-    );
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid request data.",
+        },
+        { status: 400 }
+      );
+    }
 
-    const quantity = Number(body.quantity);
+    const productId = Number(body?.productId);
+    const quantity = Number(body?.quantity);
 
     const transactionPin = String(
-      body.transactionPin ?? ""
+      body?.transactionPin || ""
     ).trim();
 
-    console.log("========== EXAM PIN PURCHASE ==========");
-    console.log("PRODUCT ID:", productId);
-    console.log("QUANTITY:", quantity);
+    // -------------------------------------------------------
+    // VALIDATE PRODUCT
+    // -------------------------------------------------------
 
-    // ==========================================================
-    // VALIDATE PRODUCT ID
-    // ==========================================================
-
-    if (!Number.isInteger(productId) || productId <= 0) {
+    if (
+      !Number.isInteger(productId) ||
+      productId <= 0
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid exam PIN product.",
+          message: "Invalid Exam PIN product.",
         },
         { status: 400 }
       );
     }
 
-    // ==========================================================
+    // -------------------------------------------------------
     // VALIDATE QUANTITY
-    // ==========================================================
+    // -------------------------------------------------------
 
-    if (![1, 2, 5].includes(quantity)) {
+    if (
+      !Number.isInteger(quantity) ||
+      quantity <= 0 ||
+      quantity > 100
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Quantity must be 1, 2, or 5.",
+          message: "Quantity must be between 1 and 100.",
         },
         { status: 400 }
       );
     }
 
-    // ==========================================================
+    // -------------------------------------------------------
     // VALIDATE TRANSACTION PIN
-    // ==========================================================
+    // -------------------------------------------------------
 
-    if (!/^\d{4}$/.test(transactionPin)) {
+    if (!transactionPin) {
       return NextResponse.json(
         {
           success: false,
-          error: "A valid 4-digit transaction PIN is required.",
+          message: "Transaction PIN is required.",
         },
         { status: 400 }
       );
     }
 
-    // ==========================================================
+    // -------------------------------------------------------
     // API KEY
-    // ==========================================================
+    // -------------------------------------------------------
 
-    const apiKey = process.env.CHEAPDATAHUB_API_KEY;
+    const apiKey =
+      process.env.NAIJARESULTPINS_API_KEY;
 
     if (!apiKey) {
       console.error(
-        "CHEAPDATAHUB_API_KEY is missing."
+        "NAIJARESULTPINS_API_KEY is missing."
       );
 
       return NextResponse.json(
         {
           success: false,
-          error: "CheapDataHub API key is not configured.",
+          message:
+            "Exam PIN provider is not configured.",
         },
         { status: 500 }
       );
     }
 
-    // ==========================================================
-    // FIND USER
-    // ==========================================================
+    // -------------------------------------------------------
+    // GET CURRENT PROVIDER PRODUCTS
+    // -------------------------------------------------------
 
-    const user = await prisma.user.findUnique({
-      where: {
-        email: session.user.email,
-      },
-    });
+    const productsResult =
+      await fetchProviderResponse(
+        NAIJARESULTPINS_API_URL,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+        }
+      );
 
-    if (!user) {
+    const {
+      response: productsResponse,
+      contentType: productsContentType,
+      text: productsText,
+      data: productsData,
+    } = productsResult;
+
+    if (
+      !productsResponse.ok ||
+      !Array.isArray(productsData)
+    ) {
+      console.error(
+        "NaijaResultPins product request failed:",
+        {
+          status: productsResponse.status,
+          contentType: productsContentType,
+          response:
+            productsData || productsText,
+        }
+      );
+
       return NextResponse.json(
         {
           success: false,
-          error: "User not found.",
+          message: getProviderErrorMessage(
+            productsResponse.status,
+            productsContentType,
+            productsData,
+            productsText
+          ),
+        },
+        { status: 502 }
+      );
+    }
+
+    // -------------------------------------------------------
+    // FIND SELECTED PRODUCT
+    // -------------------------------------------------------
+
+    const providerProduct =
+      productsData.find(
+        (product: any) =>
+          Number(product?.card_type_id) ===
+          productId
+      );
+
+    if (!providerProduct) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Selected Exam PIN product was not found.",
         },
         { status: 404 }
       );
     }
 
-    userId = user.id;
+    // -------------------------------------------------------
+    // CHECK AVAILABILITY
+    // -------------------------------------------------------
 
-    // ==========================================================
-    // TRANSACTION PIN SECURITY
-    // ==========================================================
+    const availability = String(
+      providerProduct?.availability || ""
+    ).trim();
 
-    if (
-      !user.transactionPinEnabled ||
-      !user.transactionPinHash
-    ) {
+    const availabilityLower =
+      availability.toLowerCase();
+
+    const isAvailable =
+      availabilityLower === "in stock" ||
+      availabilityLower === "available" ||
+      availabilityLower === "true";
+
+    if (!isAvailable) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Transaction PIN is not set. Please set your transaction PIN first.",
+          message:
+            "Selected Exam PIN is currently out of stock.",
         },
         { status: 400 }
       );
     }
 
-    // ==========================================================
-    // CHECK TRANSACTION PIN LOCK
-    // ==========================================================
+    // -------------------------------------------------------
+    // PROVIDER PRICE
+    // -------------------------------------------------------
 
-    if (
-      user.transactionPinLockedUntil &&
-      user.transactionPinLockedUntil > new Date()
-    ) {
-      const remainingMs =
-        user.transactionPinLockedUntil.getTime() -
-        Date.now();
-
-      const remainingMinutes = Math.max(
-        1,
-        Math.ceil(remainingMs / 60000)
-      );
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Transaction PIN is temporarily locked. Try again in ${remainingMinutes} minute(s).`,
-        },
-        { status: 429 }
-      );
-    }
-
-    // ==========================================================
-    // VERIFY TRANSACTION PIN
-    // ==========================================================
-
-    const pinValid = await bcrypt.compare(
-      transactionPin,
-      user.transactionPinHash
+    const unitPrice = Number(
+      providerProduct?.unit_amount
     );
 
-    if (!pinValid) {
-      const newAttempts =
-        user.transactionPinAttempts + 1;
-
-      const MAX_PIN_ATTEMPTS = 5;
-
-      if (newAttempts >= MAX_PIN_ATTEMPTS) {
-        const lockedUntil = new Date(
-          Date.now() + 15 * 60 * 1000
-        );
-
-        await prisma.user.update({
-          where: {
-            id: user.id,
-          },
-          data: {
-            transactionPinAttempts: 0,
-            transactionPinLockedUntil: lockedUntil,
-            lastTransactionPinCheck: new Date(),
-          },
-        });
-
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Too many incorrect transaction PIN attempts. Your transaction PIN has been locked for 15 minutes.",
-          },
-          { status: 429 }
-        );
-      }
-
-      await prisma.user.update({
-        where: {
-          id: user.id,
-        },
-        data: {
-          transactionPinAttempts: newAttempts,
-          lastTransactionPinCheck: new Date(),
-        },
-      });
-
+    if (
+      !Number.isFinite(unitPrice) ||
+      unitPrice <= 0
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: `Invalid transaction PIN. ${
-            MAX_PIN_ATTEMPTS - newAttempts
-          } attempt(s) remaining.`,
+          message:
+            "Invalid Exam PIN price received from provider.",
         },
-        { status: 400 }
+        { status: 502 }
       );
     }
 
-    // ==========================================================
-    // RESET PIN ATTEMPTS AFTER SUCCESS
-    // ==========================================================
+    const baseAmount = Number(
+      (unitPrice * quantity).toFixed(2)
+    );
 
-    await prisma.user.update({
-      where: {
-        id: user.id,
-      },
-      data: {
-        transactionPinAttempts: 0,
-        transactionPinLockedUntil: null,
-        lastTransactionPinCheck: new Date(),
-      },
-    });
+    // -------------------------------------------------------
+    // SERVICE FEE
+    // -------------------------------------------------------
 
-    // ==========================================================
-    // GET CURRENT SERVICE FEE FROM ADMIN SETTING
-    // ==========================================================
+    const serviceFeePercent =
+      await getServiceFeePercent();
 
-    const serviceFeeSetting =
-      await prisma.systemSetting.findUnique({
-        where: {
-          key: SERVICE_FEE_SETTING_KEY,
-        },
-      });
-
-    let serviceFeePercent =
-      DEFAULT_SERVICE_FEE_PERCENT;
-
-    if (serviceFeeSetting) {
-      const parsedPercentage = Number(
-        serviceFeeSetting.value
-      );
-
-      if (
-        Number.isFinite(parsedPercentage) &&
-        parsedPercentage >= 0 &&
-        parsedPercentage <= 100
-      ) {
-        serviceFeePercent =
-          parsedPercentage;
-      }
-    }
-
-    console.log(
-      "SERVICE FEE PERCENT:",
+    const {
+      serviceFee,
+      totalAmount,
+      profit,
+    } = calculateServiceFee(
+      baseAmount,
       serviceFeePercent
     );
 
-    // ==========================================================
-    // GET PRODUCTS FROM CHEAPDATAHUB
-    // ==========================================================
+    // -------------------------------------------------------
+    // GET USER
+    // -------------------------------------------------------
 
-    const productsResponse = await fetch(
-      CHEAPDATAHUB_EXAM_PRODUCTS_URL,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          Accept: "application/json",
+    const user =
+      await prisma.user.findUnique({
+        where: {
+          email: session.user.email,
         },
-        cache: "no-store",
-      }
-    );
+      });
 
-    const productsText =
-      await productsResponse.text();
-
-    console.log(
-      "CHEAPDATAHUB PRODUCTS STATUS:",
-      productsResponse.status
-    );
-
-    if (!productsText.trim()) {
+    if (!user) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "CheapDataHub returned an empty products response.",
+          message: "User account not found.",
         },
-        { status: 502 }
+        { status: 404 }
       );
     }
 
-    let productsResult: any;
+    // -------------------------------------------------------
+    // ACCOUNT STATUS
+    // -------------------------------------------------------
 
-    try {
-      productsResult =
-        JSON.parse(productsText);
-    } catch {
+    if (user.status !== "ACTIVE") {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "CheapDataHub returned an invalid products response.",
+          message: "Your account is not active.",
         },
-        { status: 502 }
+        { status: 403 }
       );
     }
 
-    if (!productsResponse.ok) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            productsResult?.message ||
-            productsResult?.error ||
-            "Unable to load exam PIN products.",
-        },
-        { status: productsResponse.status }
-      );
-    }
+    // -------------------------------------------------------
+    // TRANSACTION PIN
+    // -------------------------------------------------------
 
-    const providerSuccess =
-      productsResult?.success === true ||
-      productsResult?.status === true ||
-      productsResult?.status === "true";
+    const pinResult = await verifyTransactionPin(
+  user.id,
+  transactionPin
+);
 
-    if (!providerSuccess) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            productsResult?.message ||
-            productsResult?.error ||
-            "CheapDataHub could not return exam PIN products.",
-        },
-        { status: 502 }
-      );
-    }
+if (!pinResult.success) {
+  return NextResponse.json(
+    {
+      success: false,
+      message:
+        pinResult.message ||
+        "Invalid transaction PIN.",
+    },
+    { status: 403 }
+  );
+}
 
-    const products =
-      Array.isArray(productsResult?.data)
-        ? productsResult.data
-        : Array.isArray(
-            productsResult?.data?.products
-          )
-        ? productsResult.data.products
-        : [];
-
-    // ==========================================================
-    // FIND SELECTED PRODUCT
-    // ==========================================================
-
-    const selectedProduct =
-      products.find(
-        (product: any) =>
-          Number(product.id) === productId
-      );
-
-    if (!selectedProduct) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "The selected exam PIN product was not found.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const examName =
-      selectedProduct.exam_name ||
-      selectedProduct.examName ||
-      selectedProduct.name ||
-      "Exam PIN";
-
-    const providerPrice = Number(
-      selectedProduct.reseller_price ??
-        selectedProduct.api_price ??
-        selectedProduct.price ??
-        0
-    );
+    // -------------------------------------------------------
+    // CHECK WALLET
+    // -------------------------------------------------------
 
     if (
-      !Number.isFinite(providerPrice) ||
-      providerPrice <= 0
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "The selected exam PIN does not have a valid provider price.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // ==========================================================
-    // PRICE CALCULATION
-    // ==========================================================
-
-    const subtotal =
-      providerPrice * quantity;
-
-    const serviceFee =
-      subtotal *
-      (serviceFeePercent / 100);
-
-    const totalAmount =
-      subtotal + serviceFee;
-
-    const providerCost =
-      subtotal;
-
-    // The entire service fee is the business profit.
-    const profit =
-      serviceFee;
-
-    console.log("EXAM:", examName);
-    console.log(
-      "PROVIDER PRICE:",
-      providerPrice
-    );
-    console.log(
-      "QUANTITY:",
-      quantity
-    );
-    console.log(
-      "SUBTOTAL:",
-      subtotal
-    );
-    console.log(
-      "SERVICE FEE PERCENT:",
-      serviceFeePercent
-    );
-    console.log(
-      "SERVICE FEE:",
-      serviceFee
-    );
-    console.log(
-      "TOTAL:",
+      Number(user.walletBalance) <
       totalAmount
-    );
-    console.log(
-      "PROVIDER COST:",
-      providerCost
-    );
-    console.log(
-      "PROFIT:",
-      profit
-    );
-
-    // ==========================================================
-    // WALLET CHECK
-    // ==========================================================
-
-    const walletBalance =
-      Number(user.walletBalance);
-
-    if (
-      !Number.isFinite(walletBalance) ||
-      walletBalance < totalAmount
     ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Insufficient wallet balance.",
-          balance: walletBalance,
-          required: totalAmount,
+          message: "Insufficient wallet balance.",
         },
         { status: 400 }
       );
     }
 
-    // ==========================================================
-    // CREATE REFERENCE
-    // ==========================================================
+    // -------------------------------------------------------
+    // LOCAL REFERENCE
+    // -------------------------------------------------------
 
     const reference =
-      `EXAM-${Date.now()}-${Math.random()
-        .toString(36)
-        .substring(2, 8)
-        .toUpperCase()}`;
+      generateReference();
 
-    // ==========================================================
-    // RESERVE / DEDUCT WALLET FIRST
-    // ==========================================================
+    // -------------------------------------------------------
+    // CREATE PENDING TRANSACTION
+    // -------------------------------------------------------
 
-    const reservation =
+    const transaction =
+      await prisma.transaction.create({
+        data: {
+          userId: user.id,
+          type: "EXAM_PIN",
+          amount: totalAmount,
+          description:
+            `Exam PIN purchase - ${providerProduct.card_name} x${quantity}`,
+          status: "PENDING",
+          reference,
+          provider: "NaijaResultPins",
+          cost: baseAmount,
+          profit,
+          isTest: false,
+        },
+      });
+
+    localTransactionId =
+      transaction.id;
+
+    // -------------------------------------------------------
+    // BUY FROM NAIJARESULTPINS
+    // -------------------------------------------------------
+
+    
+
+    let purchaseResult;
+
+    try {
+      purchaseResult =
+        await fetchProviderResponse(
+          NAIJARESULTPINS_PURCHASE_URL,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              card_type_id: String(productId),
+              quantity: String(quantity),
+            }),
+          }
+        );
+    } catch (error: any) {
+      /*
+       * We cannot know whether the provider processed
+       * the purchase when the request times out.
+       *
+       * Therefore, keep the transaction PENDING.
+       */
+
+      console.error(
+        "NaijaResultPins purchase connection error:",
+        error
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            error?.message ||
+            "Unable to confirm Exam PIN purchase with provider.",
+          reference,
+          status: "PENDING",
+        },
+        { status: 502 }
+      );
+    }
+
+    const {
+      response: providerResponse,
+      contentType: providerContentType,
+      text: providerText,
+      data: providerResult,
+    } = purchaseResult;
+
+    // -------------------------------------------------------
+    // LOG PROVIDER RESPONSE
+    // -------------------------------------------------------
+
+    console.log(
+      "NaijaResultPins purchase response:",
+      {
+        httpStatus:
+          providerResponse.status,
+        contentType:
+          providerContentType,
+        status:
+          providerResult?.status,
+        code:
+          providerResult?.code,
+        message:
+          providerResult?.message,
+        reference:
+          providerResult?.reference,
+        quantity:
+          providerResult?.quantity,
+        amount:
+          providerResult?.amount,
+      }
+    );
+
+    // -------------------------------------------------------
+    // PROVIDER NON-JSON RESPONSE
+    // -------------------------------------------------------
+
+    if (
+      !providerResult ||
+      typeof providerResult !== "object" ||
+      Array.isArray(providerResult)
+    ) {
+      /*
+       * A non-JSON response does not prove that the provider
+       * failed to process the purchase.
+       *
+       * Keep the transaction PENDING.
+       */
+
+      await prisma.transaction.update({
+        where: {
+          id: transaction.id,
+        },
+        data: {
+          status: "PENDING",
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: getProviderErrorMessage(
+            providerResponse.status,
+            providerContentType,
+            providerResult,
+            providerText
+          ),
+          reference,
+          status: "PENDING",
+        },
+        { status: 502 }
+      );
+    }
+
+    // -------------------------------------------------------
+    // PROVIDER PURCHASE FAILURE
+    // -------------------------------------------------------
+
+    if (
+      !providerResponse.ok ||
+      !isProviderSuccessful(providerResult)
+    ) {
+      const providerMessage =
+        providerResult?.message ||
+        providerResult?.error ||
+        "NaijaResultPins purchase failed.";
+
+      await prisma.transaction.update({
+        where: {
+          id: transaction.id,
+        },
+        data: {
+          status: "FAILED",
+        },
+      });
+
+      localTransactionId = null;
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: providerMessage,
+          reference,
+          providerReference:
+            providerResult?.reference ||
+            null,
+          status: "FAILED",
+        },
+        {
+          status:
+            providerResponse.status >= 400
+              ? 400
+              : 502,
+        }
+      );
+    }
+
+    // -------------------------------------------------------
+    // PROVIDER PURCHASE SUCCESS
+    // -------------------------------------------------------
+
+    providerPurchaseSucceeded = true;
+
+    // -------------------------------------------------------
+    // EXTRACT CARDS
+    // -------------------------------------------------------
+
+    const cards =
+      extractCards(providerResult);
+
+    if (cards.length < quantity) {
+      /*
+       * Provider says the transaction succeeded, but did not
+       * return all requested PINs.
+       *
+       * Do NOT deduct the user's wallet yet.
+       * Keep transaction PENDING for reconciliation.
+       */
+
+      await prisma.transaction.update({
+        where: {
+          id: transaction.id,
+        },
+        data: {
+          status: "PENDING",
+        },
+      });
+
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Provider confirmed the purchase, but did not return all requested Exam PINs. Please contact support with the transaction reference.",
+          reference,
+          providerReference:
+            providerResult?.reference ||
+            null,
+          quantity,
+          receivedCards:
+            cards.length,
+          status: "PENDING",
+        },
+        { status: 502 }
+      );
+    }
+
+    // -------------------------------------------------------
+    // PROVIDER AMOUNT
+    // -------------------------------------------------------
+
+    const providerAmount = Number(
+      providerResult?.amount
+    );
+
+    /*
+     * Normally provider amount should equal:
+     *
+     * unitPrice × quantity
+     *
+     * We keep our calculated amount as the accounting cost
+     * because it was used to calculate the customer's charge.
+     */
+
+    if (
+      Number.isFinite(providerAmount) &&
+      providerAmount > 0 &&
+      Math.abs(
+        providerAmount - baseAmount
+      ) > 0.01
+    ) {
+      console.warn(
+        "NaijaResultPins amount differs from calculated cost:",
+        {
+          calculatedAmount: baseAmount,
+          providerAmount,
+          reference,
+        }
+      );
+    }
+
+    // -------------------------------------------------------
+    // FINAL DATABASE TRANSACTION
+    // -------------------------------------------------------
+
+    const completed =
       await prisma.$transaction(
         async (tx) => {
-          const currentUser =
+          const freshUser =
             await tx.user.findUnique({
               where: {
                 id: user.id,
               },
             });
 
-          if (!currentUser) {
+          if (!freshUser) {
             throw new Error(
-              "User not found."
+              "User account no longer exists."
             );
           }
 
-          const currentBalance =
-            Number(
-              currentUser.walletBalance
-            );
+          // -------------------------------------------------
+          // RE-CHECK WALLET
+          // -------------------------------------------------
 
           if (
-            !Number.isFinite(
-              currentBalance
-            ) ||
-            currentBalance <
-              totalAmount
+            Number(
+              freshUser.walletBalance
+            ) < totalAmount
           ) {
             throw new Error(
               "Insufficient wallet balance."
             );
           }
 
-          const newBalance =
-            currentBalance -
-            totalAmount;
+          // -------------------------------------------------
+          // BUSINESS WALLET
+          // -------------------------------------------------
 
-          await tx.user.update({
-            where: {
-              id: user.id,
-            },
-            data: {
-              walletBalance:
-                newBalance,
-            },
-          });
-
-          const transaction =
-            await tx.transaction.create({
-              data: {
-                userId: user.id,
-                type: "EXAM_PIN",
-                provider: examName,
-                amount: totalAmount,
-                cost: providerCost,
-                profit,
-                reference,
-                status: "PENDING",
-                description:
-                  `${examName} Exam PIN x${quantity}`,
-              },
-            });
-
-          return {
-            transaction,
-            walletBalance: newBalance,
-          };
-        }
-      );
-
-    pendingTransactionId =
-      reservation.transaction.id;
-
-    reservedAmount =
-      totalAmount;
-
-    // ==========================================================
-    // CALL CHEAPDATAHUB PURCHASE API
-    // ==========================================================
-
-    const providerPayload = {
-      product_id: productId,
-      quantity,
-    };
-
-    console.log(
-      "CHEAPDATAHUB EXAM REQUEST:",
-      providerPayload
-    );
-
-    let providerResponse: Response;
-
-    try {
-      providerResponse =
-        await fetch(
-          CHEAPDATAHUB_EXAM_PURCHASE_URL,
-          {
-            method: "POST",
-            headers: {
-              Authorization:
-                `Bearer ${apiKey}`,
-              Accept:
-                "application/json",
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify(
-              providerPayload
-            ),
-          }
-        );
-    } catch (providerError: any) {
-      console.error(
-        "CHEAPDATAHUB NETWORK ERROR:",
-        providerError
-      );
-
-      // ========================================================
-      // REFUND RESERVED WALLET
-      // ========================================================
-
-      await prisma.$transaction(
-        async (tx) => {
-          await tx.user.update({
-            where: {
-              id: user.id,
-            },
-            data: {
-              walletBalance: {
-                increment:
-                  reservedAmount,
-              },
-            },
-          });
-
-          if (pendingTransactionId) {
-            await tx.transaction.update({
-              where: {
-                id:
-                  pendingTransactionId,
-              },
-              data: {
-                status: "FAILED",
-                description:
-                  `${examName} Exam PIN purchase failed. Wallet refunded.`,
-              },
-            });
-          }
-        }
-      );
-
-      reservedAmount = 0;
-
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Unable to connect to CheapDataHub. Your wallet has been refunded.",
-        },
-        { status: 502 }
-      );
-    }
-
-    const responseText =
-      await providerResponse.text();
-
-    console.log(
-      "CHEAPDATAHUB EXAM STATUS:",
-      providerResponse.status
-    );
-
-    console.log(
-      "CHEAPDATAHUB EXAM RESPONSE:",
-      responseText
-    );
-
-    // ==========================================================
-    // PARSE PROVIDER RESPONSE
-    // ==========================================================
-
-    let providerResult: any;
-
-    try {
-      providerResult =
-        JSON.parse(responseText);
-    } catch {
-      await prisma.$transaction(
-        async (tx) => {
-          await tx.user.update({
-            where: {
-              id: user.id,
-            },
-            data: {
-              walletBalance: {
-                increment:
-                  reservedAmount,
-              },
-            },
-          });
-
-          if (pendingTransactionId) {
-            await tx.transaction.update({
-              where: {
-                id:
-                  pendingTransactionId,
-              },
-              data: {
-                status: "FAILED",
-                description:
-                  `${examName} Exam PIN purchase failed. Provider returned invalid response. Wallet refunded.`,
-              },
-            });
-          }
-        }
-      );
-
-      reservedAmount = 0;
-
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "CheapDataHub returned an invalid response. Your wallet has been refunded.",
-          providerStatus:
-            providerResponse.status,
-        },
-        { status: 502 }
-      );
-    }
-
-    // ==========================================================
-    // PROVIDER FAILURE
-    // ==========================================================
-
-    const purchaseSuccess =
-      providerResult?.status === true ||
-      providerResult?.status === "true" ||
-      providerResult?.success === true;
-
-    if (
-      !providerResponse.ok ||
-      !purchaseSuccess
-    ) {
-      await prisma.$transaction(
-        async (tx) => {
-          await tx.user.update({
-            where: {
-              id: user.id,
-            },
-            data: {
-              walletBalance: {
-                increment:
-                  reservedAmount,
-              },
-            },
-          });
-
-          if (pendingTransactionId) {
-            await tx.transaction.update({
-              where: {
-                id:
-                  pendingTransactionId,
-              },
-              data: {
-                status: "FAILED",
-                description:
-                  `${examName} Exam PIN purchase failed. ${
-                    providerResult?.message ||
-                    providerResult?.error ||
-                    "Wallet refunded."
-                  }`,
-              },
-            });
-          }
-        }
-      );
-
-      reservedAmount = 0;
-
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            providerResult?.message ||
-            providerResult?.error ||
-            "Exam PIN purchase failed. Your wallet has been refunded.",
-          providerStatus:
-            providerResponse.status,
-          providerResponse:
-            providerResult,
-        },
-        { status: 400 }
-      );
-    }
-
-    // ==========================================================
-    // EXTRACT PINS
-    // ==========================================================
-
-    const delivery =
-      providerResult?.data?.delivery ||
-      providerResult?.delivery ||
-      {};
-
-    const rawPins =
-      Array.isArray(
-        delivery?.pins
-      )
-        ? delivery.pins
-        : [];
-
-    const pins =
-      rawPins
-        .map((pin: unknown) =>
-          String(pin).trim()
-        )
-        .filter(Boolean);
-
-    console.log(
-      "RETURNED EXAM PINS:",
-      pins
-    );
-
-    // ==========================================================
-    // SUCCESS BUT NO PIN
-    // ==========================================================
-
-    if (pins.length === 0) {
-      await prisma.$transaction(
-        async (tx) => {
-          await tx.user.update({
-            where: {
-              id: user.id,
-            },
-            data: {
-              walletBalance: {
-                increment:
-                  reservedAmount,
-              },
-            },
-          });
-
-          if (pendingTransactionId) {
-            await tx.transaction.update({
-              where: {
-                id:
-                  pendingTransactionId,
-              },
-              data: {
-                status: "FAILED",
-                description:
-                  `${examName} Provider reported success but returned no PIN. Wallet refunded.`,
-              },
-            });
-          }
-        }
-      );
-
-      reservedAmount = 0;
-
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "The provider reported success but returned no PIN. Your wallet has been refunded.",
-          providerResponse:
-            providerResult,
-        },
-        { status: 502 }
-      );
-    }
-
-    // ==========================================================
-    // SAVE SUCCESSFUL PURCHASE
-    // ==========================================================
-
-    const finalResult =
-      await prisma.$transaction(
-        async (tx) => {
-          // ====================================================
-          // UPDATE TRANSACTION
-          // ====================================================
-
-          if (!pendingTransactionId) {
-            throw new Error(
-              "Pending transaction was not created."
-            );
-          }
-
-          await tx.transaction.update({
-            where: {
-              id:
-                pendingTransactionId,
-            },
-            data: {
-              status: "SUCCESS",
-              cost: providerCost,
-              profit,
-              description:
-                `${examName} Exam PIN purchase successful`,
-            },
-          });
-
-          // ====================================================
-          // SAVE EXAM PINS
-          // ====================================================
-
-          const savedPins: Array<{
-            pin: string;
-            serial: string;
-            reference: string;
-          }> = [];
-
-          for (
-            let index = 0;
-            index < pins.length;
-            index++
-          ) {
-            const pinValue =
-              pins[index];
-
-            let pin =
-              pinValue;
-
-            let serial =
-              "N/A";
-
-            if (
-              pinValue.includes(
-                "<=>"
-              )
-            ) {
-              const parts =
-                pinValue.split(
-                  "<=>"
-                );
-
-              pin =
-                parts[0]?.trim() ||
-                pinValue;
-
-              serial =
-                parts[1]?.trim() ||
-                "N/A";
-            }
-
-            const pinReference =
-              `${reference}-${index + 1}`;
-
-            await tx.examPin.create({
-              data: {
-                userId:
-                  user.id,
-                provider:
-                  examName,
-                pin,
-                serial,
-                amount:
-                  providerPrice,
-                reference:
-                  pinReference,
-              },
-            });
-
-            savedPins.push({
-              pin,
-              serial,
-              reference:
-                pinReference,
-            });
-          }
-
-          // ====================================================
-          // FIND BUSINESS WALLET
-          // ====================================================
-
-          let businessWallet =
-            await tx.businessWallet.findUnique({
+          const businessWallet =
+            await tx.businessWallet.upsert({
               where: {
                 name:
                   "Brainfriend Global Tech",
               },
+              update: {},
+              create: {
+                name:
+                  "Brainfriend Global Tech",
+                totalRevenue: 0,
+                totalCost: 0,
+                totalProfit: 0,
+                availableProfit: 0,
+              },
             });
 
-          if (!businessWallet) {
-            businessWallet =
-              await tx.businessWallet.create({
-                data: {
-                  name:
-                    "Brainfriend Global Tech",
-                },
-              });
-          }
+          // -------------------------------------------------
+          // DEDUCT USER WALLET
+          // -------------------------------------------------
 
-          // ====================================================
+          await tx.user.update({
+            where: {
+              id: freshUser.id,
+            },
+            data: {
+              walletBalance: {
+                decrement:
+                  totalAmount,
+              },
+            },
+          });
+
+          // -------------------------------------------------
+          // COMPLETE TRANSACTION
+          // -------------------------------------------------
+
+          const updatedTransaction =
+            await tx.transaction.update({
+              where: {
+                id: transaction.id,
+              },
+              data: {
+                status: "SUCCESS",
+                cost: baseAmount,
+                profit,
+              },
+            });
+
+          // -------------------------------------------------
           // UPDATE BUSINESS WALLET
-          // ====================================================
+          // -------------------------------------------------
 
           await tx.businessWallet.update({
             where: {
-              id:
-                businessWallet.id,
+              id: businessWallet.id,
             },
             data: {
               totalRevenue: {
@@ -1036,7 +865,7 @@ export async function POST(request: NextRequest) {
               },
               totalCost: {
                 increment:
-                  providerCost,
+                  baseAmount,
               },
               totalProfit: {
                 increment:
@@ -1046,83 +875,88 @@ export async function POST(request: NextRequest) {
                 increment:
                   profit,
               },
-              balance: {
-                increment:
-                  profit,
-              },
             },
           });
 
-          // ====================================================
-          // CREATE BUSINESS REVENUE
-          // ====================================================
+          // -------------------------------------------------
+          // BUSINESS REVENUE
+          // -------------------------------------------------
 
           await tx.businessRevenue.create({
             data: {
-              transactionId:
-                pendingTransactionId,
               type: "EXAM_PIN",
               provider:
-                examName,
+                "NaijaResultPins",
               amount:
                 totalAmount,
               cost:
-                providerCost,
+                baseAmount,
               profit,
               reference,
               description:
-                `${examName} Exam PIN x${quantity}`,
-              businessWalletId:
+                `Exam PIN purchase - ${providerProduct.card_name} x${quantity}`,
+              walletId:
                 businessWallet.id,
             },
           });
 
-          // ====================================================
-          // GET UPDATED USER BALANCE
-          // ====================================================
+          // -------------------------------------------------
+          // SAVE EXAM PINS
+          // -------------------------------------------------
 
-          const updatedUser =
-            await tx.user.findUnique({
-              where: {
-                id: user.id,
-              },
-              select: {
-                walletBalance: true,
+          for (const card of cards) {
+            await tx.examPin.create({
+              data: {
+                userId:
+                  freshUser.id,
+                examName:
+                  providerProduct.card_name,
+                provider:
+                  "NaijaResultPins",
+                pin:
+                  card.pin,
+                serial:
+                  card.serial,
+                amount:
+                  unitPrice,
+                reference,
               },
             });
+          }
 
           return {
+            transaction:
+              updatedTransaction,
+
             walletBalance:
               Number(
-                updatedUser?.walletBalance ??
-                  0
-              ),
-            savedPins,
+                freshUser.walletBalance
+              ) - totalAmount,
           };
         }
       );
 
-    reservedAmount = 0;
-
-    // ==========================================================
+    // -------------------------------------------------------
     // SUCCESS RESPONSE
-    // ==========================================================
+    // -------------------------------------------------------
+
+    localTransactionId = null;
 
     return NextResponse.json({
       success: true,
 
       message:
         providerResult?.message ||
-        "Exam PIN purchased successfully.",
+        "Exam PIN purchase successful.",
 
-      examName,
+      examName:
+        providerProduct.card_name,
 
       quantity,
 
-      unitPrice:
-        providerPrice,
+      unitPrice,
 
-      subtotal,
+      baseAmount,
 
       serviceFee,
 
@@ -1130,78 +964,62 @@ export async function POST(request: NextRequest) {
 
       totalAmount,
 
-      providerCost,
-
       profit,
-
-      pins:
-        finalResult.savedPins,
 
       reference,
 
-      walletBalance:
-        finalResult.walletBalance,
+      provider:
+        "NaijaResultPins",
 
-      providerResponse:
-        providerResult,
+      providerReference:
+        providerResult?.reference ||
+        null,
+
+      walletBalance:
+        completed.walletBalance,
+
+      cards,
+
+      pins: cards.map(
+        (card) => card.pin
+      ),
+
+      status: "SUCCESS",
     });
   } catch (error: any) {
     console.error(
-      "========== EXAM PURCHASE ERROR =========="
+      "Exam PIN purchase error:",
+      error
     );
 
-    console.error(
-      error?.message
-    );
+    // -------------------------------------------------------
+    // HANDLE LOCAL TRANSACTION AFTER PROVIDER RESPONSE
+    // -------------------------------------------------------
 
-    console.error(
-      error?.stack
-    );
-
-    // ==========================================================
-    // REFUND IF WALLET WAS RESERVED
-    // ==========================================================
-
-    if (
-      userId &&
-      reservedAmount > 0
-    ) {
+    if (localTransactionId) {
       try {
-        await prisma.$transaction(
-          async (tx) => {
-            await tx.user.update({
-              where: {
-                id: userId as string,
-              },
-              data: {
-                walletBalance: {
-                  increment:
-                    reservedAmount,
-                },
-              },
-            });
-
-            if (pendingTransactionId) {
-              await tx.transaction.update({
-                where: {
-                  id:
-                    pendingTransactionId,
-                },
-                data: {
-                  status: "FAILED",
-                  description:
-                    "Exam PIN purchase failed. Wallet refunded.",
-                },
-              });
-            }
-          }
-        );
-
-        reservedAmount = 0;
-      } catch (refundError) {
+        /*
+         * If NaijaResultPins already confirmed the purchase,
+         * we cannot safely mark our transaction as FAILED if
+         * our database operation fails afterward.
+         *
+         * Keep it PENDING so it can be reconciled.
+         */
+        await prisma.transaction.update({
+          where: {
+            id: localTransactionId,
+          },
+          data: {
+            status:
+              providerPurchaseSucceeded
+                ? "PENDING"
+                : "FAILED",
+          },
+        });
+      } catch (updateError) {
         console.error(
-          "CRITICAL EXAM PIN REFUND ERROR:",
-          refundError
+          "Failed to update Exam PIN transaction status:",
+          updateError
         );
       }
     }
@@ -1209,12 +1027,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          error?.message ||
-          "Exam PIN purchase failed.",
+        message:
+          providerPurchaseSucceeded
+            ? "Exam PIN provider confirmed the purchase, but we could not finish recording it. Please contact support with the transaction reference."
+            : error?.message ||
+              "Unable to complete Exam PIN purchase.",
+        status:
+          providerPurchaseSucceeded
+            ? "PENDING"
+            : "FAILED",
       },
-      { status: 500 }
+      {
+        status:
+          providerPurchaseSucceeded
+            ? 502
+            : 500,
+      }
     );
   }
 }
-

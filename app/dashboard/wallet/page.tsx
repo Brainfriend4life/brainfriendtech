@@ -492,12 +492,15 @@ export default function WalletPage() {
                         {transaction.description}
                       </p>
 
-                      <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                        Provider:{" "}
-                        <span className="text-gray-600 dark:text-slate-300">
-                          {transaction.provider}
-                        </span>
-                      </p>
+                      {/* FIX: the "Provider: ..." line was removed —
+                          it exposed the name of the backend supplier
+                          (e.g. NaijaResultPins) directly to customers,
+                          which lets them identify and go straight to
+                          the supplier instead of using this platform.
+                          `provider` is kept in the Transaction type
+                          and API response since it's still useful
+                          internally (admin views, reconciliation) —
+                          it's just not rendered here. */}
 
                       <p className="mt-1 break-all font-mono text-[11px] text-gray-400 dark:text-slate-500">
                         Ref: {transaction.reference}

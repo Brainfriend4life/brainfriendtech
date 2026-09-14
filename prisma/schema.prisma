@@ -8,6 +8,23 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model Review {
+  id          String   @id @default(cuid())
+  displayName String
+  role        String?
+  rating      Int
+  review      String
+  approved    Boolean  @default(false) // hidden from the public list until an admin approves it
+  verified    Boolean  @default(false) // true if the user had at least one SUCCESS transaction when they posted
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([approved, createdAt])
+  @@index([userId])
+}
+
 model User {
   id String @id @default(cuid())
 
@@ -19,6 +36,7 @@ model User {
   transactionPinResetOtp          String?
   transactionPinResetOtpExpires   DateTime? 
   transactionPinResetAttempts     Int      @default(0)
+  reviews Review[]
 
   // ===============================
   // TRANSACTION SECURITY
