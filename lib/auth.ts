@@ -1,3 +1,4 @@
+
 import { compare } from "bcryptjs";
 import { AuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -69,7 +70,10 @@ export const authOptions: AuthOptions = {
         // CHECK EMAIL VERIFICATION
         // -----------------------------------------
 
-        if (!user.emailVerified) {
+        if (
+          user.emailVerificationRequired &&
+          !user.emailVerified
+        ) {
           throw new Error(
             "Please verify your email address before signing in."
           );
@@ -186,3 +190,4 @@ export const authOptions: AuthOptions = {
     },
   },
 };
+

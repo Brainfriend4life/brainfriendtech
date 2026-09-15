@@ -164,6 +164,7 @@ export async function POST(req: Request) {
             },
           ],
         },
+
         select: {
           id: true,
           email: true,
@@ -221,6 +222,7 @@ export async function POST(req: Request) {
             referralCode:
               normalizedReferralCode,
           },
+
           select: {
             id: true,
           },
@@ -279,6 +281,7 @@ export async function POST(req: Request) {
           where: {
             referralCode: candidate,
           },
+
           select: {
             id: true,
           },
@@ -328,8 +331,16 @@ export async function POST(req: Request) {
 
         referredById: referrerId,
 
-        // User MUST verify email before login
+        // ======================================
+        // EMAIL VERIFICATION
+        // ======================================
+
+        // New users MUST verify their email
+        // before they can log in.
+
         emailVerified: false,
+
+        emailVerificationRequired: true,
 
         emailVerificationToken:
           verificationToken,
@@ -340,11 +351,8 @@ export async function POST(req: Request) {
 
       select: {
         id: true,
-
         email: true,
-
         fullName: true,
-
         referralCode: true,
       },
     });
@@ -355,9 +363,7 @@ export async function POST(req: Request) {
 
     await sendVerificationEmail({
       email: user.email,
-
       fullName: user.fullName,
-
       token: verificationToken,
     });
 
@@ -377,6 +383,7 @@ export async function POST(req: Request) {
         referralCode:
           user.referralCode,
       },
+
       { status: 201 }
     );
   } catch (error: unknown) {

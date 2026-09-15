@@ -88,6 +88,8 @@ model User {
 
   emailVerified Boolean @default(false)
 
+  emailVerificationRequired Boolean @default(false)
+
   phoneVerificationCode String?
 
   phoneVerificationExpires DateTime?
