@@ -8,9 +8,6 @@ import { prisma } from "@/lib/prisma";
 
 export async function DELETE(req: Request) {
   try {
-    // ---------------------------------------------------------
-    // 1. Check logged-in user
-    // ---------------------------------------------------------
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
@@ -25,10 +22,19 @@ export async function DELETE(req: Request) {
 
     const userId = session.user.id;
 
-    // ---------------------------------------------------------
-    // 2. Get password from request
-    // ---------------------------------------------------------
-    const body = await req.json();
+    let body: { password?: unknown };
+
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Invalid request.",
+        },
+        { status: 400 }
+      );
+    }
 
     const password =
       typeof body.password === "string"
@@ -45,9 +51,6 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // ---------------------------------------------------------
-    // 3. Get user
-    // ---------------------------------------------------------
     const user = await prisma.user.findUnique({
       where: {
         id: userId,
@@ -71,9 +74,7 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // ---------------------------------------------------------
-    // 4. Do not allow ADMIN accounts to self-delete
-    // ---------------------------------------------------------
+    // Admin accounts cannot be deleted from the dashboard.
     if (user.role === "ADMIN") {
       return NextResponse.json(
         {
@@ -85,9 +86,7 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // ---------------------------------------------------------
-    // 5. Verify password
-    // ---------------------------------------------------------
+    // Verify the password.
     const passwordValid = await bcrypt.compare(
       password,
       user.password
@@ -99,13 +98,11 @@ export async function DELETE(req: Request) {
           success: false,
           message: "Incorrect password.",
         },
-        { status: 403 }
+        { status: 400 }
       );
     }
 
-    // ---------------------------------------------------------
-    // 6. Prevent deletion when wallet still has money
-    // ---------------------------------------------------------
+    // Do not allow deletion while wallet still contains money.
     if (
       Number.isFinite(user.walletBalance) &&
       user.walletBalance > 0
@@ -120,13 +117,11 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // ---------------------------------------------------------
-    // 7. Check pending withdrawals
-    // ---------------------------------------------------------
+    // Check pending wallet withdrawal.
     const pendingWithdrawal =
       await prisma.withdrawal.findFirst({
         where: {
-          userId: userId,
+          userId,
           status: "PENDING",
         },
         select: {
@@ -145,13 +140,11 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // ---------------------------------------------------------
-    // 8. Check pending referral withdrawals
-    // ---------------------------------------------------------
+    // Check pending referral withdrawal.
     const pendingReferralWithdrawal =
       await prisma.referralWithdrawal.findFirst({
         where: {
-          userId: userId,
+          userId,
           status: "PENDING",
         },
         select: {
@@ -170,12 +163,9 @@ export async function DELETE(req: Request) {
       );
     }
 
-    // ---------------------------------------------------------
-    // 9. Delete account safely
-    // ---------------------------------------------------------
+    // Delete account and clean up referral relationships.
     await prisma.$transaction(async (tx) => {
-      // Users referred by this account should not keep a
-      // broken referredById reference.
+      // Detach users who were referred by this account.
       await tx.user.updateMany({
         where: {
           referredById: userId,
@@ -185,27 +175,14 @@ export async function DELETE(req: Request) {
         },
       });
 
-      // Password reset tokens are not connected through a
-      // Prisma relation, so remove them manually.
+      // Remove password reset tokens.
       await tx.passwordResetToken.deleteMany({
         where: {
           email: user.email,
         },
       });
 
-      // Delete the user.
-      //
-      // Your schema already has onDelete: Cascade on:
-      // - Reviews
-      // - ReferralEarning
-      // - ReferralWithdrawal
-      // - Transactions
-      // - Withdrawals
-      // - ExamPins
-      // - CbtAttempts
-      // - NinVerifications
-      //
-      // CbtAnswers are also removed through CbtAttempt cascade.
+      // Delete the account.
       await tx.user.delete({
         where: {
           id: userId,
@@ -215,8 +192,7 @@ export async function DELETE(req: Request) {
 
     return NextResponse.json({
       success: true,
-      message:
-        "Your account has been permanently deleted.",
+      message: "Your account has been permanently deleted.",
     });
   } catch (error) {
     console.error("DELETE ACCOUNT ERROR:", error);
