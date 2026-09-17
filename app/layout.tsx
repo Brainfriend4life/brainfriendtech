@@ -20,13 +20,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    "https://brainfriendglobaltech.com"
-  ),
+  metadataBase: new URL("https://brainfriendglobaltech.com"),
 
   verification: {
-    google:
-      "AQIBWSH6BimsTbJT4tNXn0f_At6RIL6JRwKV-GymDdQ",
+    google: "AQIBWSH6BimsTbJT4tNXn0f_At6RIL6JRwKV-GymDdQ",
   },
 
   title: {
@@ -72,8 +69,7 @@ export const metadata: Metadata = {
   publisher: "Brainfriend Global Tech",
 
   alternates: {
-    canonical:
-      "https://brainfriendglobaltech.com",
+    canonical: "https://brainfriendglobaltech.com",
   },
 
   openGraph: {
@@ -134,11 +130,6 @@ export default function RootLayout({
   return (
     <html
       lang="en-NG"
-      // Required because next-themes sets the "dark" class / color-scheme
-      // on <html> on the client before React hydrates, based on
-      // localStorage or system preference. Without this, React logs a
-      // hydration warning even though the mismatch is intentional and
-      // handled by next-themes.
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
@@ -149,9 +140,11 @@ export default function RootLayout({
           </AuthProvider>
 
           <Toaster position="top-right" />
+
           <UpdatePrompt />
         </ThemeProvider>
-         <WhatsAppButton />
+
+        <WhatsAppButton />
       </body>
     </html>
   );

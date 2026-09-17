@@ -30,10 +30,6 @@ type DataPlan = {
   sellingPrice?: number;
 
   status: string;
-
-  // Present on SMEPlug (server 3) plans. Other servers may not
-  // send this field at all — treat "missing" as available so
-  // servers 1 & 2 keep behaving exactly as before.
   isAvailable?: boolean;
 };
 
@@ -41,16 +37,24 @@ type ServerType = "CHEAPDATAHUB" | "NETWORKDATASUB" | "SMEPLUG";
 
 const NETWORKS = ["MTN", "AIRTEL", "GLO", "9MOBILE"];
 
-// Internal-only — never rendered. Kept solely so engineers reading
-// this file can tell which backend a given server number maps to.
-const SERVERS: Array<{ value: ServerType; label: string }> = [
-  { value: "CHEAPDATAHUB", label: "Server 1" },
-  { value: "NETWORKDATASUB", label: "Server 2" },
-  { value: "SMEPLUG", label: "Server 3" },
+const SERVERS: Array<{
+  value: ServerType;
+  label: string;
+}> = [
+  {
+    value: "CHEAPDATAHUB",
+    label: "Server 1",
+  },
+  {
+    value: "NETWORKDATASUB",
+    label: "Server 2",
+  },
+  {
+    value: "SMEPLUG",
+    label: "Server 3",
+  },
 ];
 
-// Network brand accents — subtle, single-color underline rather
-// than a loud badge, to keep the interface feeling composed.
 const NETWORK_ACCENT: Record<string, string> = {
   MTN: "border-l-yellow-500",
   AIRTEL: "border-l-red-500",
@@ -62,9 +66,6 @@ function networkAccent(network: string) {
   return NETWORK_ACCENT[network.toUpperCase()] || "border-l-indigo-500";
 }
 
-// A plan is treated as available unless it explicitly says
-// isAvailable === false. This keeps servers 1 & 2 (which don't
-// send this field) working exactly as before.
 function planIsAvailable(plan: DataPlan) {
   return plan.isAvailable !== false;
 }
@@ -97,6 +98,7 @@ export default function BuyDataPage() {
   // ============================================================
 
   const [serviceFeePercent, setServiceFeePercent] = useState(5);
+
   const [loadingFee, setLoadingFee] = useState(true);
 
   // ============================================================
@@ -141,7 +143,7 @@ export default function BuyDataPage() {
   }
 
   // ============================================================
-  // GET CUSTOMER SELLING PRICE
+  // CUSTOMER PRICE
   // ============================================================
 
   function getCustomerPrice(plan: DataPlan) {
@@ -178,7 +180,7 @@ export default function BuyDataPage() {
         setPlans(Array.isArray(result.data) ? result.data : []);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Unable to load data plans."
+          err instanceof Error ? err.message : "Unable to load data plans.",
         );
       } finally {
         setLoadingPlans(false);
@@ -214,7 +216,7 @@ export default function BuyDataPage() {
       setNetworkDataPlans(receivedPlans);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to load data plans."
+        err instanceof Error ? err.message : "Unable to load data plans.",
       );
     } finally {
       setLoadingNetworkPlans(false);
@@ -247,7 +249,7 @@ export default function BuyDataPage() {
       setSmePlugPlans(receivedPlans);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to load data plans."
+        err instanceof Error ? err.message : "Unable to load data plans.",
       );
     } finally {
       setLoadingSmePlugPlans(false);
@@ -255,7 +257,7 @@ export default function BuyDataPage() {
   }
 
   // ============================================================
-  // LOAD PLANS WHEN SERVER SELECTED
+  // LOAD PLANS WHEN SERVER CHANGES
   // ============================================================
 
   useEffect(() => {
@@ -266,6 +268,7 @@ export default function BuyDataPage() {
     if (server === "SMEPLUG" && smePlugPlans.length === 0) {
       loadSmePlugPlans();
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [server, networkDataPlans.length, smePlugPlans.length]);
 
@@ -306,13 +309,19 @@ export default function BuyDataPage() {
   // ============================================================
 
   const currentPlans = useMemo(() => {
-    if (server === "NETWORKDATASUB") return networkDataPlans;
-    if (server === "SMEPLUG") return smePlugPlans;
+    if (server === "NETWORKDATASUB") {
+      return networkDataPlans;
+    }
+
+    if (server === "SMEPLUG") {
+      return smePlugPlans;
+    }
+
     return plans;
   }, [server, networkDataPlans, smePlugPlans, plans]);
 
   // ============================================================
-  // FILTER PLANS BY NETWORK
+  // FILTER PLANS
   // ============================================================
 
   const filteredPlans = useMemo(() => {
@@ -323,16 +332,14 @@ export default function BuyDataPage() {
     const selectedNetwork = network.trim().toUpperCase();
 
     const matches = currentPlans.filter(
-      (plan) =>
-        String(plan.provider).trim().toUpperCase() === selectedNetwork
+      (plan) => String(plan.provider).trim().toUpperCase() === selectedNetwork,
     );
 
-    // Available plans first, unavailable ones pushed to the
-    // bottom — still visible, just deprioritized and (below)
-    // rendered disabled/labeled so people don't try to buy them.
     return [...matches].sort((a, b) => {
       const aAvailable = planIsAvailable(a) ? 0 : 1;
+
       const bAvailable = planIsAvailable(b) ? 0 : 1;
+
       return aAvailable - bAvailable;
     });
   }, [currentPlans, network]);
@@ -350,7 +357,7 @@ export default function BuyDataPage() {
   }, [currentPlans, planId]);
 
   // ============================================================
-  // NETWORKDATASUB PROVIDER PLAN ID
+  // NETWORKDATASUB PURCHASE ID
   // ============================================================
 
   const networkDataSubPurchaseId = useMemo(() => {
@@ -387,7 +394,7 @@ export default function BuyDataPage() {
   }, [selectedPlan]);
 
   // ============================================================
-  // SMEPLUG PROVIDER PLAN ID + NETWORK ID
+  // SMEPLUG PURCHASE ID
   // ============================================================
 
   const smePlugPurchaseId = useMemo(() => {
@@ -408,6 +415,10 @@ export default function BuyDataPage() {
     return rawProviderId;
   }, [selectedPlan]);
 
+  // ============================================================
+  // SMEPLUG NETWORK ID
+  // ============================================================
+
   const smePlugNetworkId = useMemo(() => {
     if (!selectedPlan) {
       return null;
@@ -423,7 +434,7 @@ export default function BuyDataPage() {
   }, [selectedPlan]);
 
   // ============================================================
-  // CUSTOMER DATA PRICE
+  // DATA PRICE
   // ============================================================
 
   const dataPrice = useMemo(() => {
@@ -592,7 +603,9 @@ export default function BuyDataPage() {
 
         const response = await fetch("/api/data/purchase", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify(purchaseBody),
         });
 
@@ -606,8 +619,8 @@ export default function BuyDataPage() {
 
         setMessage(
           `Data purchase successful. You were charged ₦${formatPrice(
-            Number.isFinite(chargedAmount) ? chargedAmount : customerTotal
-          )}.`
+            Number.isFinite(chargedAmount) ? chargedAmount : customerTotal,
+          )}.`,
         );
 
         setPhone("");
@@ -639,7 +652,9 @@ export default function BuyDataPage() {
 
         const response = await fetch("/api/data/purchase", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify(purchaseBody),
         });
 
@@ -653,8 +668,8 @@ export default function BuyDataPage() {
 
         setMessage(
           `Data purchase successful. You were charged ₦${formatPrice(
-            Number.isFinite(chargedAmount) ? chargedAmount : customerTotal
-          )}.`
+            Number.isFinite(chargedAmount) ? chargedAmount : customerTotal,
+          )}.`,
         );
 
         setPhone("");
@@ -671,9 +686,7 @@ export default function BuyDataPage() {
       // CHEAPDATAHUB
       // ========================================================
 
-      const bundleId = Number(
-        selectedPlan.bundleId ?? selectedPlan.bundle_id
-      );
+      const bundleId = Number(selectedPlan.bundleId ?? selectedPlan.bundle_id);
 
       if (!Number.isInteger(bundleId) || bundleId <= 0) {
         throw new Error("This plan is temporarily unavailable.");
@@ -688,7 +701,9 @@ export default function BuyDataPage() {
 
       const response = await fetch("/api/data/purchase", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(purchaseBody),
       });
 
@@ -698,7 +713,13 @@ export default function BuyDataPage() {
         throw new Error(result.message || "Data purchase failed.");
       }
 
-      setMessage("Data purchase successful.");
+      const chargedAmount = Number(result.amount);
+
+      setMessage(
+        `Data purchase successful. You were charged ₦${formatPrice(
+          Number.isFinite(chargedAmount) ? chargedAmount : customerTotal,
+        )}.`,
+      );
 
       setPhone("");
       setPlanId("");
@@ -723,11 +744,11 @@ export default function BuyDataPage() {
     server === "NETWORKDATASUB"
       ? loadingNetworkPlans
       : server === "SMEPLUG"
-      ? loadingSmePlugPlans
-      : loadingPlans;
+        ? loadingSmePlugPlans
+        : loadingPlans;
 
   const currentServerLabel =
-    SERVERS.find((item) => item.value === server)?.label ?? "Server 1";
+    SERVERS.find((item) => item.value === server)?.label || "Server 1";
 
   // ============================================================
   // UI
@@ -737,28 +758,28 @@ export default function BuyDataPage() {
     <div className="w-full">
       {/* HEADER */}
 
-      <div className="mb-7">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
+      <div className="mb-5">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-600 dark:text-indigo-400">
           Data Bundles
         </p>
 
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+        <h1 className="mt-0.5 text-xl font-bold tracking-tight text-foreground sm:text-2xl">
           Buy Data
         </h1>
 
-        <p className="mt-1.5 text-sm text-muted-foreground sm:text-[15px]">
-          Select a server, network and plan for the recipient number.
+        <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+          Select your network, plan and recipient number.
         </p>
       </div>
 
       {/* MAIN CARD */}
 
-      <div className="max-w-2xl overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.12)]">
-        <div className="p-5 sm:p-7">
+      <div className="w-full max-w-xl overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="p-4 sm:p-5">
           {/* ERROR */}
 
           {error && (
-            <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-600 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400">
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-600 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400">
               {error}
             </div>
           )}
@@ -766,8 +787,9 @@ export default function BuyDataPage() {
           {/* SUCCESS */}
 
           {message && (
-            <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-green-200 bg-green-50 p-3.5 text-sm text-green-700 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-400">
-              <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2.5 text-xs text-green-700 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-400">
+              <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+
               <span>{message}</span>
             </div>
           )}
@@ -775,191 +797,183 @@ export default function BuyDataPage() {
           <form onSubmit={handleBuyData}>
             {/* SERVER */}
 
-            <label className="mb-2.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Server
-            </label>
+            <div className="mb-4">
+              <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Server
+              </label>
 
-            <div className="mb-6 grid grid-cols-3 gap-2 sm:gap-2.5">
-              {SERVERS.map((item, index) => {
-                const active = server === item.value;
+              <div className="grid grid-cols-3 gap-1.5">
+                {SERVERS.map((item, index) => {
+                  const active = server === item.value;
 
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    disabled={buying}
-                    onClick={() => handleServerChange(item.value)}
-                    className={`group relative flex flex-col items-center justify-center gap-1.5 rounded-xl border py-3.5 transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                      active
-                        ? "border-indigo-600 bg-indigo-600 shadow-sm shadow-indigo-600/20"
-                        : "border-border bg-background hover:border-indigo-300 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/10"
-                    }`}
-                  >
-                    <span
-                      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      disabled={buying}
+                      onClick={() => handleServerChange(item.value)}
+                      className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-2.5 text-xs font-semibold transition ${
                         active
-                          ? "bg-white/20 text-white"
-                          : "bg-indigo-600/10 text-indigo-600 dark:text-indigo-400"
-                      }`}
+                          ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
+                          : "border-border bg-background text-foreground hover:border-indigo-300 hover:bg-muted/60"
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
                     >
-                      {index + 1}
-                    </span>
+                      <span
+                        className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                          active
+                            ? "bg-white/20 text-white"
+                            : "bg-indigo-600/10 text-indigo-600 dark:text-indigo-400"
+                        }`}
+                      >
+                        {index + 1}
+                      </span>
 
-                    <span
-                      className={`text-xs font-semibold ${
-                        active ? "text-white" : "text-foreground"
-                      }`}
-                    >
-                      Server {index + 1}
-                    </span>
-                  </button>
-                );
-              })}
+                      <span>Server {index + 1}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* NETWORK */}
 
-            <label className="mb-2.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Network
-            </label>
+            <div className="mb-4">
+              <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Network
+              </label>
 
-            <select
-              value={network}
-              onChange={handleNetworkChange}
-              disabled={loadingCurrentPlans || buying}
-              className="mb-6 w-full rounded-xl border border-border bg-background px-3.5 py-3 text-sm text-foreground outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <option value="">Select network</option>
+              <select
+                value={network}
+                onChange={handleNetworkChange}
+                disabled={loadingCurrentPlans || buying}
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="">Select network</option>
 
-              {NETWORKS.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
+                {NETWORKS.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* DATA PLAN */}
 
-            <label className="mb-2.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Data Plan
-            </label>
+            <div className="mb-4">
+              <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Data Plan
+              </label>
 
-            <select
-              value={planId}
-              onChange={(e) => {
-                setPlanId(e.target.value);
-                setError("");
-                setMessage("");
-              }}
-              disabled={!network || loadingCurrentPlans || buying}
-              className="mb-3 w-full rounded-xl border border-border bg-background px-3.5 py-3 text-sm text-foreground outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <option value="">
-                {loadingCurrentPlans
-                  ? "Loading plans..."
-                  : filteredPlans.length === 0
-                  ? "No plans available"
-                  : "Select a plan"}
-              </option>
+              <select
+                value={planId}
+                onChange={(e) => {
+                  setPlanId(e.target.value);
+                  setError("");
+                  setMessage("");
+                }}
+                disabled={!network || loadingCurrentPlans || buying}
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="">
+                  {loadingCurrentPlans
+                    ? "Loading plans..."
+                    : filteredPlans.length === 0
+                      ? "No plans available"
+                      : "Select a plan"}
+                </option>
 
-              {filteredPlans.map((plan) => {
-                const displayPrice = getCustomerPrice(plan);
-                const available = planIsAvailable(plan);
+                {filteredPlans.map((plan) => {
+                  const displayPrice = getCustomerPrice(plan);
 
-                return (
-                  <option
-                    key={String(plan.id)}
-                    value={String(plan.id)}
-                    disabled={!available}
-                    // Native <option> elements can't be styled with
-                    // classNames in most browsers, but `disabled`
-                    // does render them greyed out and unselectable
-                    // — which covers the "grey out" requirement here.
-                  >
-                    {plan.size || plan.name}
-                    {plan.duration ? ` — ${plan.duration}` : ""}
-                    {" — ₦"}
-                    {formatPrice(displayPrice)}
-                    {!available ? " (Unavailable)" : ""}
-                  </option>
-                );
-              })}
-            </select>
+                  const available = planIsAvailable(plan);
 
-            {selectedPlan && !planIsAvailable(selectedPlan) && (
-              <p className="mb-6 text-xs font-medium text-red-600 dark:text-red-400">
-                This plan is currently unavailable. Please choose another.
-              </p>
-            )}
+                  return (
+                    <option
+                      key={String(plan.id)}
+                      value={String(plan.id)}
+                      disabled={!available}
+                    >
+                      {plan.size || plan.name}
+                      {plan.duration ? ` — ${plan.duration}` : ""}
+                      {" — ₦"}
+                      {formatPrice(displayPrice)}
+                      {!available ? " (Unavailable)" : ""}
+                    </option>
+                  );
+                })}
+              </select>
 
-            {/* PLAN DETAILS */}
+              {selectedPlan && !planIsAvailable(selectedPlan) && (
+                <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-400">
+                  This plan is currently unavailable.
+                </p>
+              )}
+            </div>
+
+            {/* ORDER SUMMARY */}
 
             {selectedPlan && (
               <div
-                className={`mb-6 rounded-xl border-l-[3px] bg-muted/60 p-4 ${networkAccent(
-                  selectedPlan.provider
+                className={`mb-4 rounded-lg border border-border border-l-[3px] bg-muted/40 px-3.5 py-3 ${networkAccent(
+                  selectedPlan.provider,
                 )} ${
                   !planIsAvailable(selectedPlan) ? "opacity-50 grayscale" : ""
                 }`}
               >
-                <div className="mb-3.5 flex items-center justify-between">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                     Order Summary
-                  </h3>
+                  </span>
 
-                  <span className="text-xs font-bold text-foreground">
+                  <span className="text-[10px] font-bold text-foreground">
                     {String(selectedPlan.provider).toUpperCase()}
-                    {!planIsAvailable(selectedPlan) ? " · UNAVAILABLE" : ""}
                   </span>
                 </div>
 
-                <div className="space-y-2.5 text-sm">
+                <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between gap-4">
                     <span className="text-muted-foreground">Data</span>
 
-                    <strong className="text-right text-foreground">
+                    <span className="font-medium text-foreground">
                       {selectedPlan.size}
-                    </strong>
+                    </span>
                   </div>
 
                   {selectedPlan.duration && (
                     <div className="flex justify-between gap-4">
                       <span className="text-muted-foreground">Duration</span>
 
-                      <strong className="text-right text-foreground">
+                      <span className="font-medium text-foreground">
                         {selectedPlan.duration}
-                      </strong>
+                      </span>
                     </div>
                   )}
 
                   <div className="flex justify-between gap-4">
                     <span className="text-muted-foreground">Data Price</span>
 
-                    <strong className="text-right text-foreground">
+                    <span className="font-medium text-foreground">
                       ₦{formatPrice(dataPrice)}
-                    </strong>
+                    </span>
                   </div>
 
                   <div className="flex justify-between gap-4">
                     <span className="text-muted-foreground">Service Fee</span>
 
-                    <strong className="text-right text-foreground">
+                    <span className="font-medium text-foreground">
                       {loadingFee
                         ? "Loading..."
-                        : `${serviceFeePercent}% — ₦${formatPrice(
-                            serviceFee
-                          )}`}
-                    </strong>
+                        : `${serviceFeePercent}% — ₦${formatPrice(serviceFee)}`}
+                    </span>
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between border-t border-border pt-3.5">
-                    <span className="text-sm font-semibold text-foreground">
-                      Total
-                    </span>
+                  <div className="mt-2 flex items-center justify-between border-t border-border pt-2">
+                    <span className="font-semibold text-foreground">Total</span>
 
-                    <strong className="text-xl font-bold tracking-tight text-indigo-600 dark:text-indigo-400">
+                    <span className="text-base font-bold text-indigo-600 dark:text-indigo-400">
                       ₦{formatPrice(customerTotal)}
-                    </strong>
+                    </span>
                   </div>
                 </div>
               </div>
@@ -967,23 +981,26 @@ export default function BuyDataPage() {
 
             {/* PHONE */}
 
-            <label className="mb-2.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Phone Number
-            </label>
+            <div className="mb-5">
+              <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Phone Number
+              </label>
 
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, "");
-                setPhone(value.slice(0, 11));
-              }}
-              maxLength={11}
-              inputMode="numeric"
-              placeholder="08012345678"
-              disabled={buying}
-              className="mb-7 w-full rounded-xl border border-border bg-background px-3.5 py-3 text-sm text-foreground outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
-            />
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "");
+
+                  setPhone(value.slice(0, 11));
+                }}
+                maxLength={11}
+                inputMode="numeric"
+                placeholder="08012345678"
+                disabled={buying}
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none transition placeholder:text-muted-foreground/60 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 disabled:cursor-not-allowed disabled:opacity-60"
+              />
+            </div>
 
             {/* BUY BUTTON */}
 
@@ -995,25 +1012,25 @@ export default function BuyDataPage() {
                 !selectedPlan ||
                 !planIsAvailable(selectedPlan)
               }
-              className="w-full rounded-xl bg-gradient-to-b from-indigo-600 to-indigo-700 py-3.5 text-sm font-semibold text-white shadow-sm shadow-indigo-600/25 transition hover:from-indigo-500 hover:to-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none sm:text-base"
+              className="h-10 w-full rounded-lg bg-gradient-to-b from-indigo-600 to-indigo-700 px-4 text-sm font-semibold text-white shadow-sm shadow-indigo-600/20 transition hover:from-indigo-500 hover:to-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
             >
               {buying
                 ? "Processing..."
                 : selectedPlan && !planIsAvailable(selectedPlan)
-                ? "Unavailable"
-                : selectedPlan
-                ? `Buy Data — ₦${formatPrice(customerTotal)}`
-                : "Buy Data"}
+                  ? "Unavailable"
+                  : selectedPlan
+                    ? `Buy Data — ₦${formatPrice(customerTotal)}`
+                    : "Buy Data"}
             </button>
           </form>
         </div>
 
-        {/* FOOTER STRIP */}
+        {/* FOOTER */}
 
-        <div className="flex items-center gap-2 border-t border-border bg-muted/40 px-5 py-3 sm:px-7">
+        <div className="flex items-center gap-2 border-t border-border bg-muted/30 px-4 py-2.5">
           <Wifi className="h-3.5 w-3.5 text-muted-foreground" />
 
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground">
             Delivered instantly via {currentServerLabel}.
           </p>
         </div>
