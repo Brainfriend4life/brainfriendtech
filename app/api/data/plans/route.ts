@@ -145,6 +145,16 @@ const dataPlans = [
     is_active: true,
   },
   {
+    id: 84,
+    provider: "glo",
+    size: "1GB",
+    duration: "1 Day",
+    price: 300,
+    reseller_price: 260,
+    api_price: 250,
+    is_active: true,
+  },
+  {
     id: 68,
     provider: "glo",
     size: "1GB",

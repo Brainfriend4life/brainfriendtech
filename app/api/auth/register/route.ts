@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
@@ -13,13 +12,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    const {
-      fullName,
-      email,
-      phone,
-      password,
-      referralCode,
-    } = body;
+    const { fullName, email, phone, password, referralCode } = body;
 
     // ==========================================
     // BASIC VALIDATION
@@ -36,23 +29,18 @@ export async function POST(req: Request) {
           success: false,
           message: "Please provide all required fields.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const normalizedFullName = fullName.trim();
 
-    const normalizedEmail = email
-      .trim()
-      .toLowerCase();
+    const normalizedEmail = email.trim().toLowerCase();
 
-    const normalizedPhone = phone
-      .trim()
-      .replace(/\s+/g, "");
+    const normalizedPhone = phone.trim().replace(/\s+/g, "");
 
     const normalizedReferralCode =
-      typeof referralCode === "string" &&
-      referralCode.trim()
+      typeof referralCode === "string" && referralCode.trim()
         ? referralCode.trim().toUpperCase()
         : null;
 
@@ -60,16 +48,13 @@ export async function POST(req: Request) {
     // NAME VALIDATION
     // ==========================================
 
-    if (
-      normalizedFullName.length < 2 ||
-      normalizedFullName.length > 100
-    ) {
+    if (normalizedFullName.length < 2 || normalizedFullName.length > 100) {
       return NextResponse.json(
         {
           success: false,
           message: "Please enter a valid full name.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -77,8 +62,7 @@ export async function POST(req: Request) {
     // EMAIL VALIDATION
     // ==========================================
 
-    const emailRegex =
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!emailRegex.test(normalizedEmail)) {
       return NextResponse.json(
@@ -86,7 +70,7 @@ export async function POST(req: Request) {
           success: false,
           message: "Please enter a valid email address.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -111,10 +95,9 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Please enter a valid Nigerian phone number.",
+          message: "Please enter a valid Nigerian phone number.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -144,7 +127,7 @@ export async function POST(req: Request) {
           message:
             "Password must be at least 6 characters and contain an uppercase letter, lowercase letter, number and special character.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -152,60 +135,52 @@ export async function POST(req: Request) {
     // CHECK EXISTING USER
     // ==========================================
 
-    const existingUser =
-      await prisma.user.findFirst({
-        where: {
-          OR: [
-            {
-              email: normalizedEmail,
-            },
-            {
-              phone: finalPhone,
-            },
-          ],
-        },
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [
+          {
+            email: normalizedEmail,
+          },
+          {
+            phone: finalPhone,
+          },
+        ],
+      },
 
-        select: {
-          id: true,
-          email: true,
-          phone: true,
-        },
-      });
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+      },
+    });
 
     if (existingUser) {
-      if (
-        existingUser.email === normalizedEmail
-      ) {
+      if (existingUser.email === normalizedEmail) {
         return NextResponse.json(
           {
             success: false,
-            message:
-              "An account with this email already exists.",
+            message: "An account with this email already exists.",
           },
-          { status: 409 }
+          { status: 409 },
         );
       }
 
-      if (
-        existingUser.phone === finalPhone
-      ) {
+      if (existingUser.phone === finalPhone) {
         return NextResponse.json(
           {
             success: false,
-            message:
-              "An account with this phone number already exists.",
+            message: "An account with this phone number already exists.",
           },
-          { status: 409 }
+          { status: 409 },
         );
       }
 
       return NextResponse.json(
         {
           success: false,
-          message:
-            "An account with these details already exists.",
+          message: "An account with these details already exists.",
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -216,17 +191,15 @@ export async function POST(req: Request) {
     let referrerId: string | null = null;
 
     if (normalizedReferralCode) {
-      const referrer =
-        await prisma.user.findUnique({
-          where: {
-            referralCode:
-              normalizedReferralCode,
-          },
+      const referrer = await prisma.user.findUnique({
+        where: {
+          referralCode: normalizedReferralCode,
+        },
 
-          select: {
-            id: true,
-          },
-        });
+        select: {
+          id: true,
+        },
+      });
 
       if (!referrer) {
         return NextResponse.json(
@@ -234,7 +207,7 @@ export async function POST(req: Request) {
             success: false,
             message: "Invalid referral code.",
           },
-          { status: 400 }
+          { status: 400 },
         );
       }
 
@@ -245,20 +218,15 @@ export async function POST(req: Request) {
     // HASH PASSWORD
     // ==========================================
 
-    const hashedPassword =
-      await bcrypt.hash(password, 12);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     // ==========================================
     // EMAIL VERIFICATION TOKEN
     // ==========================================
 
-    const verificationToken =
-      crypto.randomBytes(32).toString("hex");
+    const verificationToken = crypto.randomBytes(32).toString("hex");
 
-    const verificationExpires =
-      new Date(
-        Date.now() + 30 * 60 * 1000
-      );
+    const verificationExpires = new Date(Date.now() + 30 * 60 * 1000);
 
     // ==========================================
     // GENERATE UNIQUE REFERRAL CODE
@@ -266,26 +234,21 @@ export async function POST(req: Request) {
 
     let generatedReferralCode = "";
 
-    for (
-      let attempt = 0;
-      attempt < 10;
-      attempt++
-    ) {
+    for (let attempt = 0; attempt < 10; attempt++) {
       const candidate = `BF${crypto
         .randomBytes(5)
         .toString("hex")
         .toUpperCase()}`;
 
-      const existingReferral =
-        await prisma.user.findUnique({
-          where: {
-            referralCode: candidate,
-          },
+      const existingReferral = await prisma.user.findUnique({
+        where: {
+          referralCode: candidate,
+        },
 
-          select: {
-            id: true,
-          },
-        });
+        select: {
+          id: true,
+        },
+      });
 
       if (!existingReferral) {
         generatedReferralCode = candidate;
@@ -294,17 +257,14 @@ export async function POST(req: Request) {
     }
 
     if (!generatedReferralCode) {
-      console.error(
-        "REFERRAL CODE GENERATION FAILED"
-      );
+      console.error("REFERRAL CODE GENERATION FAILED");
 
       return NextResponse.json(
         {
           success: false,
-          message:
-            "Unable to create your account right now. Please try again.",
+          message: "Unable to create your account right now. Please try again.",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -326,8 +286,7 @@ export async function POST(req: Request) {
 
         referralBalance: 0,
 
-        referralCode:
-          generatedReferralCode,
+        referralCode: generatedReferralCode,
 
         referredById: referrerId,
 
@@ -342,11 +301,9 @@ export async function POST(req: Request) {
 
         emailVerificationRequired: true,
 
-        emailVerificationToken:
-          verificationToken,
+        emailVerificationToken: verificationToken,
 
-        emailVerificationExpires:
-          verificationExpires,
+        emailVerificationExpires: verificationExpires,
       },
 
       select: {
@@ -380,17 +337,13 @@ export async function POST(req: Request) {
 
         email: user.email,
 
-        referralCode:
-          user.referralCode,
+        referralCode: user.referralCode,
       },
 
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error: unknown) {
-    console.error(
-      "REGISTER ERROR:",
-      error
-    );
+    console.error("REGISTER ERROR:", error);
 
     // ==========================================
     // PRISMA UNIQUE CONSTRAINT ERROR
@@ -400,16 +353,14 @@ export async function POST(req: Request) {
       typeof error === "object" &&
       error !== null &&
       "code" in error &&
-      (error as { code?: string }).code ===
-        "P2002"
+      (error as { code?: string }).code === "P2002"
     ) {
       return NextResponse.json(
         {
           success: false,
-          message:
-            "An account with these details already exists.",
+          message: "An account with these details already exists.",
         },
-        { status: 409 }
+        { status: 409 },
       );
     }
 
@@ -423,8 +374,7 @@ export async function POST(req: Request) {
         message:
           "Something went wrong while creating your account. Please try again.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
-

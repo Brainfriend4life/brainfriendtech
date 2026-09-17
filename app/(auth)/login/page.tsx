@@ -5,11 +5,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  LockKeyhole,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, LockKeyhole, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
 
 import AuthInput from "@/components/auth/AuthInput";
@@ -21,6 +17,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,8 +110,6 @@ export default function LoginPage() {
               xl:p-14
             "
           >
-            {/* Decorative shapes */}
-
             <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-white/10" />
 
             <div className="absolute -bottom-32 -left-20 h-80 w-80 rounded-full bg-white/10" />
@@ -124,10 +119,7 @@ export default function LoginPage() {
             <div className="relative z-10">
               {/* LOGO */}
 
-              <Link
-                href="/"
-                className="inline-flex items-center gap-3"
-              >
+              <Link href="/" className="inline-flex items-center gap-3">
                 <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg">
                   <Image
                     src="/logo.png"
@@ -140,9 +132,7 @@ export default function LoginPage() {
                 </div>
 
                 <div>
-                  <p className="text-xl font-bold text-white">
-                    Brainfriend
-                  </p>
+                  <p className="text-xl font-bold text-white">Brainfriend</p>
 
                   <p className="text-xs font-medium tracking-wide text-indigo-200">
                     TECH SERVICES
@@ -166,9 +156,8 @@ export default function LoginPage() {
                 </h2>
 
                 <p className="mt-6 text-base leading-7 text-indigo-100">
-                  Buy airtime, data, electricity and
-                  other digital services quickly and
-                  securely with Brainfriend Global Tech.
+                  Buy airtime, data, electricity and other digital services
+                  quickly and securely with Brainfriend Global Tech.
                 </p>
 
                 <div className="mt-8 space-y-4">
@@ -225,9 +214,7 @@ export default function LoginPage() {
             "
           >
             <div className="mx-auto w-full max-w-md">
-              {/* ================================================= */}
               {/* BACK TO HOME */}
-              {/* ================================================= */}
 
               <div className="mb-6 sm:mb-7">
                 <Link
@@ -259,9 +246,7 @@ export default function LoginPage() {
                 </Link>
               </div>
 
-              {/* ================================================= */}
               {/* MOBILE LOGO */}
-              {/* ================================================= */}
 
               <div className="mb-7 flex items-center gap-3 lg:hidden sm:mb-8">
                 <div
@@ -297,9 +282,7 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* ================================================= */}
               {/* HEADING */}
-              {/* ================================================= */}
 
               <div className="mb-7 sm:mb-8">
                 <div
@@ -338,40 +321,117 @@ export default function LoginPage() {
                     sm:text-base
                   "
                 >
-                  Sign in to your Brainfriend Global Tech
-                  account and continue where you left off.
+                  Sign in to your Brainfriend Global Tech account and continue
+                  where you left off.
                 </p>
               </div>
 
-              {/* ================================================= */}
               {/* LOGIN FORM */}
-              {/* ================================================= */}
 
-              <form
-                onSubmit={handleSubmit}
-                className="space-y-4 sm:space-y-5"
-              >
+              <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
                 <AuthInput
                   label="Email Address"
                   name="email"
                   type="email"
                   placeholder="you@example.com"
                   value={email}
-                  onChange={(e) =>
-                    setEmail(e.target.value)
-                  }
+                  onChange={(e) => setEmail(e.target.value)}
                 />
 
-                <AuthInput
-                  label="Password"
-                  name="password"
-                  type="password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) =>
-                    setPassword(e.target.value)
-                  }
-                />
+                {/* PASSWORD WITH SHOW/HIDE */}
+
+                <div>
+                  <label
+                    htmlFor="login-password"
+                    className="
+                      mb-2 block text-sm font-semibold
+                      text-gray-700
+                      dark:text-slate-200
+                    "
+                  >
+                    Password
+                  </label>
+
+                  <div className="relative">
+                    <LockKeyhole
+                      className="
+                        pointer-events-none
+                        absolute left-4 top-1/2
+                        h-5 w-5
+                        -translate-y-1/2
+                        text-slate-400
+                      "
+                    />
+
+                    <input
+                      id="login-password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="current-password"
+                      disabled={loading}
+                      className="
+                        h-12 w-full rounded-xl
+                        border border-gray-200
+                        bg-gray-50
+                        pl-12 pr-12
+                        text-base
+                        text-gray-900
+                        outline-none
+                        transition
+                        placeholder:text-gray-400
+                        focus:border-indigo-500
+                        focus:bg-white
+                        focus:ring-4
+                        focus:ring-indigo-500/10
+                        disabled:cursor-not-allowed
+                        disabled:opacity-60
+                        dark:border-slate-700
+                        dark:bg-slate-800
+                        dark:text-white
+                        dark:placeholder:text-slate-500
+                        dark:focus:border-indigo-400
+                        sm:h-14
+                      "
+                    />
+
+                    <button
+                      type="button"
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                      title={showPassword ? "Hide password" : "Show password"}
+                      onClick={() => setShowPassword((current) => !current)}
+                      disabled={loading}
+                      className="
+                        absolute right-4 top-1/2
+                        flex h-8 w-8
+                        -translate-y-1/2
+                        items-center justify-center
+                        rounded-lg
+                        text-slate-400
+                        transition
+                        hover:bg-slate-100
+                        hover:text-slate-700
+                        focus:outline-none
+                        focus:ring-2
+                        focus:ring-indigo-500/30
+                        dark:hover:bg-slate-700
+                        dark:hover:text-slate-200
+                        disabled:cursor-not-allowed
+                        disabled:opacity-50
+                      "
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
+                    </button>
+                  </div>
+                </div>
 
                 {/* FORGOT PASSWORD */}
 
@@ -393,18 +453,10 @@ export default function LoginPage() {
 
                 {/* LOGIN BUTTON */}
 
-                <AuthButton
-                  text={
-                    loading
-                      ? "Signing In..."
-                      : "Sign In"
-                  }
-                />
+                <AuthButton text={loading ? "Signing In..." : "Sign In"} />
               </form>
 
-              {/* ================================================= */}
               {/* REGISTER DIVIDER */}
-              {/* ================================================= */}
 
               <div className="my-6 flex items-center gap-3 sm:my-7 sm:gap-4">
                 <div className="h-px flex-1 bg-gray-200 dark:bg-slate-700" />
@@ -456,9 +508,8 @@ export default function LoginPage() {
                   sm:text-xs
                 "
               >
-                By signing in, you agree to use
-                Brainfriend Global Tech responsibly and
-                securely.
+                By signing in, you agree to use Brainfriend Global Tech
+                responsibly and securely.
               </p>
             </div>
           </div>
