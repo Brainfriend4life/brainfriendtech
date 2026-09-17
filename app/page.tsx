@@ -487,105 +487,132 @@ export default function Home() {
             </div>
           </div>
 
-          {/* RIGHT VISUAL */}
+          {/* RIGHT VISUAL
+              Same absolute-positioned mockup as before (built inside a
+              fixed 540x500 box so the phone / NIN card / telecom badges
+              keep their exact relative positions), but now wrapped in a
+              responsive-sized outer box that scales the whole group down
+              with a CSS transform on small screens instead of hiding it.
+              The outer box's own size shrinks per breakpoint so it takes
+              up exactly the right amount of space in the layout — no
+              leftover empty space, no overflow, no overlap with the text
+              column above it. */}
 
-          <div className="relative mx-auto hidden h-[500px] w-full max-w-[540px] lg:block">
-            {/* glowing circle */}
+          <div
+            className="
+              relative mx-auto mt-4
+              h-[250px] w-[270px]
+              sm:h-[315px] sm:w-[340px]
+              lg:mt-0 lg:h-[500px] lg:w-[540px]
+            "
+          >
+            <div
+              className="
+                absolute left-0 top-0
+                h-[500px] w-[540px]
+                origin-top-left
+                scale-[0.5]
+                sm:scale-[0.63]
+                lg:scale-100
+              "
+            >
+              {/* glowing circle */}
 
-            <div className="absolute left-1/2 top-1/2 h-[390px] w-[390px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-blue-200/80 to-cyan-100/40 blur-sm dark:from-blue-900/40 dark:to-cyan-900/20" />
+              <div className="absolute left-1/2 top-1/2 h-[390px] w-[390px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-blue-200/80 to-cyan-100/40 blur-sm dark:from-blue-900/40 dark:to-cyan-900/20" />
 
-            {/* PHONE */}
+              {/* PHONE */}
 
-            <div className="absolute right-5 top-14 h-[410px] w-[220px] rotate-[7deg] rounded-[34px] border-[7px] border-slate-900 bg-white p-2 shadow-2xl dark:border-slate-700 dark:bg-slate-800">
-              <div className="h-full overflow-hidden rounded-[26px] bg-slate-50 dark:bg-slate-900">
-                <div className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-4 text-white">
-                  <div>
-                    <div className="text-[9px] opacity-80">Welcome back</div>
+              <div className="absolute right-5 top-14 h-[410px] w-[220px] rotate-[7deg] rounded-[34px] border-[7px] border-slate-900 bg-white p-2 shadow-2xl dark:border-slate-700 dark:bg-slate-800">
+                <div className="h-full overflow-hidden rounded-[26px] bg-slate-50 dark:bg-slate-900">
+                  <div className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-4 text-white">
+                    <div>
+                      <div className="text-[9px] opacity-80">Welcome back</div>
 
-                    <div className="text-sm font-bold">Brainfriend</div>
-                  </div>
-
-                  <Wallet className="h-5 w-5" />
-                </div>
-
-                <div className="p-3">
-                  <div className="rounded-xl bg-white p-3 shadow-sm dark:bg-slate-800">
-                    <div className="text-[9px] text-slate-400">
-                      Wallet Balance
+                      <div className="text-sm font-bold">Brainfriend</div>
                     </div>
 
-                    <div className="mt-1 text-xl font-black text-slate-900 dark:text-white">
-                      ₦25,480.00
-                    </div>
+                    <Wallet className="h-5 w-5" />
                   </div>
 
-                  <div className="mt-3 space-y-2">
-                    {[
-                      ["Airtime", Smartphone],
-                      ["Data", Wifi],
-                      ["Electricity", Zap],
-                      ["Cable TV", Tv],
-                      ["Exam Pins", GraduationCap],
-                      ["NIN Verification", Fingerprint],
-                    ].map(([name, Icon]) => {
-                      const ServiceIcon = Icon as typeof Smartphone;
+                  <div className="p-3">
+                    <div className="rounded-xl bg-white p-3 shadow-sm dark:bg-slate-800">
+                      <div className="text-[9px] text-slate-400">
+                        Wallet Balance
+                      </div>
 
-                      return (
-                        <div
-                          key={String(name)}
-                          className="flex items-center gap-2 rounded-xl bg-white p-2 shadow-sm dark:bg-slate-800"
-                        >
-                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
-                            <ServiceIcon className="h-3.5 w-3.5" />
+                      <div className="mt-1 text-xl font-black text-slate-900 dark:text-white">
+                        ₦25,480.00
+                      </div>
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      {[
+                        ["Airtime", Smartphone],
+                        ["Data", Wifi],
+                        ["Electricity", Zap],
+                        ["Cable TV", Tv],
+                        ["Exam Pins", GraduationCap],
+                        ["NIN Verification", Fingerprint],
+                      ].map(([name, Icon]) => {
+                        const ServiceIcon = Icon as typeof Smartphone;
+
+                        return (
+                          <div
+                            key={String(name)}
+                            className="flex items-center gap-2 rounded-xl bg-white p-2 shadow-sm dark:bg-slate-800"
+                          >
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400">
+                              <ServiceIcon className="h-3.5 w-3.5" />
+                            </div>
+
+                            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200">
+                              {String(name)}
+                            </span>
+
+                            <ArrowRight className="ml-auto h-3 w-3 text-slate-300" />
                           </div>
-
-                          <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200">
-                            {String(name)}
-                          </span>
-
-                          <ArrowRight className="ml-auto h-3 w-3 text-slate-300" />
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* NIN CARD */}
+              {/* NIN CARD */}
 
-            <div className="absolute bottom-12 left-0 w-[270px] -rotate-3 rounded-2xl border border-white/70 bg-white/90 p-4 shadow-2xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/90">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
-                  <Fingerprint className="h-6 w-6" />
-                </div>
-
-                <div>
-                  <div className="text-[10px] font-semibold text-slate-400">
-                    NIN Verification
+              <div className="absolute bottom-12 left-0 w-[270px] -rotate-3 rounded-2xl border border-white/70 bg-white/90 p-4 shadow-2xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/90">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400">
+                    <Fingerprint className="h-6 w-6" />
                   </div>
 
-                  <div className="text-sm font-black text-slate-800 dark:text-white">
-                    Verification Successful
-                  </div>
-                </div>
+                  <div>
+                    <div className="text-[10px] font-semibold text-slate-400">
+                      NIN Verification
+                    </div>
 
-                <CheckCircle2 className="ml-auto h-5 w-5 text-emerald-500" />
+                    <div className="text-sm font-black text-slate-800 dark:text-white">
+                      Verification Successful
+                    </div>
+                  </div>
+
+                  <CheckCircle2 className="ml-auto h-5 w-5 text-emerald-500" />
+                </div>
               </div>
-            </div>
 
-            {/* TELECOM FLOATERS */}
+              {/* TELECOM FLOATERS */}
 
-            <div className="absolute left-16 top-24 flex h-12 w-12 items-center justify-center rounded-xl bg-yellow-400 text-[10px] font-black text-slate-900 shadow-xl">
-              MTN
-            </div>
+              <div className="absolute left-16 top-24 flex h-12 w-12 items-center justify-center rounded-xl bg-yellow-400 text-[10px] font-black text-slate-900 shadow-xl">
+                MTN
+              </div>
 
-            <div className="absolute left-5 top-40 flex h-12 w-12 items-center justify-center rounded-xl bg-red-500 text-xs font-black text-white shadow-xl">
-              airtel
-            </div>
+              <div className="absolute left-5 top-40 flex h-12 w-12 items-center justify-center rounded-xl bg-red-500 text-xs font-black text-white shadow-xl">
+                airtel
+              </div>
 
-            <div className="absolute left-16 top-56 flex h-12 w-12 items-center justify-center rounded-xl bg-green-500 text-xs font-black text-white shadow-xl">
-              glo
+              <div className="absolute left-16 top-56 flex h-12 w-12 items-center justify-center rounded-xl bg-green-500 text-xs font-black text-white shadow-xl">
+                glo
+              </div>
             </div>
           </div>
         </div>
