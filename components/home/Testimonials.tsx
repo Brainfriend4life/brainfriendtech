@@ -293,8 +293,8 @@ function ReviewForm() {
         setError(
           getErrorMessage(
             err,
-            "You're logged in — please hit Submit to finish posting your review."
-          )
+            "You're logged in — please hit Submit to finish posting your review.",
+          ),
         );
       } finally {
         sessionStorage.removeItem(DRAFT_STORAGE_KEY);
@@ -340,7 +340,7 @@ function ReviewForm() {
 
       const returnUrl = `${window.location.pathname}#leave-review`;
       window.location.href = `/login?callbackUrl=${encodeURIComponent(
-        returnUrl
+        returnUrl,
       )}`;
       return;
     }
@@ -368,8 +368,8 @@ function ReviewForm() {
       </h3>
 
       <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
-        You'll be asked to log in before it posts, it'll appear once our
-        team reviews it.
+        You'll be asked to log in before it posts, it'll appear once our team
+        reviews it.
       </p>
 
       {error && (
@@ -395,7 +395,11 @@ function ReviewForm() {
           <label className="mb-1.5 block text-xs font-medium text-gray-800 dark:text-gray-200">
             Rating
           </label>
-          <StarRatingInput value={rating} onChange={setRating} disabled={busy} />
+          <StarRatingInput
+            value={rating}
+            onChange={setRating}
+            disabled={busy}
+          />
         </div>
 
         <div className="mb-3">
@@ -464,10 +468,10 @@ function ReviewForm() {
         {redirecting
           ? "Redirecting to log in..."
           : submitting
-          ? "Submitting..."
-          : isLoggedIn
-          ? "Submit Review"
-          : "Log In & Submit Review"}
+            ? "Submitting..."
+            : isLoggedIn
+              ? "Submit Review"
+              : "Log In & Submit Review"}
       </button>
     </form>
   );
@@ -491,7 +495,7 @@ export default function Testimonials() {
 
         const response = await fetch(
           `/api/reviews?page=${pageToLoad}&limit=${REVIEWS_PER_PAGE}`,
-          { cache: "no-store", signal: controller.signal }
+          { cache: "no-store", signal: controller.signal },
         );
         const result = await response.json();
 
@@ -499,7 +503,7 @@ export default function Testimonials() {
           setReviews((prev) =>
             pageToLoad === 1
               ? result.reviews || []
-              : [...prev, ...(result.reviews || [])]
+              : [...prev, ...(result.reviews || [])],
           );
           setHasMore(Boolean(result.pagination?.hasMore));
         } else {
@@ -542,8 +546,8 @@ export default function Testimonials() {
           </h2>
 
           <p className="mx-auto mt-4 max-w-2xl text-gray-600 dark:text-gray-400">
-            See what customers have to say about our fast, secure and
-            reliable VTU and digital payment services.
+            See what customers have to say about our fast, secure and reliable
+            VTU and digital payment services.
           </p>
         </div>
 
