@@ -1,4 +1,3 @@
-
 "use client";
 
 import Image from "next/image";
@@ -27,18 +26,14 @@ function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const referralCode =
-    searchParams.get("ref")?.trim().toUpperCase() || "";
+  const referralCode = searchParams.get("ref")?.trim().toUpperCase() || "";
 
   const [loading, setLoading] = useState(false);
-  const [registrationComplete, setRegistrationComplete] =
-    useState(false);
-  const [registeredEmail, setRegisteredEmail] =
-    useState("");
+  const [registrationComplete, setRegistrationComplete] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] =
-    useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [form, setForm] = useState({
     fullName: "",
@@ -49,17 +44,12 @@ function RegisterForm() {
     confirmPassword: "",
   });
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
 
     setForm((current) => ({
       ...current,
-      [name]:
-        name === "referralCode"
-          ? value.toUpperCase()
-          : value,
+      [name]: name === "referralCode" ? value.toUpperCase() : value,
     }));
   };
 
@@ -78,9 +68,7 @@ function RegisterForm() {
     passwordRequirements.number &&
     passwordRequirements.special;
 
-  const handleSubmit = async (
-    e: React.FormEvent<HTMLFormElement>
-  ) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (
@@ -96,7 +84,7 @@ function RegisterForm() {
 
     if (!strongPassword) {
       toast.error(
-        "Password must contain uppercase, lowercase, number and special character."
+        "Password must contain uppercase, lowercase, number and special character.",
       );
       return;
     }
@@ -109,26 +97,20 @@ function RegisterForm() {
     try {
       setLoading(true);
 
-      const res = await axios.post(
-        "/api/auth/register",
-        {
-          fullName: form.fullName.trim(),
-          email: form.email.trim(),
-          phone: form.phone.trim(),
-          password: form.password,
-          referralCode:
-            form.referralCode.trim() || null,
-        }
-      );
+      const res = await axios.post("/api/auth/register", {
+        fullName: form.fullName.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        password: form.password,
+        referralCode: form.referralCode.trim() || null,
+      });
 
-      setRegisteredEmail(
-        res.data.email || form.email.trim()
-      );
+      setRegisteredEmail(res.data.email || form.email.trim());
 
       setRegistrationComplete(true);
 
       toast.success(
-        "Account created! Check your email to verify your account."
+        "Account created! Check your email to verify your account.",
       );
     } catch (error: unknown) {
       console.error("REGISTER ERROR:", error);
@@ -136,12 +118,10 @@ function RegisterForm() {
       if (axios.isAxiosError(error)) {
         toast.error(
           error.response?.data?.message ||
-            "Registration failed. Please try again."
+            "Registration failed. Please try again.",
         );
       } else {
-        toast.error(
-          "Registration failed. Please try again."
-        );
+        toast.error("Registration failed. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -223,10 +203,7 @@ function RegisterForm() {
             <div className="relative z-10">
               {/* LOGO */}
 
-              <Link
-                href="/"
-                className="inline-flex items-center gap-3"
-              >
+              <Link href="/" className="inline-flex items-center gap-3">
                 <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-lg">
                   <Image
                     src="/logo.png"
@@ -239,9 +216,7 @@ function RegisterForm() {
                 </div>
 
                 <div>
-                  <p className="text-xl font-bold text-white">
-                    Brainfriend
-                  </p>
+                  <p className="text-xl font-bold text-white">Brainfriend</p>
 
                   <p className="text-xs font-medium tracking-wide text-indigo-200">
                     TECH SERVICES
@@ -274,9 +249,8 @@ function RegisterForm() {
                 </h2>
 
                 <p className="mt-6 text-base leading-7 text-indigo-100">
-                  Create your Brainfriend Global Tech
-                  account and enjoy fast, secure and
-                  reliable digital services.
+                  Create your Brainfriend Global Tech account and enjoy fast,
+                  secure and reliable digital services.
                 </p>
 
                 <div className="mt-8 space-y-4">
@@ -341,14 +315,12 @@ function RegisterForm() {
             "
           >
             <div className="mx-auto w-full max-w-md">
-
               {/* ================================================= */}
               {/* EMAIL VERIFICATION SUCCESS */}
               {/* ================================================= */}
 
               {registrationComplete ? (
                 <div className="py-6 text-center sm:py-10">
-
                   <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/40">
                     <MailCheck className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
                   </div>
@@ -430,9 +402,8 @@ function RegisterForm() {
                         </p>
 
                         <p className="mt-1 text-xs leading-5 text-indigo-700 dark:text-indigo-300">
-                          Open the email and click the
-                          verification link to activate
-                          your account.
+                          Open the email and click the verification link to
+                          activate your account.
                         </p>
                       </div>
                     </div>
@@ -453,7 +424,8 @@ function RegisterForm() {
                   >
                     The verification link will expire in
                     <span className="font-semibold text-gray-700 dark:text-slate-200">
-                      {" "}30 minutes
+                      {" "}
+                      30 minutes
                     </span>
                     .
                   </div>
@@ -482,8 +454,7 @@ function RegisterForm() {
                   </button>
 
                   <p className="mt-5 text-xs leading-5 text-gray-400 dark:text-slate-500">
-                    You must verify your email before
-                    you can sign in.
+                    You must verify your email before you can sign in.
                   </p>
                 </div>
               ) : (
@@ -598,8 +569,8 @@ function RegisterForm() {
                         sm:mt-3 sm:text-base
                       "
                     >
-                      Register with Brainfriend Global Tech
-                      and start using our digital services.
+                      Register with Brainfriend Global Tech and start using our
+                      digital services.
                     </p>
                   </div>
 
@@ -609,7 +580,6 @@ function RegisterForm() {
                     onSubmit={handleSubmit}
                     className="space-y-4 sm:space-y-5"
                   >
-
                     {/* FULL NAME */}
 
                     <AuthInput
@@ -740,11 +710,7 @@ function RegisterForm() {
                         <input
                           id="password"
                           name="password"
-                          type={
-                            showPassword
-                              ? "text"
-                              : "password"
-                          }
+                          type={showPassword ? "text" : "password"}
                           autoComplete="new-password"
                           placeholder="Create a strong password"
                           value={form.password}
@@ -778,15 +744,9 @@ function RegisterForm() {
                         <button
                           type="button"
                           aria-label={
-                            showPassword
-                              ? "Hide password"
-                              : "Show password"
+                            showPassword ? "Hide password" : "Show password"
                           }
-                          onClick={() =>
-                            setShowPassword(
-                              (current) => !current
-                            )
-                          }
+                          onClick={() => setShowPassword((current) => !current)}
                           disabled={loading}
                           className="
                             absolute right-4 top-1/2
@@ -834,11 +794,7 @@ function RegisterForm() {
                         <input
                           id="confirmPassword"
                           name="confirmPassword"
-                          type={
-                            showConfirmPassword
-                              ? "text"
-                              : "password"
-                          }
+                          type={showConfirmPassword ? "text" : "password"}
                           autoComplete="new-password"
                           placeholder="Re-enter your password"
                           value={form.confirmPassword}
@@ -859,8 +815,7 @@ function RegisterForm() {
                             sm:h-14
                             ${
                               form.confirmPassword &&
-                              form.password !==
-                                form.confirmPassword
+                              form.password !== form.confirmPassword
                                 ? `
                                   border-red-400
                                   focus:border-red-500
@@ -869,16 +824,15 @@ function RegisterForm() {
                                   dark:border-red-500
                                 `
                                 : form.confirmPassword &&
-                                  form.password ===
-                                    form.confirmPassword
-                                ? `
+                                    form.password === form.confirmPassword
+                                  ? `
                                   border-emerald-400
                                   focus:border-emerald-500
                                   focus:ring-4
                                   focus:ring-emerald-500/10
                                   dark:border-emerald-500
                                 `
-                                : `
+                                  : `
                                   border-gray-200
                                   focus:border-indigo-500
                                   focus:bg-white
@@ -899,9 +853,7 @@ function RegisterForm() {
                               : "Show confirm password"
                           }
                           onClick={() =>
-                            setShowConfirmPassword(
-                              (current) => !current
-                            )
+                            setShowConfirmPassword((current) => !current)
                           }
                           disabled={loading}
                           className="
@@ -926,15 +878,13 @@ function RegisterForm() {
                           className={`
                             mt-2 text-xs font-medium
                             ${
-                              form.password ===
-                              form.confirmPassword
+                              form.password === form.confirmPassword
                                 ? "text-emerald-600 dark:text-emerald-400"
                                 : "text-red-500 dark:text-red-400"
                             }
                           `}
                         >
-                          {form.password ===
-                          form.confirmPassword
+                          {form.password === form.confirmPassword
                             ? "Passwords match"
                             : "Passwords do not match"}
                         </p>
@@ -1006,9 +956,7 @@ function RegisterForm() {
                     <div className="pt-1">
                       <AuthButton
                         text={
-                          loading
-                            ? "Creating Account..."
-                            : "Create Account"
+                          loading ? "Creating Account..." : "Create Account"
                         }
                       />
                     </div>
@@ -1063,9 +1011,8 @@ function RegisterForm() {
                       sm:mt-7 sm:text-xs
                     "
                   >
-                    By creating an account, you agree to use
-                    Brainfriend Global Tech responsibly and
-                    keep your account information secure.
+                    By creating an account, you agree to use Brainfriend Global
+                    Tech responsibly and keep your account information secure.
                   </p>
                 </>
               )}
@@ -1105,4 +1052,3 @@ export default function RegisterPage() {
     </Suspense>
   );
 }
-

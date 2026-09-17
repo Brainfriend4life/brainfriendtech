@@ -417,7 +417,7 @@ export default function Home() {
 
             <p className="mt-6 max-w-xl text-base leading-7 text-slate-600 dark:text-slate-300 sm:text-lg">
               Buy airtime, data, electricity, cable TV, exam PINs and verify
-              your NIN — all in one place. Fast, secure and affordable.
+              your NIN, all in one place. Fast, secure and affordable.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
