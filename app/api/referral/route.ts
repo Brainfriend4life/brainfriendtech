@@ -14,7 +14,7 @@ export async function GET() {
           success: false,
           message: "You must be logged in.",
         },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -28,6 +28,19 @@ export async function GET() {
         referralCode: true,
         referralBalance: true,
         walletBalance: true,
+
+        // Get users directly referred by this user
+        referredUsers: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
       },
     });
 
@@ -37,15 +50,27 @@ export async function GET() {
           success: false,
           message: "User account not found.",
         },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     return NextResponse.json({
       success: true,
+
       referralCode: user.referralCode,
-      referralBalance: Number(user.referralBalance),
-      walletBalance: Number(user.walletBalance),
+
+      referralBalance: Number(user.referralBalance || 0),
+
+      walletBalance: Number(user.walletBalance || 0),
+
+      totalReferrals: user.referredUsers.length,
+
+      referrals: user.referredUsers.map((referral) => ({
+        id: referral.id,
+        fullName: referral.fullName,
+        email: referral.email,
+        createdAt: referral.createdAt,
+      })),
     });
   } catch (error) {
     console.error("REFERRAL GET ERROR:", error);
@@ -55,7 +80,7 @@ export async function GET() {
         success: false,
         message: "Unable to load referral information.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
