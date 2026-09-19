@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const NETWORKDATASUB_BASE_URL = "https://www.networkdatasub.com/api";
+
 const NETWORKDATASUB_PLANS_URL = `${NETWORKDATASUB_BASE_URL}/data/all-plans`;
 
 function firstValue(...values: unknown[]) {
@@ -20,83 +21,31 @@ function toNumber(value: unknown, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
-function normalizeNetwork(value: unknown) {
-  if (value && typeof value === "object") {
-    const object = value as Record<string, unknown>;
-
-    value = firstValue(
-      object.name,
-      object.network,
-      object.network_name,
-      object.networkName,
-      object.title,
-    );
+function normalizeNetwork(network: any) {
+  if (network && typeof network === "object") {
+    return String(firstValue(network.code, network.name) ?? "")
+      .trim()
+      .toUpperCase();
   }
 
-  const network = String(value ?? "")
+  return String(network ?? "")
     .trim()
     .toUpperCase();
-
-  if (network.includes("MTN")) return "MTN";
-  if (network.includes("AIRTEL")) return "AIRTEL";
-  if (network.includes("9MOBILE") || network.includes("9 MOBILE")) {
-    return "9MOBILE";
-  }
-  if (network.includes("GLO")) return "GLO";
-
-  return network;
-}
-
-function normalizeSize(plan: Record<string, any>) {
-  return String(
-    firstValue(
-      plan.size,
-      plan.data,
-      plan.data_size,
-      plan.dataSize,
-      plan.bundle,
-      plan.volume,
-      plan.name,
-    ) ?? "",
-  ).trim();
-}
-
-function normalizeName(plan: Record<string, any>) {
-  return String(
-    firstValue(
-      plan.name,
-      plan.plan_name,
-      plan.planName,
-      plan.title,
-      plan.description,
-      plan.bundle_name,
-    ) ?? "",
-  ).trim();
-}
-
-function normalizeDuration(plan: Record<string, any>) {
-  return String(
-    firstValue(
-      plan.duration,
-      plan.validity,
-      plan.validity_period,
-      plan.validityPeriod,
-      plan.duration_period,
-      plan.durationPeriod,
-    ) ?? "",
-  ).trim();
 }
 
 function getPlanId(plan: Record<string, any>) {
-  const value = firstValue(
-    plan.plan_id,
-    plan.planId,
-    plan.api_plan_id,
-    plan.apiPlanId,
-    plan.bundle_id,
-    plan.bundleId,
-    plan.id,
-  );
+  /*
+   * IMPORTANT:
+   *
+   * NetworkDataSub has two IDs:
+   *
+   * id      -> internal NetworkDataSub record ID
+   * plan_id -> actual API plan ID used for purchase
+   *
+   * We MUST use plan_id.
+   */
+
+  const value = firstValue(plan.plan_id, plan.planId);
 
   const id = Number(value);
 
@@ -104,21 +53,72 @@ function getPlanId(plan: Record<string, any>) {
 }
 
 function getProviderPrice(plan: Record<string, any>) {
+  /*
+   * Actual NetworkDataSub response:
+   *
+   * price: {
+   *   amount: 110,
+   *   formatted: "₦110.0",
+   *   currency: "NGN"
+   * }
+   */
+
+  const priceObject =
+    plan.price && typeof plan.price === "object" ? plan.price : null;
+
   const value = firstValue(
+    priceObject?.amount,
+    plan.price_amount,
     plan.api_price,
     plan.apiPrice,
     plan.provider_price,
     plan.providerPrice,
-    plan.cost,
-    plan.price,
-    plan.amount,
-    plan.selling_price,
-    plan.sellingPrice,
   );
 
   const price = Number(value);
 
   return Number.isFinite(price) && price > 0 ? price : null;
+}
+
+function getName(plan: Record<string, any>) {
+  return String(
+    firstValue(plan.plan_name, plan.planName, plan.name, plan.title) ?? "",
+  ).trim();
+}
+
+function getSize(plan: Record<string, any>) {
+  return String(
+    firstValue(plan.data_size, plan.dataSize, plan.size, plan.data) ?? "",
+  ).trim();
+}
+
+function getDuration(plan: Record<string, any>) {
+  /*
+   * Actual response:
+   *
+   * validity: {
+   *   days: 14,
+   *   formatted: "14 days"
+   * }
+   */
+
+  if (plan.validity && typeof plan.validity === "object") {
+    const formatted = firstValue(plan.validity.formatted, plan.validity.name);
+
+    if (formatted) {
+      return String(formatted).trim();
+    }
+
+    const days = Number(plan.validity.days);
+
+    if (Number.isFinite(days) && days > 0) {
+      return `${days} days`;
+    }
+  }
+
+  return String(
+    firstValue(plan.duration, plan.validity_period, plan.validityPeriod) ?? "",
+  ).trim();
 }
 
 function extractPlans(result: any): Record<string, any>[] {
@@ -155,7 +155,7 @@ async function fetchNetworkDataSubPlans(apiKey: string) {
 
   console.log("NETWORKDATASUB PLANS STATUS:", response.status);
 
-  console.log("NETWORKDATASUB PLANS RESPONSE:", responseText.slice(0, 2000));
+  console.log("NETWORKDATASUB PLANS RESPONSE:", responseText.slice(0, 3000));
 
   let result: any = null;
 
@@ -190,35 +190,37 @@ async function fetchNetworkDataSubPlans(apiKey: string) {
 async function syncNetworkDataSubPlans(apiKey: string) {
   const providerPlans = await fetchNetworkDataSubPlans(apiKey);
 
+  let received = 0;
   let created = 0;
   let updated = 0;
   let skipped = 0;
 
   for (const providerPlan of providerPlans) {
+    received++;
+
     const bundleId = getPlanId(providerPlan);
 
     if (!bundleId) {
+      console.warn(
+        "NETWORKDATASUB PLAN SKIPPED - INVALID PLAN ID:",
+        providerPlan,
+      );
+
       skipped++;
       continue;
     }
 
-    const network = normalizeNetwork(
-      firstValue(
-        providerPlan.network,
-        providerPlan.provider,
-        providerPlan.network_name,
-        providerPlan.networkName,
-        providerPlan.telco,
-        providerPlan.network_id,
-      ),
-    );
+    const network = normalizeNetwork(providerPlan.network);
 
-    const name = normalizeName(providerPlan);
-    const size = normalizeSize(providerPlan);
-    const duration = normalizeDuration(providerPlan);
+    const name = getName(providerPlan);
+
+    const size = getSize(providerPlan);
+
+    const duration = getDuration(providerPlan);
+
     const providerPrice = getProviderPrice(providerPlan);
 
-    if (!network || !name || !providerPrice || providerPrice <= 0) {
+    if (!network || !name || !size || !providerPrice || providerPrice <= 0) {
       console.warn("NETWORKDATASUB PLAN SKIPPED:", {
         bundleId,
         network,
@@ -233,6 +235,10 @@ async function syncNetworkDataSubPlans(apiKey: string) {
       continue;
     }
 
+    /*
+     * Check if this exact provider + plan ID
+     * already exists.
+     */
     const existingPlan = await prisma.dataPlan.findUnique({
       where: {
         provider_bundleId: {
@@ -249,11 +255,12 @@ async function syncNetworkDataSubPlans(apiKey: string) {
 
     if (existingPlan) {
       /*
-       * IMPORTANT:
+       * DO NOT overwrite:
        *
-       * Do NOT overwrite sellingPrice or status.
+       * sellingPrice
+       * status
        *
-       * These are controlled by your Admin → Data Prices page.
+       * These belong to Admin → Data Prices.
        */
       await prisma.dataPlan.update({
         where: {
@@ -265,18 +272,16 @@ async function syncNetworkDataSubPlans(apiKey: string) {
           size,
           duration,
           providerPrice,
-          updatedAt: new Date(),
         },
       });
 
       updated++;
     } else {
       /*
-       * First time this provider plan enters the database.
+       * New plan.
        *
-       * For now, provider price is used as the initial
-       * selling price. Admin can then change it from
-       * Admin → Data Prices.
+       * Start selling price at provider price.
+       * Admin can change this afterwards.
        */
       await prisma.dataPlan.create({
         data: {
@@ -297,7 +302,7 @@ async function syncNetworkDataSubPlans(apiKey: string) {
   }
 
   return {
-    received: providerPlans.length,
+    received,
     created,
     updated,
     skipped,
@@ -329,8 +334,6 @@ export async function GET(_request: NextRequest) {
     const apiKey = process.env.NETWORKDATASUB_API_KEY;
 
     if (!apiKey) {
-      console.error("NETWORKDATASUB_API_KEY is not configured.");
-
       return NextResponse.json(
         {
           success: false,
@@ -341,7 +344,7 @@ export async function GET(_request: NextRequest) {
     }
 
     // ========================================================
-    // SYNC PROVIDER PLANS INTO DATABASE
+    // SYNC LIVE PROVIDER PLANS
     // ========================================================
 
     const syncResult = await syncNetworkDataSubPlans(apiKey);
@@ -387,27 +390,35 @@ export async function GET(_request: NextRequest) {
       id: String(plan.bundleId),
 
       bundleId: plan.bundleId,
+
       bundle_id: plan.bundleId,
 
       provider: plan.network,
+
       network: plan.network,
 
       name: plan.name,
+
       size: plan.size,
+
       duration: plan.duration,
 
       providerPrice: plan.providerPrice,
+
       sellingPrice: plan.sellingPrice,
 
       status: plan.status,
 
       planId: plan.bundleId,
+
       plan_id: plan.bundleId,
 
       apiPlanId: plan.bundleId,
+
       api_plan_id: plan.bundleId,
 
       dataPlanId: plan.bundleId,
+
       data_plan_id: plan.bundleId,
     }));
 
