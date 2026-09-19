@@ -16,6 +16,7 @@ import {
 type DataPlan = {
   id: string;
   provider: string;
+  network?: string;
   bundleId: number;
   name: string;
   size: string;
@@ -51,10 +52,12 @@ export default function AdminDataPricesPage() {
         params.set("provider", providerFilter);
       }
 
-      if (search.trim()) {
-        params.set("search", search.trim());
-      }
-
+      /*
+       * Do not send the search term to the API.
+       * We load the provider's plans and perform the
+       * search locally so network searches like MTN,
+       * AIRTEL, GLO and 9MOBILE work consistently.
+       */
       const response = await fetch(
         `/api/admin/data-plans?${params.toString()}`,
         {
@@ -68,7 +71,7 @@ export default function AdminDataPricesPage() {
         throw new Error(result.message || "Failed to load data plans.");
       }
 
-      setPlans(result.plans || []);
+      setPlans(Array.isArray(result.plans) ? result.plans : []);
     } catch (err: any) {
       setError(err?.message || "Failed to load data plans.");
     } finally {
@@ -144,25 +147,43 @@ export default function AdminDataPricesPage() {
     }
   }
 
+  /*
+   * Normalize values before searching.
+   * This makes:
+   *
+   * MTN
+   * mtn
+   * Mtn
+   *
+   * all behave the same.
+   */
+  function normalizeSearchValue(value: unknown) {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase();
+  }
+
   const filteredPlans = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = normalizeSearchValue(search);
 
     if (!query) {
       return plans;
     }
 
-    return plans.filter((plan) =>
-      [
+    return plans.filter((plan) => {
+      const searchableFields = [
         plan.provider,
+        plan.network,
         plan.name,
         plan.size,
         plan.duration,
         String(plan.bundleId),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
-    );
+      ];
+
+      return searchableFields.some((value) =>
+        normalizeSearchValue(value).includes(query),
+      );
+    });
   }, [plans, search]);
 
   function money(value: number) {
@@ -287,6 +308,12 @@ export default function AdminDataPricesPage() {
                         <span className="rounded-lg bg-indigo-100 px-2.5 py-1 text-xs font-bold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-400">
                           {plan.provider}
                         </span>
+
+                        {plan.network && (
+                          <span className="rounded-lg bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700 dark:bg-blue-500/15 dark:text-blue-400">
+                            {plan.network}
+                          </span>
+                        )}
 
                         <span
                           className={`rounded-lg px-2.5 py-1 text-xs font-bold ${
@@ -542,7 +569,6 @@ export default function AdminDataPricesPage() {
                   className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm dark:border-gray-700 dark:bg-gray-950"
                 >
                   <option value="ACTIVE">Active</option>
-
                   <option value="INACTIVE">Inactive</option>
                 </select>
               </div>
