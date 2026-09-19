@@ -6,7 +6,9 @@ import { Wifi, ShieldCheck } from "lucide-react";
 
 type DataPlan = {
   id: string;
+
   provider: string;
+  network: string;
 
   bundleId?: number;
   bundle_id?: number;
@@ -63,11 +65,112 @@ const NETWORK_ACCENT: Record<string, string> = {
 };
 
 function networkAccent(network: string) {
-  return NETWORK_ACCENT[network.toUpperCase()] || "border-l-indigo-500";
+  return (
+    NETWORK_ACCENT[String(network || "").toUpperCase()] || "border-l-indigo-500"
+  );
 }
 
 function planIsAvailable(plan: DataPlan) {
+  if (String(plan.status || "").toUpperCase() !== "ACTIVE") {
+    return false;
+  }
+
   return plan.isAvailable !== false;
+}
+
+function normalizePlan(plan: any): DataPlan {
+  const provider = String(plan?.provider ?? plan?.network ?? "")
+    .trim()
+    .toUpperCase();
+
+  const network = String(plan?.network ?? plan?.provider ?? "")
+    .trim()
+    .toUpperCase();
+
+  const bundleIdRaw =
+    plan?.bundleId ??
+    plan?.bundle_id ??
+    plan?.planId ??
+    plan?.plan_id ??
+    plan?.id;
+
+  const bundleIdNumber = Number(bundleIdRaw);
+
+  const providerPrice = Number(plan?.providerPrice ?? 0);
+
+  const sellingPrice = Number(plan?.sellingPrice ?? providerPrice);
+
+  return {
+    ...plan,
+
+    id: String(
+      plan?.id ??
+        plan?.bundleId ??
+        plan?.bundle_id ??
+        plan?.planId ??
+        plan?.plan_id ??
+        "",
+    ),
+
+    provider,
+    network,
+
+    bundleId:
+      Number.isInteger(bundleIdNumber) && bundleIdNumber > 0
+        ? bundleIdNumber
+        : undefined,
+
+    bundle_id:
+      Number.isInteger(bundleIdNumber) && bundleIdNumber > 0
+        ? bundleIdNumber
+        : undefined,
+
+    providerPrice: Number.isFinite(providerPrice) ? providerPrice : 0,
+
+    sellingPrice: Number.isFinite(sellingPrice) ? sellingPrice : providerPrice,
+
+    name: String(plan?.name ?? ""),
+    size: String(plan?.size ?? ""),
+    duration: String(plan?.duration ?? ""),
+    status: String(plan?.status ?? "ACTIVE"),
+
+    isAvailable: plan?.isAvailable !== false,
+  };
+}
+
+async function fetchJson(url: string, options?: RequestInit) {
+  const response = await fetch(url, {
+    ...options,
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      ...(options?.headers || {}),
+    },
+  });
+
+  let result: any = null;
+
+  try {
+    result = await response.json();
+  } catch {
+    result = null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      result?.message ||
+        result?.error ||
+        `Request failed with status ${response.status}.`,
+    );
+  }
+
+  if (!result?.success) {
+    throw new Error(
+      result?.message || result?.error || "Unable to load data plans.",
+    );
+  }
+
+  return result;
 }
 
 export default function BuyDataPage() {
@@ -84,6 +187,16 @@ export default function BuyDataPage() {
   const [plans, setPlans] = useState<DataPlan[]>([]);
   const [networkDataPlans, setNetworkDataPlans] = useState<DataPlan[]>([]);
   const [smePlugPlans, setSmePlugPlans] = useState<DataPlan[]>([]);
+
+  // ============================================================
+  // LOADED STATE
+  // ============================================================
+
+  const [cheapDataHubLoaded, setCheapDataHubLoaded] = useState(false);
+
+  const [networkDataSubLoaded, setNetworkDataSubLoaded] = useState(false);
+
+  const [smePlugLoaded, setSmePlugLoaded] = useState(false);
 
   // ============================================================
   // FORM
@@ -105,9 +218,12 @@ export default function BuyDataPage() {
   // LOADING
   // ============================================================
 
-  const [loadingPlans, setLoadingPlans] = useState(true);
+  const [loadingPlans, setLoadingPlans] = useState(false);
+
   const [loadingNetworkPlans, setLoadingNetworkPlans] = useState(false);
+
   const [loadingSmePlugPlans, setLoadingSmePlugPlans] = useState(false);
+
   const [buying, setBuying] = useState(false);
 
   // ============================================================
@@ -162,61 +278,68 @@ export default function BuyDataPage() {
   // LOAD CHEAPDATAHUB PLANS
   // ============================================================
 
-  useEffect(() => {
-    async function loadPlans() {
-      try {
-        setLoadingPlans(true);
+  async function loadCheapDataHubPlans() {
+    try {
+      setLoadingPlans(true);
+      setError("");
 
-        const response = await fetch("/api/data-plans", {
-          cache: "no-store",
-        });
+      const result = await fetchJson("/api/data-plans");
 
-        const result = await response.json();
+      const receivedPlans = Array.isArray(result.data)
+        ? result.data.map(normalizePlan)
+        : [];
 
-        if (!response.ok || !result.success) {
-          throw new Error(result.message || "Unable to load data plans.");
-        }
+      setPlans(receivedPlans);
+      setCheapDataHubLoaded(true);
+    } catch (err) {
+      console.error("CHEAPDATAHUB CUSTOMER PLANS ERROR:", err);
 
-        setPlans(Array.isArray(result.data) ? result.data : []);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Unable to load data plans.",
-        );
-      } finally {
-        setLoadingPlans(false);
-      }
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load CheapDataHub plans.",
+      );
+    } finally {
+      setLoadingPlans(false);
     }
-
-    loadPlans();
-  }, []);
+  }
 
   // ============================================================
   // LOAD NETWORKDATASUB PLANS
   // ============================================================
 
   async function loadNetworkDataPlans() {
+    if (networkDataSubLoaded) {
+      return;
+    }
+
     try {
       setLoadingNetworkPlans(true);
       setError("");
 
-      const response = await fetch("/api/networkdata/data-plans", {
-        cache: "no-store",
-      });
+      /*
+       * IMPORTANT:
+       *
+       * This endpoint MUST be a DATABASE-ONLY endpoint.
+       *
+       * It should NOT call NetworkDataSub's provider API.
+       * It should only read active DataPlan rows from Prisma.
+       */
+      const result = await fetchJson("/api/networkdata/data-plans");
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Unable to load data plans.");
-      }
-
-      const receivedPlans: DataPlan[] = Array.isArray(result.data)
-        ? result.data
+      const receivedPlans = Array.isArray(result.data)
+        ? result.data.map(normalizePlan)
         : [];
 
       setNetworkDataPlans(receivedPlans);
+      setNetworkDataSubLoaded(true);
     } catch (err) {
+      console.error("NETWORKDATASUB CUSTOMER PLANS ERROR:", err);
+
       setError(
-        err instanceof Error ? err.message : "Unable to load data plans.",
+        err instanceof Error
+          ? err.message
+          : "Unable to load NetworkDataSub plans.",
       );
     } finally {
       setLoadingNetworkPlans(false);
@@ -228,28 +351,34 @@ export default function BuyDataPage() {
   // ============================================================
 
   async function loadSmePlugPlans() {
+    if (smePlugLoaded) {
+      return;
+    }
+
     try {
       setLoadingSmePlugPlans(true);
       setError("");
 
-      const response = await fetch("/api/smeplug/data-plans", {
-        cache: "no-store",
-      });
+      /*
+       * IMPORTANT:
+       *
+       * This endpoint MUST read from DataPlan.
+       * It should NOT synchronize SMEPlug every time
+       * a customer opens the data page.
+       */
+      const result = await fetchJson("/api/smeplug/data-plans");
 
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Unable to load data plans.");
-      }
-
-      const receivedPlans: DataPlan[] = Array.isArray(result.data)
-        ? result.data
+      const receivedPlans = Array.isArray(result.data)
+        ? result.data.map(normalizePlan)
         : [];
 
       setSmePlugPlans(receivedPlans);
+      setSmePlugLoaded(true);
     } catch (err) {
+      console.error("SMEPLUG CUSTOMER PLANS ERROR:", err);
+
       setError(
-        err instanceof Error ? err.message : "Unable to load data plans.",
+        err instanceof Error ? err.message : "Unable to load SMEPlug plans.",
       );
     } finally {
       setLoadingSmePlugPlans(false);
@@ -257,20 +386,32 @@ export default function BuyDataPage() {
   }
 
   // ============================================================
+  // INITIAL CHEAPDATAHUB LOAD
+  // ============================================================
+
+  useEffect(() => {
+    if (!cheapDataHubLoaded) {
+      loadCheapDataHubPlans();
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ============================================================
   // LOAD PLANS WHEN SERVER CHANGES
   // ============================================================
 
   useEffect(() => {
-    if (server === "NETWORKDATASUB" && networkDataPlans.length === 0) {
+    if (server === "NETWORKDATASUB") {
       loadNetworkDataPlans();
     }
 
-    if (server === "SMEPLUG" && smePlugPlans.length === 0) {
+    if (server === "SMEPLUG") {
       loadSmePlugPlans();
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [server, networkDataPlans.length, smePlugPlans.length]);
+  }, [server]);
 
   // ============================================================
   // LOAD SERVICE FEE
@@ -281,18 +422,12 @@ export default function BuyDataPage() {
       try {
         setLoadingFee(true);
 
-        const response = await fetch("/api/settings/service-fee", {
-          cache: "no-store",
-        });
+        const result = await fetchJson("/api/settings/service-fee");
 
-        const result = await response.json();
+        const percentage = Number(result.percentage);
 
-        if (response.ok && result.success) {
-          const percentage = Number(result.percentage);
-
-          if (Number.isFinite(percentage) && percentage >= 0) {
-            setServiceFeePercent(percentage);
-          }
+        if (Number.isFinite(percentage) && percentage >= 0) {
+          setServiceFeePercent(percentage);
         }
       } catch (err) {
         console.error("SERVICE FEE ERROR:", err);
@@ -331,16 +466,24 @@ export default function BuyDataPage() {
 
     const selectedNetwork = network.trim().toUpperCase();
 
-    const matches = currentPlans.filter(
-      (plan) => String(plan.provider).trim().toUpperCase() === selectedNetwork,
-    );
+    const matches = currentPlans.filter((plan) => {
+      const planNetwork = String(plan.network ?? plan.provider ?? "")
+        .trim()
+        .toUpperCase();
+
+      return planNetwork === selectedNetwork;
+    });
 
     return [...matches].sort((a, b) => {
       const aAvailable = planIsAvailable(a) ? 0 : 1;
 
       const bAvailable = planIsAvailable(b) ? 0 : 1;
 
-      return aAvailable - bAvailable;
+      if (aAvailable !== bAvailable) {
+        return aAvailable - bAvailable;
+      }
+
+      return getCustomerPrice(a) - getCustomerPrice(b);
     });
   }, [currentPlans, network]);
 
@@ -365,15 +508,20 @@ export default function BuyDataPage() {
       return null;
     }
 
+    /*
+     * NetworkDataSub purchase must ultimately use
+     * the DataPlan bundleId / plan_id that was saved
+     * from provider plan.plan_id.
+     *
+     * Do NOT prefer apiPlanId here.
+     */
     const rawProviderId =
-      selectedPlan.apiPlanId ??
-      selectedPlan.api_plan_id ??
+      selectedPlan.bundleId ??
+      selectedPlan.bundle_id ??
       selectedPlan.planId ??
       selectedPlan.plan_id ??
       selectedPlan.dataPlanId ??
       selectedPlan.data_plan_id ??
-      selectedPlan.bundleId ??
-      selectedPlan.bundle_id ??
       null;
 
     if (
@@ -402,7 +550,12 @@ export default function BuyDataPage() {
       return null;
     }
 
-    const rawProviderId = selectedPlan.planId ?? selectedPlan.plan_id ?? null;
+    const rawProviderId =
+      selectedPlan.planId ??
+      selectedPlan.plan_id ??
+      selectedPlan.bundleId ??
+      selectedPlan.bundle_id ??
+      null;
 
     if (
       rawProviderId === null ||
@@ -412,7 +565,13 @@ export default function BuyDataPage() {
       return null;
     }
 
-    return rawProviderId;
+    const numericId = Number(rawProviderId);
+
+    if (!Number.isInteger(numericId) || numericId <= 0) {
+      return null;
+    }
+
+    return numericId;
   }, [selectedPlan]);
 
   // ============================================================
@@ -426,11 +585,28 @@ export default function BuyDataPage() {
 
     const numericId = Number(selectedPlan.networkId);
 
-    if (!Number.isInteger(numericId) || numericId <= 0) {
-      return null;
+    if (Number.isInteger(numericId) && numericId >= 1 && numericId <= 4) {
+      return numericId;
     }
 
-    return numericId;
+    /*
+     * Fallback in case the API does not return
+     * networkId but does return network.
+     */
+    const networkName = String(
+      selectedPlan.network ?? selectedPlan.provider ?? "",
+    )
+      .trim()
+      .toUpperCase();
+
+    const mapping: Record<string, number> = {
+      MTN: 1,
+      AIRTEL: 2,
+      "9MOBILE": 3,
+      GLO: 4,
+    };
+
+    return mapping[networkName] ?? null;
   }, [selectedPlan]);
 
   // ============================================================
@@ -596,8 +772,11 @@ export default function BuyDataPage() {
 
         const purchaseBody = {
           server: "NETWORKDATASUB",
+
           data_plan_id: networkDataSubPurchaseId,
+
           phone_number: cleanedPhone,
+
           transactionPin: pin,
         };
 
@@ -612,7 +791,9 @@ export default function BuyDataPage() {
         const result = await response.json();
 
         if (!response.ok || !result.success) {
-          throw new Error(result.message || "Data purchase failed.");
+          throw new Error(
+            result.message || result.error || "Data purchase failed.",
+          );
         }
 
         const chargedAmount = Number(result.amount);
@@ -644,9 +825,13 @@ export default function BuyDataPage() {
 
         const purchaseBody = {
           server: "SMEPLUG",
+
           network_id: smePlugNetworkId,
+
           plan_id: smePlugPurchaseId,
+
           phone_number: cleanedPhone,
+
           transactionPin: pin,
         };
 
@@ -661,7 +846,9 @@ export default function BuyDataPage() {
         const result = await response.json();
 
         if (!response.ok || !result.success) {
-          throw new Error(result.message || "Data purchase failed.");
+          throw new Error(
+            result.message || result.error || "Data purchase failed.",
+          );
         }
 
         const chargedAmount = Number(result.amount);
@@ -694,8 +881,11 @@ export default function BuyDataPage() {
 
       const purchaseBody = {
         server: "CHEAPDATAHUB",
+
         bundle_id: bundleId,
+
         phone_number: cleanedPhone,
+
         transactionPin: pin,
       };
 
@@ -710,7 +900,9 @@ export default function BuyDataPage() {
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.message || "Data purchase failed.");
+        throw new Error(
+          result.message || result.error || "Data purchase failed.",
+        );
       }
 
       const chargedAmount = Number(result.amount);
@@ -869,6 +1061,7 @@ export default function BuyDataPage() {
                 value={planId}
                 onChange={(e) => {
                   setPlanId(e.target.value);
+
                   setError("");
                   setMessage("");
                 }}
@@ -878,9 +1071,11 @@ export default function BuyDataPage() {
                 <option value="">
                   {loadingCurrentPlans
                     ? "Loading plans..."
-                    : filteredPlans.length === 0
-                      ? "No plans available"
-                      : "Select a plan"}
+                    : !network
+                      ? "Select network first"
+                      : filteredPlans.length === 0
+                        ? "No plans available"
+                        : "Select a plan"}
                 </option>
 
                 {filteredPlans.map((plan) => {
@@ -904,6 +1099,15 @@ export default function BuyDataPage() {
                 })}
               </select>
 
+              {network &&
+                !loadingCurrentPlans &&
+                filteredPlans.length === 0 && (
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">
+                    No active plans are currently available for {network} on{" "}
+                    {currentServerLabel}.
+                  </p>
+                )}
+
               {selectedPlan && !planIsAvailable(selectedPlan) && (
                 <p className="mt-1.5 text-[11px] font-medium text-red-600 dark:text-red-400">
                   This plan is currently unavailable.
@@ -916,7 +1120,7 @@ export default function BuyDataPage() {
             {selectedPlan && (
               <div
                 className={`mb-4 rounded-lg border border-border border-l-[3px] bg-muted/40 px-3.5 py-3 ${networkAccent(
-                  selectedPlan.provider,
+                  selectedPlan.network || selectedPlan.provider,
                 )} ${
                   !planIsAvailable(selectedPlan) ? "opacity-50 grayscale" : ""
                 }`}
@@ -927,7 +1131,9 @@ export default function BuyDataPage() {
                   </span>
 
                   <span className="text-[10px] font-bold text-foreground">
-                    {String(selectedPlan.provider).toUpperCase()}
+                    {String(
+                      selectedPlan.network || selectedPlan.provider,
+                    ).toUpperCase()}
                   </span>
                 </div>
 
@@ -1046,6 +1252,7 @@ export default function BuyDataPage() {
           }}
           onSuccess={(pin) => {
             setShowPinModal(false);
+
             processBuyData(pin);
           }}
         />
