@@ -467,25 +467,35 @@ const plans = [
 ];
 
 async function main() {
-  console.log(`Preparing ${plans.length} data plans...`);
+  console.log(`Preparing ${plans.length} CheapDataHub data plans...`);
 
   for (const plan of plans) {
+    const network = String(plan.provider).trim().toUpperCase();
+
     await prisma.dataPlan.upsert({
       where: {
-        bundleId: plan.bundleId,
+        provider_bundleId: {
+          provider: "CheapDataHub",
+          bundleId: plan.bundleId,
+        },
       },
+
       update: {
-        provider: plan.provider,
+        network,
         name: plan.name,
         size: plan.size,
         duration: plan.duration,
         providerPrice: plan.providerPrice,
-        // Keep existing admin selling price if the plan already exists.
-        // New plans receive the initial selling price above.
-        status: "ACTIVE",
+
+        // IMPORTANT:
+        // Do not update sellingPrice here.
+        // Do not update status here.
+        // Those values are controlled by the admin.
       },
+
       create: {
-        provider: plan.provider,
+        provider: "CheapDataHub",
+        network,
         bundleId: plan.bundleId,
         name: plan.name,
         size: plan.size,
@@ -497,7 +507,7 @@ async function main() {
     });
   }
 
-  console.log("Data plans successfully inserted.");
+  console.log("CheapDataHub data plans successfully inserted/updated.");
 }
 
 main()

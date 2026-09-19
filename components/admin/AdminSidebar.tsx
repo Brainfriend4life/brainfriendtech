@@ -28,6 +28,7 @@ import {
   CircleDollarSign,
   SlidersHorizontal,
   Star,
+  Database,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -79,6 +80,11 @@ const managementItems: NavItem[] = [
     href: "/dashboard/admin/reviews",
     icon: Star,
   },
+  {
+    label: "Data Prices",
+    href: "/dashboard/admin/data-prices",
+    icon: Database,
+  },
 ];
 
 /* =========================================================
@@ -100,7 +106,6 @@ const educationItems: NavItem[] = [
 
 /* =========================================================
    REFERRAL SYSTEM
-   SINGULAR ROUTE
 ========================================================= */
 
 const referralItems: NavItem[] = [
@@ -188,28 +193,29 @@ export default function AdminSidebar() {
   const [managementOpen, setManagementOpen] = useState(
     pathname.startsWith("/dashboard/admin/purchases") ||
       pathname.startsWith("/dashboard/admin/nin") ||
-      pathname.startsWith("/dashboard/admin/reviews")
+      pathname.startsWith("/dashboard/admin/reviews") ||
+      pathname.startsWith("/dashboard/admin/data-prices"),
   );
 
   const [educationOpen, setEducationOpen] = useState(
     pathname.startsWith("/dashboard/admin/cbt") ||
-      pathname.startsWith("/dashboard/admin/results")
+      pathname.startsWith("/dashboard/admin/results"),
   );
 
   const [referralOpen, setReferralOpen] = useState(
     pathname === "/dashboard/admin/referral" ||
-      pathname.startsWith("/dashboard/admin/referral/")
+      pathname.startsWith("/dashboard/admin/referral/"),
   );
 
   const [financeOpen, setFinanceOpen] = useState(
     pathname.startsWith("/dashboard/admin/revenue") ||
       pathname.startsWith("/dashboard/admin/wallet") ||
-      pathname.startsWith("/dashboard/admin/provider-wallet")
+      pathname.startsWith("/dashboard/admin/provider-wallet"),
   );
 
   const [systemOpen, setSystemOpen] = useState(
     pathname.startsWith("/dashboard/admin/settings") ||
-      pathname.startsWith("/dashboard/admin/service-fees")
+      pathname.startsWith("/dashboard/admin/service-fees"),
   );
 
   /* =======================================================
@@ -229,10 +235,7 @@ export default function AdminSidebar() {
       return pathname === href;
     }
 
-    return (
-      pathname === href ||
-      pathname.startsWith(`${href}/`)
-    );
+    return pathname === href || pathname.startsWith(`${href}/`);
   }
 
   /* =======================================================
@@ -271,13 +274,9 @@ export default function AdminSidebar() {
             : "text-indigo-100 hover:bg-white/10 hover:text-white"
         }`}
       >
-        {/* ACTIVE INDICATOR */}
-
         {active && (
           <span className="absolute left-0 top-1/2 h-7 w-1 -translate-y-1/2 rounded-r-full bg-indigo-600" />
         )}
-
-        {/* ICON */}
 
         <span
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${
@@ -286,19 +285,10 @@ export default function AdminSidebar() {
               : "bg-indigo-600/60 text-indigo-200 group-hover:bg-indigo-500 group-hover:text-white"
           }`}
         >
-          <Icon
-            className="h-[17px] w-[17px]"
-            strokeWidth={2.4}
-          />
+          <Icon className="h-[17px] w-[17px]" strokeWidth={2.4} />
         </span>
 
-        {/* LABEL */}
-
-        <span className="min-w-0 flex-1 truncate">
-          {item.label}
-        </span>
-
-        {/* ACTIVE DOT */}
+        <span className="min-w-0 flex-1 truncate">{item.label}</span>
 
         {active && (
           <span className="h-2 w-2 shrink-0 rounded-full bg-indigo-600" />
@@ -314,19 +304,15 @@ export default function AdminSidebar() {
   function renderGroupButton(
     label: string,
     open: boolean,
-    setOpen: React.Dispatch<
-      React.SetStateAction<boolean>
-    >,
-    icon: React.ElementType
+    setOpen: React.Dispatch<React.SetStateAction<boolean>>,
+    icon: React.ElementType,
   ) {
     const Icon = icon;
 
     return (
       <button
         type="button"
-        onClick={() =>
-          setOpen((current) => !current)
-        }
+        onClick={() => setOpen((current) => !current)}
         className="group mb-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition hover:bg-white/5"
       >
         <span className="flex items-center gap-2.5">
@@ -351,9 +337,7 @@ export default function AdminSidebar() {
 
   return (
     <>
-      {/* =====================================================
-          MOBILE MENU BUTTON
-      ===================================================== */}
+      {/* MOBILE MENU BUTTON */}
 
       <button
         type="button"
@@ -361,15 +345,10 @@ export default function AdminSidebar() {
         className="fixed left-4 top-4 z-40 flex h-11 w-11 items-center justify-center rounded-xl border border-indigo-600 bg-indigo-700 text-white shadow-lg transition hover:bg-indigo-800 lg:hidden"
         aria-label="Open admin menu"
       >
-        <Menu
-          className="h-5 w-5"
-          strokeWidth={2.5}
-        />
+        <Menu className="h-5 w-5" strokeWidth={2.5} />
       </button>
 
-      {/* =====================================================
-          MOBILE OVERLAY
-      ===================================================== */}
+      {/* MOBILE OVERLAY */}
 
       {isOpen && (
         <button
@@ -380,20 +359,14 @@ export default function AdminSidebar() {
         />
       )}
 
-      {/* =====================================================
-          SIDEBAR
-      ===================================================== */}
+      {/* SIDEBAR */}
 
       <aside
         className={`fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col border-r border-indigo-600 bg-indigo-700 text-white shadow-2xl transition-transform duration-300 lg:static lg:z-auto lg:translate-x-0 lg:shadow-none ${
-          isOpen
-            ? "translate-x-0"
-            : "-translate-x-full"
+          isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* =================================================
-            HEADER
-        ================================================= */}
+        {/* HEADER */}
 
         <div className="shrink-0 border-b border-indigo-600 px-5 py-5">
           <div className="flex items-center justify-between">
@@ -402,16 +375,9 @@ export default function AdminSidebar() {
               onClick={closeSidebar}
               className="group flex min-w-0 items-center gap-3"
             >
-              {/* LOGO */}
-
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-700 shadow-md transition group-hover:scale-105">
-                <ShieldCheck
-                  className="h-6 w-6"
-                  strokeWidth={2.5}
-                />
+                <ShieldCheck className="h-6 w-6" strokeWidth={2.5} />
               </div>
-
-              {/* BRAND */}
 
               <div className="min-w-0">
                 <h1 className="truncate text-[15px] font-extrabold tracking-tight text-white">
@@ -428,150 +394,104 @@ export default function AdminSidebar() {
               </div>
             </Link>
 
-            {/* MOBILE CLOSE */}
-
             <button
               type="button"
               onClick={closeSidebar}
               className="rounded-lg p-2 text-indigo-200 transition hover:bg-indigo-600 hover:text-white lg:hidden"
               aria-label="Close admin menu"
             >
-              <X
-                className="h-5 w-5"
-                strokeWidth={2.5}
-              />
+              <X className="h-5 w-5" strokeWidth={2.5} />
             </button>
           </div>
         </div>
 
-        {/* =================================================
-            NAVIGATION
-        ================================================= */}
+        {/* NAVIGATION */}
 
         <div className="flex-1 overflow-y-auto px-3 py-5">
-          {/* =================================================
-              OVERVIEW
-          ================================================= */}
+          {/* OVERVIEW */}
 
           <section>
             <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-300">
               Overview
             </p>
 
-            <nav className="space-y-1">
-              {overviewItems.map(renderItem)}
-            </nav>
+            <nav className="space-y-1">{overviewItems.map(renderItem)}</nav>
           </section>
 
-          {/* =================================================
-              MANAGEMENT
-          ================================================= */}
+          {/* MANAGEMENT */}
 
           <section className="mt-6">
             {renderGroupButton(
               "Management",
               managementOpen,
               setManagementOpen,
-              ShoppingBag
+              ShoppingBag,
             )}
 
             {managementOpen && (
-              <nav className="space-y-1">
-                {managementItems.map(renderItem)}
-              </nav>
+              <nav className="space-y-1">{managementItems.map(renderItem)}</nav>
             )}
           </section>
 
-          {/* =================================================
-              EDUCATION
-          ================================================= */}
+          {/* EDUCATION */}
 
           <section className="mt-6">
             {renderGroupButton(
               "Education",
               educationOpen,
               setEducationOpen,
-              GraduationCap
+              GraduationCap,
             )}
 
             {educationOpen && (
-              <nav className="space-y-1">
-                {educationItems.map(renderItem)}
-              </nav>
+              <nav className="space-y-1">{educationItems.map(renderItem)}</nav>
             )}
           </section>
 
-          {/* =================================================
-              REFERRAL SYSTEM
-          ================================================= */}
+          {/* REFERRAL SYSTEM */}
 
           <section className="mt-6">
             {renderGroupButton(
               "Referral System",
               referralOpen,
               setReferralOpen,
-              Gift
+              Gift,
             )}
 
             {referralOpen && (
-              <nav className="space-y-1">
-                {referralItems.map(renderItem)}
-              </nav>
+              <nav className="space-y-1">{referralItems.map(renderItem)}</nav>
             )}
           </section>
 
-          {/* =================================================
-              FINANCE
-          ================================================= */}
+          {/* FINANCE */}
 
           <section className="mt-6">
-            {renderGroupButton(
-              "Finance",
-              financeOpen,
-              setFinanceOpen,
-              Wallet
-            )}
+            {renderGroupButton("Finance", financeOpen, setFinanceOpen, Wallet)}
 
             {financeOpen && (
-              <nav className="space-y-1">
-                {financeItems.map(renderItem)}
-              </nav>
+              <nav className="space-y-1">{financeItems.map(renderItem)}</nav>
             )}
           </section>
 
-          {/* =================================================
-              SYSTEM
-          ================================================= */}
+          {/* SYSTEM */}
 
           <section className="mt-6 pb-4">
-            {renderGroupButton(
-              "System",
-              systemOpen,
-              setSystemOpen,
-              Settings
-            )}
+            {renderGroupButton("System", systemOpen, setSystemOpen, Settings)}
 
             {systemOpen && (
-              <nav className="space-y-1">
-                {systemItems.map(renderItem)}
-              </nav>
+              <nav className="space-y-1">{systemItems.map(renderItem)}</nav>
             )}
           </section>
         </div>
 
-        {/* =================================================
-            FOOTER
-        ================================================= */}
+        {/* FOOTER */}
 
         <div className="shrink-0 border-t border-indigo-600 p-4">
           {/* ADMIN PROFILE */}
 
           <div className="mb-3 flex items-center gap-3 rounded-xl border border-indigo-500/50 bg-indigo-600/50 p-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-indigo-700 shadow-sm">
-              <ShieldCheck
-                className="h-5 w-5"
-                strokeWidth={2.5}
-              />
+              <ShieldCheck className="h-5 w-5" strokeWidth={2.5} />
             </div>
 
             <div className="min-w-0">
@@ -598,17 +518,10 @@ export default function AdminSidebar() {
             className="group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold text-indigo-100 transition-all duration-200 hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600/60 transition group-hover:bg-red-500">
-              <LogOut
-                className="h-[17px] w-[17px]"
-                strokeWidth={2.5}
-              />
+              <LogOut className="h-[17px] w-[17px]" strokeWidth={2.5} />
             </span>
 
-            <span>
-              {loading
-                ? "Logging out..."
-                : "Logout"}
-            </span>
+            <span>{loading ? "Logging out..." : "Logout"}</span>
           </button>
         </div>
       </aside>

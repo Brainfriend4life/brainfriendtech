@@ -13,7 +13,7 @@ export async function GET() {
           success: false,
           error: "CHEAPDATAHUB_API_KEY is not configured.",
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -26,7 +26,7 @@ export async function GET() {
           Accept: "application/json",
         },
         cache: "no-store",
-      }
+      },
     );
 
     const contentType = response.headers.get("content-type") || "";
@@ -41,7 +41,7 @@ export async function GET() {
           status: response.status,
           responsePreview: text.slice(0, 500),
         },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -56,7 +56,7 @@ export async function GET() {
             result?.error ||
             "CheapDataHub failed to return data plans.",
         },
-        { status: response.status }
+        { status: response.status },
       );
     }
 
@@ -67,69 +67,122 @@ export async function GET() {
         : [];
 
     if (plans.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: "CheapDataHub returned no data plans.",
-        raw: result,
-      });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "CheapDataHub returned no data plans.",
+          raw: result,
+        },
+        { status: 502 },
+      );
     }
 
     let synced = 0;
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
 
     for (const plan of plans) {
       const bundleId = Number(plan.id);
 
-      if (!bundleId) continue;
+      if (!Number.isInteger(bundleId) || bundleId <= 0) {
+        skipped++;
+        continue;
+      }
 
-      const provider = String(plan.provider || "").toUpperCase();
+      const network = String(plan.provider || "")
+        .trim()
+        .toUpperCase();
 
-      const size = String(plan.size || "");
+      const size = String(plan.size || "").trim();
 
-      const duration = String(plan.duration || "");
+      const duration = String(plan.duration || "").trim();
 
       const providerPrice = Number(
         plan.api_price ??
           plan.apiPrice ??
           plan.price ??
           plan.provider_price ??
-          0
+          0,
       );
 
-      if (!provider || !size || !providerPrice) {
+      if (
+        !network ||
+        !size ||
+        !Number.isFinite(providerPrice) ||
+        providerPrice <= 0
+      ) {
+        skipped++;
         continue;
       }
 
-      const name = `${provider} ${size}`;
+      const name = `${network} ${size}`;
 
-      await prisma.dataPlan.upsert({
+      const existingPlan = await prisma.dataPlan.findUnique({
         where: {
-          bundleId,
+          provider_bundleId: {
+            provider: "CheapDataHub",
+            bundleId,
+          },
         },
-
-        update: {
-          provider,
-          name,
-          size,
-          duration,
-          providerPrice,
-          updatedAt: new Date(),
-        },
-
-        create: {
-          provider,
-          bundleId,
-          name,
-          size,
-          duration,
-          providerPrice,
-
-          // Initial customer price.
-          // Admin can change this later.
-          sellingPrice: providerPrice,
-
-          status: "ACTIVE",
+        select: {
+          id: true,
+          sellingPrice: true,
+          status: true,
         },
       });
+
+      if (existingPlan) {
+        /*
+         * IMPORTANT:
+         *
+         * Do NOT update sellingPrice here.
+         * Do NOT update status here.
+         *
+         * Those values are controlled by the admin.
+         *
+         * This allows:
+         * - Admin price changes to remain intact.
+         * - Admin-deactivated plans to remain deactivated.
+         */
+        await prisma.dataPlan.update({
+          where: {
+            id: existingPlan.id,
+          },
+          data: {
+            network,
+            name,
+            size,
+            duration,
+            providerPrice,
+            updatedAt: new Date(),
+          },
+        });
+
+        updated++;
+      } else {
+        /*
+         * New plans get the provider price as their
+         * initial selling price.
+         *
+         * Admin can change it later.
+         */
+        await prisma.dataPlan.create({
+          data: {
+            provider: "CheapDataHub",
+            network,
+            bundleId,
+            name,
+            size,
+            duration,
+            providerPrice,
+            sellingPrice: providerPrice,
+            status: "ACTIVE",
+          },
+        });
+
+        created++;
+      }
 
       synced++;
     }
@@ -139,6 +192,9 @@ export async function GET() {
       message: "CheapDataHub data plans synchronized successfully.",
       totalReceived: plans.length,
       totalSynced: synced,
+      created,
+      updated,
+      skipped,
     });
   } catch (error) {
     console.error("CHEAPDATAHUB SYNC ERROR:", error);
@@ -148,7 +204,7 @@ export async function GET() {
         success: false,
         error: "Unable to synchronize CheapDataHub data plans.",
       },
-      { status: 500 }
+      { status: 500 },
     );
   } finally {
     await prisma.$disconnect();

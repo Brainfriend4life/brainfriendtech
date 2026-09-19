@@ -37,8 +37,6 @@ const SMEPLUG_PLANS_URL = `${SMEPLUG_BASE_URL}/data/plans`;
 
 const SMEPLUG_PURCHASE_URL = `${SMEPLUG_BASE_URL}/data/purchase`;
 
-// Confirmed from SMEPlug's /api/v1/networks endpoint.
-// NOTE: Glo is 4, not 3 — this is NOT the usual convention.
 const SMEPLUG_NETWORK_NAMES: Record<number, string> = {
   1: "mtn",
   2: "airtel",
@@ -46,11 +44,8 @@ const SMEPLUG_NETWORK_NAMES: Record<number, string> = {
   4: "glo",
 };
 
-// 9mobile intentionally excluded per business decision.
 const SMEPLUG_ENABLED_NETWORK_IDS = [1, 2, 4];
 
-// Applied only when SMEPlug doesn't return a distinct selling
-// price separate from their cost price.
 const SMEPLUG_MARKUP_PERCENT = Number(process.env.SMEPLUG_MARKUP_PERCENT ?? 5);
 
 // ============================================================
@@ -70,7 +65,16 @@ const NETWORKDATASUB_MARKUP_PERCENT = Number(
 );
 
 // ============================================================
-// CHEAPDATAHUB DATA PLANS
+// LEGACY CHEAPDATAHUB PLAN INFORMATION
+//
+// These values are kept only for backward compatibility and
+// descriptive fallback information.
+//
+// IMPORTANT:
+// They are NO LONGER used as the customer selling price or
+// provider cost when a DataPlan exists in the database.
+//
+// The DataPlan table is now the pricing source of truth.
 // ============================================================
 
 const dataPlans: Record<
@@ -669,6 +673,58 @@ function toText(value: unknown, fallback = ""): string {
 }
 
 // ============================================================
+// DATABASE PRICING
+//
+// DataPlan is the source of truth for actual customer pricing.
+//
+// provider:
+//   CheapDataHub
+//   NetworkDataSub
+//   SMEPlug
+//
+// bundleId:
+//   The provider's actual plan/bundle ID.
+// ============================================================
+
+async function getDataPlanFromDatabase(provider: string, bundleId: number) {
+  if (!Number.isInteger(bundleId) || bundleId <= 0) {
+    return null;
+  }
+
+  const plan = await prisma.dataPlan.findFirst({
+    where: {
+      provider,
+      bundleId,
+    },
+  });
+
+  if (!plan) {
+    return null;
+  }
+
+  if (String(plan.status).toUpperCase() !== "ACTIVE") {
+    return null;
+  }
+
+  const providerPrice = Number(plan.providerPrice);
+  const sellingPrice = Number(plan.sellingPrice);
+
+  if (!Number.isFinite(providerPrice) || providerPrice <= 0) {
+    return null;
+  }
+
+  if (!Number.isFinite(sellingPrice) || sellingPrice <= 0) {
+    return null;
+  }
+
+  return {
+    ...plan,
+    providerPrice,
+    sellingPrice,
+  };
+}
+
+// ============================================================
 // FIXED NETWORK PROVIDER NORMALIZER
 // ============================================================
 
@@ -685,9 +741,6 @@ function normalizeProvider(plan: any): string {
   );
 
   if (typeof provider === "object" && provider !== null) {
-    // IMPORTANT:
-    // Explicitly cast the nested object so
-    // TypeScript allows property access.
     const providerObject = provider as Record<string, unknown>;
 
     return toText(
@@ -1051,11 +1104,9 @@ function matchesSmePlugPlan(plan: any, requestedId: number | string): boolean {
   );
 }
 
-// SMEPlug's raw plan objects have no separate size/duration
-// fields — both are embedded in the name string, e.g.
-// "150MB - 1 Day [Awoof]" or "Monthly Plan 5000 - Data - 13GB [Gifting]".
 function extractSmePlugSizeFromName(name: string): string {
   const match = name.match(/(\d+(?:\.\d+)?\s?(?:GB|MB|TB))/i);
+
   return match ? match[1].replace(/\s+/g, "") : "";
 }
 
@@ -1063,16 +1114,10 @@ function extractSmePlugDurationFromName(name: string): string {
   const match = name.match(
     /(\d+\s?(?:day|days|week|weeks|month|months|year|years))/i,
   );
+
   return match ? match[1].trim() : "";
 }
 
-// IMPORTANT: SMEPlug's `price` field (their "Wallet Price") is
-// inconsistently populated — many legitimate, purchasable plans
-// (dispense_method: "SIM") have price = 0 while telco_price is
-// always populated and matches their dashboard's "Network Price"
-// column. telco_price is the real, reliable cost to us — always
-// prefer it. See /api/smeplug/data-plans/route.ts for the same
-// reasoning.
 function extractSmePlugProviderPrice(plan: any): number {
   const candidates = [
     plan.telco_price,
@@ -1209,98 +1254,113 @@ async function getNetworkDataSubPlans(apiKey: string): Promise<any[]> {
 async function getNetworkDataSubPlan(apiKey: string, requestedPlanId: number) {
   const rawPlans = await getNetworkDataSubPlans(apiKey);
 
-  const plan = rawPlans.find((item) =>
+  const providerPlan = rawPlans.find((item) =>
     matchesNetworkDataSubPlan(item, requestedPlanId),
   );
 
-  if (!plan) {
+  if (!providerPlan) {
     return null;
   }
 
-  const provider = normalizeProvider(plan);
+  const provider = normalizeProvider(providerPlan);
 
-  const size = normalizeSize(plan);
+  const apiSize = normalizeSize(providerPlan);
 
-  const name = normalizeName(plan);
+  const apiName = normalizeName(providerPlan);
 
-  const duration = normalizeDuration(
+  const apiDuration = normalizeDuration(
     firstValue(
-      plan.duration,
-      plan.validity,
-      plan.validity_period,
-      plan.validityPeriod,
-      plan.duration_period,
-      plan.durationPeriod,
+      providerPlan.duration,
+      providerPlan.validity,
+      providerPlan.validity_period,
+      providerPlan.validityPeriod,
+      providerPlan.duration_period,
+      providerPlan.durationPeriod,
     ),
   );
 
-  const providerPrice = extractProviderPrice(plan);
+  const providerPlanId = getNetworkDataSubPlanId(providerPlan);
 
-  let sellingPrice = extractSellingPrice(plan, providerPrice);
+  if (!providerPlanId) {
+    return null;
+  }
 
-  // NetworkDataSub currently exposes
-  // the same price as provider cost.
+  // ==========================================================
+  // DATABASE PRICING
+  // ==========================================================
   //
-  // Apply server-side markup only when
-  // there is no distinct selling price.
+  // The provider API tells us which plan exists.
+  // The DataPlan database tells us what OUR customer pays.
+  //
+  // This means an admin price change immediately affects
+  // the actual purchase amount.
+  // ==========================================================
 
-  if (
-    providerPrice > 0 &&
-    sellingPrice === providerPrice &&
-    NETWORKDATASUB_MARKUP_PERCENT > 0
-  ) {
-    sellingPrice = Number(
-      (providerPrice * (1 + NETWORKDATASUB_MARKUP_PERCENT / 100)).toFixed(2),
+  const dbPlan = await getDataPlanFromDatabase(
+    "NetworkDataSub",
+    providerPlanId,
+  );
+
+  if (!dbPlan) {
+    console.error(
+      "NETWORKDATASUB DATA PLAN NOT FOUND IN DATABASE:",
+      providerPlanId,
     );
+
+    return null;
   }
 
   const networkId = toNumber(
     firstValue(
-      plan.network_id,
-      plan.networkId,
-      typeof plan.network === "object" && plan.network !== null
-        ? (plan.network as Record<string, unknown>).id
+      providerPlan.network_id,
+      providerPlan.networkId,
+      typeof providerPlan.network === "object" && providerPlan.network !== null
+        ? (providerPlan.network as Record<string, unknown>).id
         : null,
     ),
     0,
   );
 
-  const planId = getNetworkDataSubPlanId(plan);
-
   return {
-    raw: plan,
+    raw: providerPlan,
 
     id: String(
       firstValue(
-        plan.id,
-        plan.plan_id,
-        plan.planId,
-        plan.api_plan_id,
-        plan.apiPlanId,
+        providerPlan.id,
+        providerPlan.plan_id,
+        providerPlan.planId,
+        providerPlan.api_plan_id,
+        providerPlan.apiPlanId,
         requestedPlanId,
       ),
     ),
 
-    planId,
+    planId: providerPlanId,
 
     apiPlanId:
-      toNumber(firstValue(plan.api_plan_id, plan.apiPlanId), 0) || null,
+      toNumber(
+        firstValue(providerPlan.api_plan_id, providerPlan.apiPlanId),
+        0,
+      ) || null,
 
     networkId: networkId || null,
 
     provider,
 
-    name,
+    name: dbPlan.name || apiName,
 
-    size,
+    size: dbPlan.size || apiSize,
 
-    duration,
+    duration: dbPlan.duration || apiDuration,
 
-    providerPrice,
+    // IMPORTANT:
+    // These values come from DataPlan, NOT directly from the
+    // provider API.
+    providerPrice: Number(dbPlan.providerPrice),
 
-    sellingPrice,
+    sellingPrice: Number(dbPlan.sellingPrice),
 
-    status: normalizeStatus(plan),
+    status: String(dbPlan.status).toUpperCase(),
   };
 }
 
@@ -1379,59 +1439,85 @@ async function getSmePlugPlan(
 
   const rawPlans = grouped[networkId] || [];
 
-  const plan = rawPlans.find((item) =>
+  const providerPlan = rawPlans.find((item) =>
     matchesSmePlugPlan(item, requestedPlanId),
   );
 
-  if (!plan) {
+  if (!providerPlan) {
     return null;
   }
 
   const name = String(
-    firstValue(plan.name, plan.plan, plan.plan_name, plan.title) ?? "",
+    firstValue(
+      providerPlan.name,
+      providerPlan.plan,
+      providerPlan.plan_name,
+      providerPlan.title,
+    ) ?? "",
   ).trim();
 
-  const size = extractSmePlugSizeFromName(name) || name;
+  const apiSize = extractSmePlugSizeFromName(name) || name;
 
-  const duration = extractSmePlugDurationFromName(name);
+  const apiDuration = extractSmePlugDurationFromName(name);
 
-  const providerPrice = extractSmePlugProviderPrice(plan);
+  const providerPlanId = getSmePlugPlanId(providerPlan);
 
-  if (!(providerPrice > 0)) {
+  if (
+    providerPlanId === null ||
+    providerPlanId === undefined ||
+    providerPlanId === ""
+  ) {
     return null;
   }
 
-  // We compute our own selling price — SMEPlug's `price` field
-  // is not reliable enough to use directly (see note above).
-  const sellingPrice =
-    SMEPLUG_MARKUP_PERCENT > 0
-      ? Number((providerPrice * (1 + SMEPLUG_MARKUP_PERCENT / 100)).toFixed(2))
-      : providerPrice;
+  // DataPlan.bundleId is an Int.
+  const numericPlanId = toNumber(providerPlanId, NaN);
 
-  const planId = getSmePlugPlanId(plan);
+  if (!Number.isInteger(numericPlanId) || numericPlanId <= 0) {
+    return null;
+  }
+
+  // ==========================================================
+  // DATABASE PRICING
+  // ==========================================================
+  //
+  // We DO NOT calculate the customer selling price here from
+  // SMEPlug's markup anymore.
+  //
+  // Admin -> Data Prices -> sellingPrice is authoritative.
+  // ==========================================================
+
+  const dbPlan = await getDataPlanFromDatabase("SMEPlug", numericPlanId);
+
+  if (!dbPlan) {
+    console.error("SMEPLUG DATA PLAN NOT FOUND IN DATABASE:", numericPlanId);
+
+    return null;
+  }
 
   return {
-    raw: plan,
+    raw: providerPlan,
 
-    id: String(planId ?? requestedPlanId),
+    id: String(providerPlanId),
 
-    planId,
+    planId: providerPlanId,
 
     networkId,
 
     provider: SMEPLUG_NETWORK_NAMES[networkId] || "unknown",
 
-    name,
+    name: dbPlan.name || name,
 
-    size,
+    size: dbPlan.size || apiSize,
 
-    duration,
+    duration: dbPlan.duration || apiDuration,
 
-    providerPrice,
+    // DataPlan is the source of truth.
+    providerPrice: Number(dbPlan.providerPrice),
 
-    sellingPrice,
+    sellingPrice: Number(dbPlan.sellingPrice),
 
-    status: normalizeStatus(plan),
+    status: String(dbPlan.status).toUpperCase(),
   };
 }
 
@@ -1610,7 +1696,8 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message: "Invalid data plan.",
+        message:
+          "This data plan is not available in the pricing database. Please refresh the available plans.",
         receivedPlanId: rawPlanId,
       },
       { status: 400 },
@@ -1626,6 +1713,11 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
       { status: 400 },
     );
   }
+
+  // ==========================================================
+  // IMPORTANT:
+  // These prices now come from DataPlan.
+  // ==========================================================
 
   const providerCost = Number(plan.providerPrice);
 
@@ -1693,24 +1785,16 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
   const transaction = await prisma.transaction.create({
     data: {
       userId: user.id,
-
       type: "DATA",
-
       amount,
-
       reference,
-
       status: "PENDING",
-
       provider: "NetworkDataSub",
-
       cost: providerCost,
-
       profit,
-
-      description: `${plan.provider.toUpperCase()} ${plan.size || plan.name} ${
-        plan.duration
-      } for ${cleanedPhone}`,
+      description: `${plan.provider.toUpperCase()} ${
+        plan.size || plan.name
+      } ${plan.duration} for ${cleanedPhone}`,
     },
   });
 
@@ -1728,11 +1812,8 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
 
       headers: {
         Authorization: `Token ${apiKey}`,
-
         Accept: "application/json",
-
         "Content-Type": "application/json",
-
         "User-Agent": "BrainfriendGlobalTech/1.0",
       },
 
@@ -2058,7 +2139,6 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
 
       {
         maxWait: 10000,
-
         timeout: 30000,
       },
     );
@@ -2265,7 +2345,8 @@ async function processSmePlugPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message: "Invalid data plan.",
+        message:
+          "This SMEPlug data plan is not available in the pricing database. Please refresh the available plans.",
         receivedPlanId: rawPlanId,
       },
       { status: 400 },
@@ -2281,6 +2362,10 @@ async function processSmePlugPurchase(userId: string, body: any) {
       { status: 400 },
     );
   }
+
+  // ==========================================================
+  // DATABASE PRICING
+  // ==========================================================
 
   const providerCost = Number(plan.providerPrice);
 
@@ -2363,9 +2448,9 @@ async function processSmePlugPurchase(userId: string, body: any) {
 
       profit,
 
-      description: `${plan.provider.toUpperCase()} ${
-        plan.size || plan.name
-      } ${plan.duration} for ${cleanedPhone}`,
+      description: `${plan.provider.toUpperCase()} ${plan.size || plan.name} ${
+        plan.duration
+      } for ${cleanedPhone}`,
     },
   });
 
@@ -2399,7 +2484,9 @@ async function processSmePlugPurchase(userId: string, body: any) {
     });
   } catch (error: any) {
     await prisma.transaction.update({
-      where: { id: transaction.id },
+      where: {
+        id: transaction.id,
+      },
 
       data: {
         status: "FAILED",
@@ -2430,7 +2517,9 @@ async function processSmePlugPurchase(userId: string, body: any) {
 
   if (!providerResult) {
     await prisma.transaction.update({
-      where: { id: transaction.id },
+      where: {
+        id: transaction.id,
+      },
 
       data: {
         status: "FAILED",
@@ -2451,7 +2540,9 @@ async function processSmePlugPurchase(userId: string, body: any) {
 
   if (!providerResponse.ok || !isProviderSuccess(providerResult)) {
     await prisma.transaction.update({
-      where: { id: transaction.id },
+      where: {
+        id: transaction.id,
+      },
 
       data: {
         status: "FAILED",
@@ -2466,9 +2557,6 @@ async function processSmePlugPurchase(userId: string, body: any) {
       providerResult?.error ||
       "";
 
-    // Logged unconditionally (not just on a match) so you can
-    // tune the keyword list in /lib/smeplug-availability.ts if
-    // SMEPlug's real out-of-stock wording isn't being caught.
     console.log(
       "SMEPLUG PURCHASE FAILURE MESSAGE (for stock-classifier tuning):",
       failureMessage,
@@ -2516,7 +2604,9 @@ async function processSmePlugPurchase(userId: string, body: any) {
     result = await prisma.$transaction(
       async (tx) => {
         const currentUser = await tx.user.findUnique({
-          where: { id: user.id },
+          where: {
+            id: user.id,
+          },
         });
 
         if (!currentUser) {
@@ -2530,18 +2620,26 @@ async function processSmePlugPurchase(userId: string, body: any) {
         }
 
         let businessWallet = await tx.businessWallet.findUnique({
-          where: { name: "Brainfriend Global Tech" },
+          where: {
+            name: "Brainfriend Global Tech",
+          },
         });
 
         if (!businessWallet) {
           businessWallet = await tx.businessWallet.create({
             data: {
               name: "Brainfriend Global Tech",
+
               balance: 0,
+
               totalRevenue: 0,
+
               totalCost: 0,
+
               totalProfit: 0,
+
               withdrawnProfit: 0,
+
               availableProfit: 0,
             },
           });
@@ -2570,19 +2668,29 @@ async function processSmePlugPurchase(userId: string, body: any) {
         );
 
         await tx.user.update({
-          where: { id: user.id },
+          where: {
+            id: user.id,
+          },
 
-          data: { walletBalance: newUserBalance },
+          data: {
+            walletBalance: newUserBalance,
+          },
         });
 
         await tx.businessWallet.update({
-          where: { id: businessWallet.id },
+          where: {
+            id: businessWallet.id,
+          },
 
           data: {
             balance: newBusinessBalance,
+
             totalRevenue: newTotalRevenue,
+
             totalCost: newTotalCost,
+
             totalProfit: newTotalProfit,
+
             availableProfit: newAvailableProfit,
           },
         });
@@ -2605,7 +2713,9 @@ async function processSmePlugPurchase(userId: string, body: any) {
 
             description: `${plan.provider.toUpperCase()} ${
               plan.size || plan.name
-            } ${plan.duration} for ${cleanedPhone} + ${serviceFeePercentage}% service fee`,
+            } ${plan.duration} for ${cleanedPhone} + ${
+              serviceFeePercentage
+            }% service fee`,
 
             businessWalletId: businessWallet.id,
           },
@@ -2613,7 +2723,9 @@ async function processSmePlugPurchase(userId: string, body: any) {
 
         if (user.referredBy && referralCommission > 0) {
           await tx.user.update({
-            where: { id: user.referredBy.id },
+            where: {
+              id: user.referredBy.id,
+            },
 
             data: {
               referralBalance: {
@@ -2652,7 +2764,9 @@ async function processSmePlugPurchase(userId: string, body: any) {
         }
 
         await tx.transaction.update({
-          where: { id: transaction.id },
+          where: {
+            id: transaction.id,
+          },
 
           data: {
             status: "SUCCESS",
@@ -2663,15 +2777,20 @@ async function processSmePlugPurchase(userId: string, body: any) {
 
             description: `${plan.provider.toUpperCase()} ${
               plan.size || plan.name
-            } ${plan.duration} for ${cleanedPhone} + ${serviceFeePercentage}% service fee`,
+            } ${plan.duration} for ${cleanedPhone} + ${
+              serviceFeePercentage
+            }% service fee`,
           },
         });
 
         const updatedUser = await tx.user.findUnique({
-          where: { id: user.id },
+          where: {
+            id: user.id,
+          },
 
           select: {
             walletBalance: true,
+
             referralBalance: true,
           },
         });
@@ -2693,7 +2812,6 @@ async function processSmePlugPurchase(userId: string, body: any) {
 
       {
         maxWait: 10000,
-
         timeout: 30000,
       },
     );
@@ -2702,9 +2820,13 @@ async function processSmePlugPurchase(userId: string, body: any) {
 
     try {
       await prisma.transaction.update({
-        where: { id: transaction.id },
+        where: {
+          id: transaction.id,
+        },
 
-        data: { status: "FAILED" },
+        data: {
+          status: "FAILED",
+        },
       });
     } catch (updateError) {
       console.error("FAILED TO MARK SMEPLUG TRANSACTION:", updateError);
@@ -2726,9 +2848,6 @@ async function processSmePlugPurchase(userId: string, body: any) {
     );
   }
 
-  // A successful purchase proves this plan is currently in
-  // stock — clear any stale unavailable flag immediately rather
-  // than waiting for it to expire on its own.
   await markSmePlugPlanAvailable(networkId, plan.planId ?? rawPlanId);
 
   return NextResponse.json({
@@ -2889,7 +3008,7 @@ export async function POST(request: NextRequest) {
 
     const bundleId = Number(rawBundleId);
 
-    if (!Number.isInteger(bundleId) || !dataPlans[bundleId]) {
+    if (!Number.isInteger(bundleId) || bundleId <= 0) {
       return NextResponse.json(
         {
           success: false,
@@ -2900,7 +3019,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const plan = dataPlans[bundleId];
+    // ========================================================
+    // DATABASE PLAN
+    //
+    // DO NOT use dataPlans[bundleId] for pricing.
+    //
+    // The database now controls:
+    // - providerPrice
+    // - sellingPrice
+    // - plan name
+    // - size
+    // - duration
+    // - active status
+    // ========================================================
+
+    const dbPlan = await getDataPlanFromDatabase("CheapDataHub", bundleId);
+
+    if (!dbPlan) {
+      return NextResponse.json(
+        {
+          success: false,
+
+          message:
+            "This CheapDataHub data plan is not available in the pricing database. Please refresh the available plans.",
+
+          receivedBundleId: rawBundleId,
+        },
+        { status: 400 },
+      );
+    }
+
+    const plan = {
+      provider: dbPlan.provider || "unknown",
+
+      size: dbPlan.size || dataPlans[bundleId]?.size || "",
+
+      duration: dbPlan.duration || dataPlans[bundleId]?.duration || "",
+
+      name: dbPlan.name || dataPlans[bundleId]?.size || "",
+    };
 
     const cleanedPhone = normalizePhone(rawPhoneNumber);
 
@@ -2977,27 +3134,37 @@ export async function POST(request: NextRequest) {
 
     // ========================================================
     // SERVER-SIDE PRICING
+    //
+    // THIS IS THE IMPORTANT FIX.
+    //
+    // Before:
+    //   basePrice = dataPlans[bundleId].resellerPrice
+    //   providerCost = dataPlans[bundleId].apiPrice
+    //
+    // Now:
+    //   basePrice = DataPlan.sellingPrice
+    //   providerCost = DataPlan.providerPrice
     // ========================================================
 
-    const basePrice = Number(plan.resellerPrice);
+    const basePrice = Number(dbPlan.sellingPrice);
 
-    const providerCost = Number(plan.apiPrice);
+    const providerCost = Number(dbPlan.providerPrice);
 
     if (!Number.isFinite(basePrice) || basePrice <= 0) {
       return NextResponse.json(
         {
           success: false,
-          message: "Invalid reseller price.",
+          message: "Invalid selling price configured for this data plan.",
         },
         { status: 500 },
       );
     }
 
-    if (!Number.isFinite(providerCost) || providerCost < 0) {
+    if (!Number.isFinite(providerCost) || providerCost <= 0) {
       return NextResponse.json(
         {
           success: false,
-          message: "Invalid provider price.",
+          message: "Invalid provider price configured for this data plan.",
         },
         { status: 500 },
       );
@@ -3077,6 +3244,8 @@ export async function POST(request: NextRequest) {
 
     // ========================================================
     // PROVIDER REQUEST
+    //
+    // bundle_id remains the actual CheapDataHub provider ID.
     // ========================================================
 
     const providerBody = {
@@ -3444,6 +3613,8 @@ export async function POST(request: NextRequest) {
       phone_number: cleanedPhone,
 
       provider: plan.provider,
+
+      plan_name: plan.name,
 
       size: plan.size,
 

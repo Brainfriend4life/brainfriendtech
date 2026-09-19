@@ -1,4 +1,3 @@
-
 export const dynamic = "force-dynamic";
 
 import {
@@ -69,13 +68,7 @@ export default async function AdminDashboardPage() {
       where: {
         status: "SUCCESS",
         type: {
-          in: [
-            "AIRTIME",
-            "DATA",
-            "ELECTRICITY",
-            "CABLE",
-            "EXAM_PIN",
-          ],
+          in: ["AIRTIME", "DATA", "ELECTRICITY", "CABLE", "EXAM_PIN"],
         },
       },
       orderBy: {
@@ -95,57 +88,42 @@ export default async function AdminDashboardPage() {
 
   if (apiKey) {
     try {
-      const response = await fetch(
-        CHEAPDATAHUB_BALANCE_URL,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            Accept: "application/json",
-          },
-          cache: "no-store",
-        }
-      );
+      const response = await fetch(CHEAPDATAHUB_BALANCE_URL, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      });
 
       const result = await response.json();
 
-      console.log(
-        "CHEAPDATAHUB BALANCE RESPONSE:",
-        result
-      );
+      console.log("CHEAPDATAHUB BALANCE RESPONSE:", result);
 
       if (
         response.ok &&
-        (result?.status === true ||
-          result?.status === "true")
+        (result?.status === true || result?.status === "true")
       ) {
-        cheapDataHubBalance =
-          Number(result?.data?.balance) || 0;
+        cheapDataHubBalance = Number(result?.data?.balance) || 0;
       } else {
         cheapDataHubBalanceError =
-          result?.message ||
-          "Unable to fetch provider balance.";
+          result?.message || "Unable to fetch provider balance.";
       }
     } catch (error) {
-      console.error(
-        "CHEAPDATAHUB BALANCE ERROR:",
-        error
-      );
+      console.error("CHEAPDATAHUB BALANCE ERROR:", error);
 
-      cheapDataHubBalanceError =
-        "Unable to connect to provider.";
+      cheapDataHubBalanceError = "Unable to connect to provider.";
     }
   } else {
-    cheapDataHubBalanceError =
-      "Provider API key is not configured.";
+    cheapDataHubBalanceError = "Provider API key is not configured.";
   }
 
   // =========================================================
   // WALLET FUNDING
   // =========================================================
 
-  const totalWalletFunding =
-    Number(walletFunding._sum.amount) || 0;
+  const totalWalletFunding = Number(walletFunding._sum.amount) || 0;
 
   // =========================================================
   // REVENUE / COST / PROFIT
@@ -162,31 +140,20 @@ export default async function AdminDashboardPage() {
   let totalRevenue = 0;
 
   for (const transaction of serviceTransactions) {
-    const amount =
-      Number(transaction.amount) || 0;
+    const amount = Number(transaction.amount) || 0;
 
     totalRevenue += amount;
 
     if (
-      Object.prototype.hasOwnProperty.call(
-        revenueByService,
-        transaction.type
-      )
+      Object.prototype.hasOwnProperty.call(revenueByService, transaction.type)
     ) {
-      revenueByService[transaction.type] +=
-        amount;
+      revenueByService[transaction.type] += amount;
     }
   }
 
-  /*
-   * Provider cost can be connected here later
-   * when the actual provider cost is stored
-   * on each transaction.
-   */
   const totalCost = 0;
 
-  const totalProfit =
-    totalRevenue - totalCost;
+  const totalProfit = totalRevenue - totalCost;
 
   // =========================================================
   // FORMAT MONEY
@@ -208,37 +175,29 @@ export default async function AdminDashboardPage() {
       title: "Total Users",
       value: totalUsers.toLocaleString(),
       icon: Users,
-      iconBg:
-        "bg-indigo-100 dark:bg-indigo-500/15",
-      iconColor:
-        "text-indigo-600 dark:text-indigo-400",
+      iconBg: "bg-indigo-100 dark:bg-indigo-500/15",
+      iconColor: "text-indigo-600 dark:text-indigo-400",
     },
     {
       title: "Transactions",
       value: totalTransactions.toLocaleString(),
       icon: ReceiptText,
-      iconBg:
-        "bg-blue-100 dark:bg-blue-500/15",
-      iconColor:
-        "text-blue-600 dark:text-blue-400",
+      iconBg: "bg-blue-100 dark:bg-blue-500/15",
+      iconColor: "text-blue-600 dark:text-blue-400",
     },
     {
       title: "CBT Attempts",
       value: totalCbtAttempts.toLocaleString(),
       icon: GraduationCap,
-      iconBg:
-        "bg-purple-100 dark:bg-purple-500/15",
-      iconColor:
-        "text-purple-600 dark:text-purple-400",
+      iconBg: "bg-purple-100 dark:bg-purple-500/15",
+      iconColor: "text-purple-600 dark:text-purple-400",
     },
     {
       title: "Completed Exams",
       value: completedExams.toLocaleString(),
       icon: CheckCircle2,
-      iconBg:
-        "bg-green-100 dark:bg-green-500/15",
-      iconColor:
-        "text-green-600 dark:text-green-400",
+      iconBg: "bg-green-100 dark:bg-green-500/15",
+      iconColor: "text-green-600 dark:text-green-400",
     },
   ];
 
@@ -276,7 +235,6 @@ export default async function AdminDashboardPage() {
 
   return (
     <div className="min-h-full space-y-6 bg-gray-50 px-4 py-6 text-gray-900 transition-colors dark:bg-gray-950 dark:text-gray-100 sm:px-6 lg:px-0">
-
       {/* =====================================================
           HEADER
       ===================================================== */}
@@ -291,8 +249,7 @@ export default async function AdminDashboardPage() {
         </h1>
 
         <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-600 dark:text-gray-400 sm:text-base">
-          Manage Brainfriend Global Tech and monitor
-          platform activity.
+          Manage Brainfriend Global Tech and monitor platform activity.
         </p>
       </div>
 
@@ -323,9 +280,7 @@ export default async function AdminDashboardPage() {
                 <div
                   className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${stat.iconBg}`}
                 >
-                  <Icon
-                    className={`h-6 w-6 ${stat.iconColor}`}
-                  />
+                  <Icon className={`h-6 w-6 ${stat.iconColor}`} />
                 </div>
               </div>
             </div>
@@ -344,13 +299,11 @@ export default async function AdminDashboardPage() {
           </h2>
 
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Monitor the balance used to process customer
-            service requests.
+            Monitor the balance used to process customer service requests.
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-
           {/* PROVIDER BALANCE */}
 
           <div className="overflow-hidden rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-600 via-indigo-600 to-indigo-700 p-6 text-white shadow-sm dark:from-indigo-700 dark:via-indigo-800 dark:to-indigo-950">
@@ -366,9 +319,7 @@ export default async function AdminDashboardPage() {
                   </p>
                 ) : (
                   <p className="mt-2 break-words text-3xl font-bold tracking-tight">
-                    {formatMoney(
-                      cheapDataHubBalance
-                    )}
+                    {formatMoney(cheapDataHubBalance)}
                   </p>
                 )}
               </div>
@@ -379,9 +330,8 @@ export default async function AdminDashboardPage() {
             </div>
 
             <p className="mt-4 text-xs leading-5 text-indigo-100/90">
-              Current balance available for processing
-              customer service requests. This balance is
-              separate from customer wallet balances.
+              Current balance available for processing customer service
+              requests. This balance is separate from customer wallet balances.
             </p>
           </div>
 
@@ -395,9 +345,7 @@ export default async function AdminDashboardPage() {
                 </p>
 
                 <p className="mt-2 break-words text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
-                  {formatMoney(
-                    totalWalletFunding
-                  )}
+                  {formatMoney(totalWalletFunding)}
                 </p>
               </div>
 
@@ -407,11 +355,10 @@ export default async function AdminDashboardPage() {
             </div>
 
             <p className="mt-4 text-xs leading-5 text-gray-500 dark:text-gray-400">
-              Total successful wallet funding transactions
-              recorded on the platform.
+              Total successful wallet funding transactions recorded on the
+              platform.
             </p>
           </div>
-
         </div>
       </section>
 
@@ -431,7 +378,6 @@ export default async function AdminDashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-
           {/* REVENUE */}
 
           <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900 sm:p-6">
@@ -452,8 +398,8 @@ export default async function AdminDashboardPage() {
             </div>
 
             <p className="mt-4 text-xs leading-5 text-gray-500 dark:text-gray-400">
-              Successful Airtime, Data, Electricity, Cable
-              and Exam PIN transactions.
+              Successful Airtime, Data, Electricity, Cable and Exam PIN
+              transactions.
             </p>
           </div>
 
@@ -477,8 +423,8 @@ export default async function AdminDashboardPage() {
             </div>
 
             <p className="mt-4 text-xs leading-5 text-gray-500 dark:text-gray-400">
-              Provider costs will be calculated from the
-              actual API cost stored with each transaction.
+              Provider costs will be calculated from the actual API cost stored
+              with each transaction.
             </p>
           </div>
 
@@ -505,7 +451,6 @@ export default async function AdminDashboardPage() {
               Revenue minus provider cost.
             </p>
           </div>
-
         </div>
       </section>
 
@@ -514,7 +459,6 @@ export default async function AdminDashboardPage() {
       ===================================================== */}
 
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-
         <div className="border-b border-gray-200 p-5 dark:border-gray-800 sm:p-6">
           <h2 className="font-bold text-gray-900 dark:text-white">
             Service Revenue
@@ -526,7 +470,6 @@ export default async function AdminDashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 divide-y divide-gray-200 dark:divide-gray-800 sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-5">
-
           {serviceBreakdown.map((service) => (
             <div
               key={service.type}
@@ -541,7 +484,6 @@ export default async function AdminDashboardPage() {
               </p>
             </div>
           ))}
-
         </div>
       </div>
 
@@ -550,9 +492,7 @@ export default async function AdminDashboardPage() {
       ===================================================== */}
 
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-
         <div className="flex items-center justify-between border-b border-gray-200 p-5 dark:border-gray-800 sm:p-6">
-
           <div>
             <h2 className="font-bold text-gray-900 dark:text-white">
               Recent Transactions
@@ -566,32 +506,24 @@ export default async function AdminDashboardPage() {
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 dark:bg-gray-800">
             <ReceiptText className="h-5 w-5 text-gray-500 dark:text-gray-400" />
           </div>
-
         </div>
 
         <div className="divide-y divide-gray-200 dark:divide-gray-800">
-
           {recentTransactions.length === 0 ? (
-
             <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
               No transactions yet.
             </div>
-
           ) : (
-
             recentTransactions.map((transaction) => {
-
-              const transactionStatus =
-                String(
-                  transaction.status || ""
-                ).toLowerCase();
+              const transactionStatus = String(
+                transaction.status || "",
+              ).toLowerCase();
 
               return (
                 <div
                   key={transaction.id}
                   className="flex flex-col gap-4 p-5 transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/50 sm:flex-row sm:items-center sm:justify-between sm:p-6"
                 >
-
                   <div className="min-w-0">
                     <p className="truncate font-semibold text-gray-900 dark:text-white">
                       {transaction.user.fullName}
@@ -607,25 +539,18 @@ export default async function AdminDashboardPage() {
                   </div>
 
                   <div className="flex items-center justify-between gap-6 sm:block sm:min-w-[150px] sm:text-right">
-
                     <div>
                       <p className="font-bold text-gray-900 dark:text-white">
-                        {formatMoney(
-                          Number(
-                            transaction.amount
-                          )
-                        )}
+                        {formatMoney(Number(transaction.amount))}
                       </p>
 
                       <p
                         className={`mt-1 text-xs font-semibold ${
-                          transactionStatus ===
-                          "success"
+                          transactionStatus === "success"
                             ? "text-green-600 dark:text-green-400"
-                            : transactionStatus ===
-                              "failed"
-                            ? "text-red-600 dark:text-red-400"
-                            : "text-yellow-600 dark:text-yellow-400"
+                            : transactionStatus === "failed"
+                              ? "text-red-600 dark:text-red-400"
+                              : "text-yellow-600 dark:text-yellow-400"
                         }`}
                       >
                         {transaction.status}
@@ -635,19 +560,13 @@ export default async function AdminDashboardPage() {
                     <p className="mt-2 hidden items-center justify-end gap-1 text-xs text-gray-400 dark:text-gray-500 sm:flex">
                       <Clock className="h-3 w-3" />
 
-                      {new Date(
-                        transaction.createdAt
-                      ).toLocaleString("en-NG")}
+                      {new Date(transaction.createdAt).toLocaleString("en-NG")}
                     </p>
-
                   </div>
-
                 </div>
               );
             })
-
           )}
-
         </div>
       </div>
 
@@ -665,7 +584,6 @@ export default async function AdminDashboardPage() {
         </p>
 
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-
           {/* USERS */}
 
           <a
@@ -757,15 +675,30 @@ export default async function AdminDashboardPage() {
             </h3>
 
             <p className="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">
-              Manage business funds, connect bank account
-              and withdraw profit.
+              Manage business funds, connect bank account and withdraw profit.
             </p>
           </a>
 
+          {/* DATA PRICES */}
+
+          <a
+            href="/dashboard/admin/data-prices"
+            className="group rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-1 hover:border-indigo-200 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-indigo-800 dark:hover:bg-gray-900/80"
+          >
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100 dark:bg-indigo-500/15">
+              <Database className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+            </div>
+
+            <h3 className="mt-4 font-semibold text-gray-900 dark:text-white">
+              Data Prices
+            </h3>
+
+            <p className="mt-1 text-sm leading-5 text-gray-500 dark:text-gray-400">
+              Manage data plans and customer selling prices.
+            </p>
+          </a>
         </div>
       </section>
-
     </div>
   );
 }
-

@@ -399,19 +399,24 @@ model PasswordResetToken {
 model DataPlan {
   id            String   @id @default(cuid())
   provider      String
-  bundleId      Int      @unique
+  network       String
+  bundleId      Int
   name          String
   size          String
   duration      String
   providerPrice Float
   sellingPrice  Float
+  manualPrice   Boolean  @default(false)
   status        String   @default("ACTIVE")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  @@unique([provider, bundleId])
   @@index([provider])
+  @@index([network])
   @@index([status])
   @@index([provider, status])
+  @@index([provider, network, status])
 }
 
 model CablePlan {
