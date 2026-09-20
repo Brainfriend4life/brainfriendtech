@@ -11,8 +11,8 @@ interface Transaction {
   createdAt: string;
 }
 
-// Maps raw enum values (as stored in the DB) to a clean, customer-facing
-// label. Add new TransactionType values here as you introduce them.
+// Maps raw enum values (as stored in the DB) to clean,
+// customer-facing transaction type labels.
 const TYPE_LABELS: Record<string, string> = {
   FUND_WALLET: "Wallet Funding",
   AIRTIME: "Airtime",
@@ -35,10 +35,66 @@ function getTypeLabel(type: string): string {
   );
 }
 
+/*
+ * ==========================================
+ * HIDE PROVIDER NAMES FROM CUSTOMERS
+ * ==========================================
+ *
+ * Provider names may be stored inside transaction
+ * descriptions, for example:
+ *
+ * CHEAPDATAHUB 110MB 1 Day for 08114863733
+ * NETWORKDATASUB MTN 1GB 30 Days for 080...
+ * SMEPLUG GLO 500MB 7 Days for 080...
+ *
+ * We remove those provider names before displaying
+ * the description to the customer.
+ *
+ * This does NOT modify the database.
+ * It only changes what the customer sees.
+ */
+
+const PROVIDER_NAMES = [
+  "CHEAPDATAHUB",
+  "CHEAP DATA HUB",
+  "NETWORKDATASUB",
+  "NETWORK DATA SUB",
+  "SMEPLUG",
+  "SME PLUG",
+];
+
+function getCustomerDescription(description: string): string {
+  if (!description) {
+    return "-";
+  }
+
+  let cleanDescription = String(description);
+
+  // Remove provider names regardless of capitalization.
+  for (const provider of PROVIDER_NAMES) {
+    const escapedProvider = provider.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const regex = new RegExp(`\\b${escapedProvider}\\b`, "gi");
+
+    cleanDescription = cleanDescription.replace(regex, "");
+  }
+
+  /*
+   * Clean up leftover punctuation and spaces after
+   * removing the provider name.
+   */
+  cleanDescription = cleanDescription
+    .replace(/\s{2,}/g, " ")
+    .replace(/^\s*[-:|•]+\s*/g, "")
+    .replace(/\s*[-:|•]+\s*$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  return cleanDescription || "-";
+}
+
 export default function TransactionsPage() {
-  const [transactions, setTransactions] = useState<Transaction[]>(
-    []
-  );
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -56,24 +112,20 @@ export default function TransactionsPage() {
         const data = await res.json();
 
         if (!res.ok) {
-          throw new Error(
-            data?.message || "Failed to load transactions"
-          );
+          throw new Error(data?.message || "Failed to load transactions");
         }
 
         const transactionList = Array.isArray(data)
           ? data
           : Array.isArray(data?.transactions)
-          ? data.transactions
-          : [];
+            ? data.transactions
+            : [];
 
         setTransactions(transactionList);
       } catch (err: any) {
         console.error("TRANSACTION LOAD ERROR:", err);
 
-        setError(
-          err?.message || "Failed to load transactions"
-        );
+        setError(err?.message || "Failed to load transactions");
       } finally {
         setLoading(false);
       }
@@ -94,6 +146,7 @@ export default function TransactionsPage() {
         <div className="mx-auto max-w-7xl space-y-6">
           <div>
             <div className="h-9 w-64 animate-pulse rounded-lg bg-gray-200 dark:bg-gray-800" />
+
             <div className="mt-3 h-5 w-80 animate-pulse rounded-lg bg-gray-200 dark:bg-gray-800" />
           </div>
 
@@ -131,13 +184,9 @@ export default function TransactionsPage() {
           </div>
 
           <div className="rounded-2xl border border-red-200 bg-red-50 p-5 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
-            <p className="font-semibold">
-              Unable to load transactions
-            </p>
+            <p className="font-semibold">Unable to load transactions</p>
 
-            <p className="mt-1 text-sm">
-              {error}
-            </p>
+            <p className="mt-1 text-sm">{error}</p>
           </div>
 
           <button
@@ -214,8 +263,8 @@ export default function TransactionsPage() {
             </h2>
 
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500 dark:text-gray-400">
-              Your transactions will appear here after you
-              fund your wallet or purchase a service.
+              Your transactions will appear here after you fund your wallet or
+              purchase a service.
             </p>
           </div>
         ) : (
@@ -256,9 +305,7 @@ export default function TransactionsPage() {
 
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {transactions.map((tx) => {
-                    const status = String(
-                      tx.status || ""
-                    ).toLowerCase();
+                    const status = String(tx.status || "").toLowerCase();
 
                     const isSuccess =
                       status === "success" ||
@@ -268,8 +315,7 @@ export default function TransactionsPage() {
                       status === "paid";
 
                     const isFailed =
-                      status === "failed" ||
-                      status === "rejected";
+                      status === "failed" || status === "rejected";
 
                     return (
                       <tr
@@ -288,7 +334,7 @@ export default function TransactionsPage() {
 
                         <td className="max-w-xs px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
                           <div className="max-w-xs truncate">
-                            {tx.description || "-"}
+                            {getCustomerDescription(tx.description)}
                           </div>
                         </td>
 
@@ -296,9 +342,7 @@ export default function TransactionsPage() {
 
                         <td className="px-4 py-4 font-semibold text-gray-900 dark:text-white">
                           ₦
-                          {Number(
-                            tx.amount || 0
-                          ).toLocaleString("en-NG", {
+                          {Number(tx.amount || 0).toLocaleString("en-NG", {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
@@ -312,8 +356,8 @@ export default function TransactionsPage() {
                               isFailed
                                 ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300"
                                 : isSuccess
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-                                : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                  : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
                             }`}
                           >
                             {tx.status || "Pending"}
@@ -324,9 +368,7 @@ export default function TransactionsPage() {
 
                         <td className="whitespace-nowrap px-4 py-4 text-sm text-gray-600 dark:text-gray-400">
                           {tx.createdAt
-                            ? new Date(
-                                tx.createdAt
-                              ).toLocaleString("en-NG", {
+                            ? new Date(tx.createdAt).toLocaleString("en-NG", {
                                 dateStyle: "medium",
                                 timeStyle: "short",
                               })
@@ -339,13 +381,13 @@ export default function TransactionsPage() {
               </table>
             </div>
 
-            {/* MOBILE TRANSACTIONS */}
+            {/* ==========================================
+                MOBILE TRANSACTIONS
+            ========================================== */}
 
             <div className="divide-y divide-gray-100 dark:divide-gray-800 md:hidden">
               {transactions.map((tx) => {
-                const status = String(
-                  tx.status || ""
-                ).toLowerCase();
+                const status = String(tx.status || "").toLowerCase();
 
                 const isSuccess =
                   status === "success" ||
@@ -354,9 +396,7 @@ export default function TransactionsPage() {
                   status === "completed" ||
                   status === "paid";
 
-                const isFailed =
-                  status === "failed" ||
-                  status === "rejected";
+                const isFailed = status === "failed" || status === "rejected";
 
                 return (
                   <div
@@ -370,15 +410,13 @@ export default function TransactionsPage() {
                         </p>
 
                         <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
-                          {tx.description || "-"}
+                          {getCustomerDescription(tx.description)}
                         </p>
                       </div>
 
                       <p className="shrink-0 font-bold text-gray-900 dark:text-white">
                         ₦
-                        {Number(
-                          tx.amount || 0
-                        ).toLocaleString("en-NG", {
+                        {Number(tx.amount || 0).toLocaleString("en-NG", {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
@@ -391,8 +429,8 @@ export default function TransactionsPage() {
                           isFailed
                             ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300"
                             : isSuccess
-                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
-                            : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                              : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
                         }`}
                       >
                         {tx.status || "Pending"}
@@ -400,9 +438,7 @@ export default function TransactionsPage() {
 
                       <span className="text-xs text-gray-500 dark:text-gray-400">
                         {tx.createdAt
-                          ? new Date(
-                              tx.createdAt
-                            ).toLocaleString("en-NG", {
+                          ? new Date(tx.createdAt).toLocaleString("en-NG", {
                               dateStyle: "medium",
                               timeStyle: "short",
                             })
