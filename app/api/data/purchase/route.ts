@@ -15,6 +15,22 @@ import {
 } from "@/lib/smeplug-availability";
 
 // ============================================================
+// CUSTOMER-FACING MESSAGES
+//
+// Anything returned to the browser must NEVER mention a
+// provider's name, raw provider response, or provider error.
+// The real details are logged on the server with console.error.
+// ============================================================
+
+const GENERIC_FAILURE =
+  "Data purchase failed. Please try again or contact support.";
+
+const GENERIC_UNAVAILABLE =
+  "This data plan is currently unavailable. Please try another.";
+
+const SUCCESS_MESSAGE = "Data purchase successful.";
+
+// ============================================================
 // PROVIDER URLS
 // ============================================================
 
@@ -75,6 +91,12 @@ const NETWORKDATASUB_MARKUP_PERCENT = Number(
 // provider cost when a DataPlan exists in the database.
 //
 // The DataPlan table is now the pricing source of truth.
+//
+// NOTE:
+// `provider` in this map is the NETWORK (airtel / glo / mtn).
+// It is used as the customer-facing network label for
+// CheapDataHub purchases. New CheapDataHub plans that are
+// added only to the database will not be in this map.
 // ============================================================
 
 const dataPlans: Record<
@@ -1345,6 +1367,7 @@ async function getNetworkDataSubPlan(apiKey: string, requestedPlanId: number) {
 
     networkId: networkId || null,
 
+    // Network label from the provider API (MTN / AIRTEL / GLO).
     provider,
 
     name: dbPlan.name || apiName,
@@ -1504,6 +1527,7 @@ async function getSmePlugPlan(
 
     networkId,
 
+    // Network label (mtn / airtel / glo).
     provider: SMEPLUG_NETWORK_NAMES[networkId] || "unknown",
 
     name: dbPlan.name || name,
@@ -1600,10 +1624,12 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
   const apiKey = process.env.NETWORKDATASUB_API_KEY;
 
   if (!apiKey) {
+    console.error("NETWORKDATASUB API KEY IS NOT CONFIGURED.");
+
     return NextResponse.json(
       {
         success: false,
-        message: "NetworkDataSub API key is not configured.",
+        message: GENERIC_FAILURE,
       },
       { status: 500 },
     );
@@ -1623,7 +1649,7 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message: "Invalid NetworkDataSub data plan.",
+        message: "Invalid data plan.",
         receivedPlanId: rawPlanId,
       },
       { status: 400 },
@@ -1696,8 +1722,7 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message:
-          "This data plan is not available in the pricing database. Please refresh the available plans.",
+        message: GENERIC_UNAVAILABLE,
         receivedPlanId: rawPlanId,
       },
       { status: 400 },
@@ -1708,7 +1733,7 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message: "This data plan is currently unavailable.",
+        message: GENERIC_UNAVAILABLE,
       },
       { status: 400 },
     );
@@ -1724,20 +1749,24 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
   const basePrice = Number(plan.sellingPrice);
 
   if (!Number.isFinite(providerCost) || providerCost <= 0) {
+    console.error("NETWORKDATASUB INVALID PROVIDER PRICE:", plan.providerPrice);
+
     return NextResponse.json(
       {
         success: false,
-        message: "Invalid NetworkDataSub provider price.",
+        message: GENERIC_FAILURE,
       },
       { status: 500 },
     );
   }
 
   if (!Number.isFinite(basePrice) || basePrice <= 0) {
+    console.error("NETWORKDATASUB INVALID SELLING PRICE:", plan.sellingPrice);
+
     return NextResponse.json(
       {
         success: false,
-        message: "Invalid NetworkDataSub selling price.",
+        message: GENERIC_FAILURE,
       },
       { status: 500 },
     );
@@ -1777,7 +1806,8 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
     );
   }
 
-  const reference = `DATA-NDS-${Date.now()}-${Math.random()
+  // Same reference format for every provider (no vendor code).
+  const reference = `DATA-${Date.now()}-${Math.random()
     .toString(36)
     .substring(2, 8)
     .toUpperCase()}`;
@@ -1824,6 +1854,8 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
       signal: AbortSignal.timeout(30000),
     });
   } catch (error: any) {
+    console.error("NETWORKDATASUB CONNECTION ERROR:", error);
+
     await prisma.transaction.update({
       where: {
         id: transaction.id,
@@ -1839,8 +1871,7 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message: "Unable to connect to NetworkDataSub.",
-        error: error?.message || "Provider connection failed.",
+        message: GENERIC_FAILURE,
       },
       { status: 502 },
     );
@@ -1857,6 +1888,12 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
   }
 
   if (!providerResult) {
+    console.error(
+      "NETWORKDATASUB INVALID RESPONSE:",
+      providerResponse.status,
+      responseText,
+    );
+
     await prisma.transaction.update({
       where: {
         id: transaction.id,
@@ -1872,14 +1909,20 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message: "NetworkDataSub returned an invalid response.",
-        providerStatus: providerResponse.status,
+        message: GENERIC_FAILURE,
       },
       { status: 502 },
     );
   }
 
   if (!providerResponse.ok || !isProviderSuccess(providerResult)) {
+    // Real provider message stays in the server logs only.
+    console.error(
+      "NETWORKDATASUB PURCHASE FAILED:",
+      providerResponse.status,
+      providerResult,
+    );
+
     await prisma.transaction.update({
       where: {
         id: transaction.id,
@@ -1896,14 +1939,7 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
       {
         success: false,
 
-        message:
-          providerResult?.message ||
-          providerResult?.error ||
-          "NetworkDataSub data purchase failed.",
-
-        providerStatus: providerResponse.status,
-
-        providerResponse: providerResult,
+        message: GENERIC_FAILURE,
       },
       {
         status:
@@ -2079,11 +2115,12 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
 
               status: "SUCCESS",
 
+              // No vendor name in the referrer-facing description.
               description: `Referral earning from ${
                 user.fullName
               }'s ${plan.provider.toUpperCase()} ${
                 plan.size || plan.name
-              } NetworkDataSub data purchase of ₦${basePrice}`,
+              } data purchase of ₦${basePrice}`,
 
               reference: `REF-${reference}`,
             },
@@ -2175,21 +2212,21 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
     );
   }
 
+  // NOTE: no `server` and no raw `providerResponse` in the response.
   return NextResponse.json({
     success: true,
 
-    message: providerResult?.message || "Data purchase successful.",
+    message: SUCCESS_MESSAGE,
 
     reference,
 
     providerReference,
 
-    server: "NETWORKDATASUB",
-
     data_plan_id: dataPlanId,
 
     phone_number: cleanedPhone,
 
+    // Network label (MTN / AIRTEL / GLO), not the vendor.
     provider: plan.provider,
 
     plan_id: plan.planId,
@@ -2225,8 +2262,6 @@ async function processNetworkDataSubPurchase(userId: string, body: any) {
     walletBalance: result.walletBalance,
 
     referralBalance: result.referralBalance,
-
-    providerResponse: providerResult,
   });
 }
 
@@ -2238,10 +2273,12 @@ async function processSmePlugPurchase(userId: string, body: any) {
   const apiKey = process.env.SMEPLUG_API_KEY;
 
   if (!apiKey) {
+    console.error("SMEPLUG API KEY IS NOT CONFIGURED.");
+
     return NextResponse.json(
       {
         success: false,
-        message: "SMEPlug API key is not configured.",
+        message: GENERIC_FAILURE,
       },
       { status: 500 },
     );
@@ -2258,7 +2295,7 @@ async function processSmePlugPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message: "Invalid or unsupported SMEPlug network.",
+        message: "Invalid or unsupported network.",
         receivedNetworkId: rawNetworkId,
       },
       { status: 400 },
@@ -2272,7 +2309,7 @@ async function processSmePlugPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message: "Invalid SMEPlug data plan.",
+        message: "Invalid data plan.",
         receivedPlanId: rawPlanId,
       },
       { status: 400 },
@@ -2345,8 +2382,7 @@ async function processSmePlugPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message:
-          "This SMEPlug data plan is not available in the pricing database. Please refresh the available plans.",
+        message: GENERIC_UNAVAILABLE,
         receivedPlanId: rawPlanId,
       },
       { status: 400 },
@@ -2357,7 +2393,7 @@ async function processSmePlugPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message: "This data plan is currently unavailable.",
+        message: GENERIC_UNAVAILABLE,
       },
       { status: 400 },
     );
@@ -2372,20 +2408,24 @@ async function processSmePlugPurchase(userId: string, body: any) {
   const basePrice = Number(plan.sellingPrice);
 
   if (!Number.isFinite(providerCost) || providerCost <= 0) {
+    console.error("SMEPLUG INVALID PROVIDER PRICE:", plan.providerPrice);
+
     return NextResponse.json(
       {
         success: false,
-        message: "Invalid SMEPlug provider price.",
+        message: GENERIC_FAILURE,
       },
       { status: 500 },
     );
   }
 
   if (!Number.isFinite(basePrice) || basePrice <= 0) {
+    console.error("SMEPLUG INVALID SELLING PRICE:", plan.sellingPrice);
+
     return NextResponse.json(
       {
         success: false,
-        message: "Invalid SMEPlug selling price.",
+        message: GENERIC_FAILURE,
       },
       { status: 500 },
     );
@@ -2425,7 +2465,8 @@ async function processSmePlugPurchase(userId: string, body: any) {
     );
   }
 
-  const reference = `DATA-SMP-${Date.now()}-${Math.random()
+  // Same reference format for every provider (no vendor code).
+  const reference = `DATA-${Date.now()}-${Math.random()
     .toString(36)
     .substring(2, 8)
     .toUpperCase()}`;
@@ -2483,6 +2524,8 @@ async function processSmePlugPurchase(userId: string, body: any) {
       signal: AbortSignal.timeout(30000),
     });
   } catch (error: any) {
+    console.error("SMEPLUG CONNECTION ERROR:", error);
+
     await prisma.transaction.update({
       where: {
         id: transaction.id,
@@ -2498,8 +2541,7 @@ async function processSmePlugPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message: "Unable to connect to SMEPlug.",
-        error: error?.message || "Provider connection failed.",
+        message: GENERIC_FAILURE,
       },
       { status: 502 },
     );
@@ -2516,6 +2558,12 @@ async function processSmePlugPurchase(userId: string, body: any) {
   }
 
   if (!providerResult) {
+    console.error(
+      "SMEPLUG INVALID RESPONSE:",
+      providerResponse.status,
+      responseText,
+    );
+
     await prisma.transaction.update({
       where: {
         id: transaction.id,
@@ -2531,8 +2579,7 @@ async function processSmePlugPurchase(userId: string, body: any) {
     return NextResponse.json(
       {
         success: false,
-        message: "SMEPlug returned an invalid response.",
-        providerStatus: providerResponse.status,
+        message: GENERIC_FAILURE,
       },
       { status: 502 },
     );
@@ -2557,9 +2604,11 @@ async function processSmePlugPurchase(userId: string, body: any) {
       providerResult?.error ||
       "";
 
-    console.log(
+    // Real provider message stays in the server logs only.
+    console.error(
       "SMEPLUG PURCHASE FAILURE MESSAGE (for stock-classifier tuning):",
       failureMessage,
+      providerResult,
     );
 
     if (looksLikeStockFailure(failureMessage)) {
@@ -2570,15 +2619,7 @@ async function processSmePlugPurchase(userId: string, body: any) {
       {
         success: false,
 
-        message:
-          providerResult?.msg ||
-          providerResult?.message ||
-          providerResult?.error ||
-          "SMEPlug data purchase failed.",
-
-        providerStatus: providerResponse.status,
-
-        providerResponse: providerResult,
+        message: GENERIC_FAILURE,
       },
       {
         status:
@@ -2752,11 +2793,12 @@ async function processSmePlugPurchase(userId: string, body: any) {
 
               status: "SUCCESS",
 
+              // No vendor name in the referrer-facing description.
               description: `Referral earning from ${
                 user.fullName
               }'s ${plan.provider.toUpperCase()} ${
                 plan.size || plan.name
-              } SMEPlug data purchase of ₦${basePrice}`,
+              } data purchase of ₦${basePrice}`,
 
               reference: `REF-${reference}`,
             },
@@ -2850,17 +2892,15 @@ async function processSmePlugPurchase(userId: string, body: any) {
 
   await markSmePlugPlanAvailable(networkId, plan.planId ?? rawPlanId);
 
+  // NOTE: no `server` and no raw `providerResponse` in the response.
   return NextResponse.json({
     success: true,
 
-    message:
-      providerData?.msg || providerResult?.msg || "Data purchase successful.",
+    message: SUCCESS_MESSAGE,
 
     reference,
 
     providerReference,
-
-    server: "SMEPLUG",
 
     network_id: networkId,
 
@@ -2868,6 +2908,7 @@ async function processSmePlugPurchase(userId: string, body: any) {
 
     phone_number: cleanedPhone,
 
+    // Network label (mtn / airtel / glo), not the vendor.
     provider: plan.provider,
 
     plan_name: plan.name,
@@ -2897,8 +2938,6 @@ async function processSmePlugPurchase(userId: string, body: any) {
     walletBalance: result.walletBalance,
 
     referralBalance: result.referralBalance,
-
-    providerResponse: providerResult,
   });
 }
 
@@ -2938,9 +2977,14 @@ export async function POST(request: NextRequest) {
 
     // ========================================================
     // NETWORKDATASUB
+    //
+    // "S1" is an opaque alias so the frontend does not have to
+    // send the vendor name. The old names still work until you
+    // switch your frontend over.
     // ========================================================
 
     if (
+      requestedServer === "S1" ||
       requestedServer === "NETWORKDATASUB" ||
       requestedServer === "NETWORK_DATA_SUB" ||
       requestedServer === "NDS"
@@ -2954,10 +2998,7 @@ export async function POST(request: NextRequest) {
           {
             success: false,
 
-            message:
-              error instanceof Error
-                ? error.message
-                : "NetworkDataSub purchase failed.",
+            message: GENERIC_FAILURE,
           },
           { status: 500 },
         );
@@ -2966,9 +3007,12 @@ export async function POST(request: NextRequest) {
 
     // ========================================================
     // SMEPLUG
+    //
+    // "S2" is an opaque alias (see note above).
     // ========================================================
 
     if (
+      requestedServer === "S2" ||
       requestedServer === "SMEPLUG" ||
       requestedServer === "SME_PLUG" ||
       requestedServer === "SMP"
@@ -2982,10 +3026,7 @@ export async function POST(request: NextRequest) {
           {
             success: false,
 
-            message:
-              error instanceof Error
-                ? error.message
-                : "SMEPlug purchase failed.",
+            message: GENERIC_FAILURE,
           },
           { status: 500 },
         );
@@ -2993,7 +3034,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ========================================================
-    // CHEAPDATAHUB
+    // CHEAPDATAHUB (default when no other server matches)
     // ========================================================
 
     const rawBundleId =
@@ -3040,8 +3081,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
 
-          message:
-            "This CheapDataHub data plan is not available in the pricing database. Please refresh the available plans.",
+          message: GENERIC_UNAVAILABLE,
 
           receivedBundleId: rawBundleId,
         },
@@ -3049,8 +3089,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ========================================================
+    // CUSTOMER-FACING PLAN INFO
+    //
+    // IMPORTANT FIX:
+    // dbPlan.provider is the VENDOR name ("CheapDataHub"), so it
+    // must NOT be used as the label. The label is the NETWORK
+    // (MTN / AIRTEL / GLO), taken from the legacy map.
+    //
+    // If a plan exists only in the database (not in the legacy
+    // map), it falls back to "data". To fix that permanently, add
+    // a `network` column to DataPlan and use it here.
+    // ========================================================
+
     const plan = {
-      provider: dbPlan.provider || "unknown",
+      provider: dataPlans[bundleId]?.provider || "data",
 
       size: dbPlan.size || dataPlans[bundleId]?.size || "",
 
@@ -3123,10 +3176,12 @@ export async function POST(request: NextRequest) {
     const apiKey = process.env.CHEAPDATAHUB_API_KEY;
 
     if (!apiKey) {
+      console.error("CHEAPDATAHUB API KEY IS NOT CONFIGURED.");
+
       return NextResponse.json(
         {
           success: false,
-          message: "CheapDataHub API key is not configured.",
+          message: GENERIC_FAILURE,
         },
         { status: 500 },
       );
@@ -3135,15 +3190,8 @@ export async function POST(request: NextRequest) {
     // ========================================================
     // SERVER-SIDE PRICING
     //
-    // THIS IS THE IMPORTANT FIX.
-    //
-    // Before:
-    //   basePrice = dataPlans[bundleId].resellerPrice
-    //   providerCost = dataPlans[bundleId].apiPrice
-    //
-    // Now:
-    //   basePrice = DataPlan.sellingPrice
-    //   providerCost = DataPlan.providerPrice
+    // basePrice = DataPlan.sellingPrice
+    // providerCost = DataPlan.providerPrice
     // ========================================================
 
     const basePrice = Number(dbPlan.sellingPrice);
@@ -3151,20 +3199,27 @@ export async function POST(request: NextRequest) {
     const providerCost = Number(dbPlan.providerPrice);
 
     if (!Number.isFinite(basePrice) || basePrice <= 0) {
+      console.error("CHEAPDATAHUB INVALID SELLING PRICE:", dbPlan.sellingPrice);
+
       return NextResponse.json(
         {
           success: false,
-          message: "Invalid selling price configured for this data plan.",
+          message: GENERIC_FAILURE,
         },
         { status: 500 },
       );
     }
 
     if (!Number.isFinite(providerCost) || providerCost <= 0) {
+      console.error(
+        "CHEAPDATAHUB INVALID PROVIDER PRICE:",
+        dbPlan.providerPrice,
+      );
+
       return NextResponse.json(
         {
           success: false,
-          message: "Invalid provider price configured for this data plan.",
+          message: GENERIC_FAILURE,
         },
         { status: 500 },
       );
@@ -3275,6 +3330,8 @@ export async function POST(request: NextRequest) {
         signal: AbortSignal.timeout(30000),
       });
     } catch (error: any) {
+      console.error("CHEAPDATAHUB CONNECTION ERROR:", error);
+
       await prisma.transaction.update({
         where: {
           id: transaction.id,
@@ -3293,9 +3350,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
 
-          message: "Unable to connect to CheapDataHub.",
-
-          error: error?.message,
+          message: GENERIC_FAILURE,
         },
         { status: 502 },
       );
@@ -3308,17 +3363,16 @@ export async function POST(request: NextRequest) {
     try {
       providerResult = responseText.trim() ? JSON.parse(responseText) : null;
     } catch (error) {
-      console.error("========== CHEAPDATAHUB API ERROR ==========");
-      console.error("STATUS:", providerResponse.status);
-      console.error(
-        "CONTENT-TYPE:",
-        providerResponse.headers.get("content-type"),
-      );
-      console.error("RESPONSE:", responseText.substring(0, 2000));
-      console.error("============================================");
+      console.error("CHEAPDATAHUB JSON ERROR:", error);
     }
 
     if (!providerResult) {
+      console.error(
+        "CHEAPDATAHUB INVALID RESPONSE:",
+        providerResponse.status,
+        responseText,
+      );
+
       await prisma.transaction.update({
         where: {
           id: transaction.id,
@@ -3337,15 +3391,20 @@ export async function POST(request: NextRequest) {
         {
           success: false,
 
-          message: "CheapDataHub returned an invalid response.",
-
-          providerStatus: providerResponse.status,
+          message: GENERIC_FAILURE,
         },
         { status: 502 },
       );
     }
 
     if (!providerResponse.ok || !isProviderSuccess(providerResult)) {
+      // Real provider message stays in the server logs only.
+      console.error(
+        "CHEAPDATAHUB PURCHASE FAILED:",
+        providerResponse.status,
+        providerResult,
+      );
+
       await prisma.transaction.update({
         where: {
           id: transaction.id,
@@ -3364,14 +3423,7 @@ export async function POST(request: NextRequest) {
         {
           success: false,
 
-          message:
-            providerResult?.message ||
-            providerResult?.error ||
-            "Data purchase failed.",
-
-          providerStatus: providerResponse.status,
-
-          providerResponse: providerResult,
+          message: GENERIC_FAILURE,
         },
         {
           status:
@@ -3604,21 +3656,21 @@ export async function POST(request: NextRequest) {
       },
     );
 
+    // NOTE: no `server` and no raw `providerResponse` in the response.
     return NextResponse.json({
       success: true,
 
-      message: providerResult?.message || "Data purchase successful.",
+      message: SUCCESS_MESSAGE,
 
       reference,
 
       providerReference,
 
-      server: "CHEAPDATAHUB",
-
       bundle_id: bundleId,
 
       phone_number: cleanedPhone,
 
+      // Network label (MTN / AIRTEL / GLO), not the vendor.
       provider: plan.provider,
 
       plan_name: plan.name,
@@ -3648,10 +3700,9 @@ export async function POST(request: NextRequest) {
       walletBalance: result.walletBalance,
 
       referralBalance: result.referralBalance,
-
-      providerResponse: providerResult,
     });
   } catch (error: any) {
+    // Real error stays in the server logs only.
     console.error("DATA PURCHASE ERROR:", error);
 
     if (transactionId) {
@@ -3686,7 +3737,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
 
-        message: error?.message || "Data purchase failed.",
+        message: GENERIC_FAILURE,
       },
       { status: 500 },
     );
