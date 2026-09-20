@@ -3308,7 +3308,14 @@ export async function POST(request: NextRequest) {
     try {
       providerResult = responseText.trim() ? JSON.parse(responseText) : null;
     } catch (error) {
-      console.error("CHEAPDATAHUB JSON ERROR:", error);
+      console.error("========== CHEAPDATAHUB API ERROR ==========");
+      console.error("STATUS:", providerResponse.status);
+      console.error(
+        "CONTENT-TYPE:",
+        providerResponse.headers.get("content-type"),
+      );
+      console.error("RESPONSE:", responseText.substring(0, 2000));
+      console.error("============================================");
     }
 
     if (!providerResult) {
