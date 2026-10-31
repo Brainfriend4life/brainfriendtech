@@ -1,9 +1,9 @@
 ﻿import { NextResponse } from "next/server";
 
-export const dynamic = "force-dynamic";
-
 const PRICE_ENV: Record<string, string> = {
-  nin: "AGEVERIFY_NIN_VERIFY_PRICE",
+  "nin-regular": "AGEVERIFY_NIN_REGULAR_SLIP_PRICE",
+  "nin-standard": "AGEVERIFY_NIN_STANDARD_SLIP_PRICE",
+  "nin-premium": "AGEVERIFY_NIN_PREMIUM_SLIP_PRICE",
   "nin-phone": "AGEVERIFY_NIN_PHONE_PRICE",
   "nin-demo": "AGEVERIFY_NIN_DEMO_PRICE",
   bvn: "AGEVERIFY_BVN_VERIFY_PRICE",
@@ -21,15 +21,16 @@ export async function GET() {
   const prices: Record<string, number | null> = {};
 
   for (const [service, variable] of Object.entries(PRICE_ENV)) {
-    const raw = process.env[variable];
-    const value = Number(raw);
-
-    prices[service] =
-      raw !== undefined && raw.trim() !== "" &&
-      Number.isFinite(value) && value >= 0
-        ? value
-        : null;
+    const value = Number(process.env[variable]);
+    prices[service] = Number.isFinite(value) && value > 0 ? value : null;
   }
 
-  return NextResponse.json({ prices });
+  return NextResponse.json(
+    { prices },
+    {
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+      },
+    },
+  );
 }
