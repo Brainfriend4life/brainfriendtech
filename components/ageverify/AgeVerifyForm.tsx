@@ -434,7 +434,7 @@ export default function AgeVerifyForm({ service }: { service: string }) {
                 : `₦${currentPrice.toLocaleString("en-NG")}`}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {$service === "nin" ? "Price updates automatically when you select a slip type." : "{service === "nin" ? "Price updates automatically when you select a slip type." : "This is the current configured price for this service."}"}
+            {service === "nin" ? "Price updates automatically when you select a slip type." : "This is the current configured price for this service."}
           </p>
         </div>
 
@@ -619,6 +619,7 @@ export default function AgeVerifyForm({ service }: { service: string }) {
     </main>
   );
 }
+
 
 
 
