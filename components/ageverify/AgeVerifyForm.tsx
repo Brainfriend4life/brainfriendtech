@@ -249,11 +249,11 @@ export default function AgeVerifyForm({ service }: { service: string }) {
   }, []);
 
   const currentPrice =
-  service === "nin" || service === "nin-phone" || service === "bvn"
-    ? values.slip_type
-      ? prices[`nin-${values.slip_type}`]
-      : null
-    : prices[service];
+    service === "nin" || service === "nin-phone" || service === "bvn"
+      ? values.slip_type
+        ? prices[`nin-${values.slip_type}`]
+        : null
+      : prices[service];
   if (!config) return <p>Unknown verification service.</p>;
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -422,9 +422,7 @@ export default function AgeVerifyForm({ service }: { service: string }) {
         </p>
 
         <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
-          <p className="text-sm text-muted-foreground">
-            Verification Price
-          </p>
+          <p className="text-sm text-muted-foreground">Verification Price</p>
           <p className="mt-1 text-2xl font-bold text-primary">
             {pricesLoading
               ? "Loading price..."
@@ -433,7 +431,9 @@ export default function AgeVerifyForm({ service }: { service: string }) {
                 : `₦${currentPrice.toLocaleString("en-NG")}`}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {service === "nin" ? "Price updates automatically when you select a slip type." : "This is the current configured price for this service."}
+            {service === "nin"
+              ? "Price updates automatically when you select a slip type."
+              : "This is the current configured price for this service."}
           </p>
         </div>
 
@@ -603,10 +603,6 @@ export default function AgeVerifyForm({ service }: { service: string }) {
             </a>
           )}
 
-          <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-xl bg-muted p-3 text-xs text-foreground">
-            {JSON.stringify(result.result ?? result, null, 2)}
-          </pre>
-
           <Link
             href="/dashboard/verification/ageverify/history"
             className="text-sm font-semibold text-primary hover:underline"
@@ -618,9 +614,3 @@ export default function AgeVerifyForm({ service }: { service: string }) {
     </main>
   );
 }
-
-
-
-
-
-
