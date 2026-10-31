@@ -248,7 +248,12 @@ export default function AgeVerifyForm({ service }: { service: string }) {
     };
   }, []);
 
-  const currentPrice = prices[service];
+  const currentPrice =
+    service === "nin"
+      ? values.slip_type
+        ? prices[`nin-${values.slip_type}`]
+        : null
+      : prices[service];
 
   if (!config) return <p>Unknown verification service.</p>;
 
@@ -429,7 +434,7 @@ export default function AgeVerifyForm({ service }: { service: string }) {
                 : `₦${currentPrice.toLocaleString("en-NG")}`}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            This is the current configured price for this service.
+            {$service === "nin" ? "Price updates automatically when you select a slip type." : "{service === "nin" ? "Price updates automatically when you select a slip type." : "This is the current configured price for this service."}"}
           </p>
         </div>
 
@@ -614,3 +619,6 @@ export default function AgeVerifyForm({ service }: { service: string }) {
     </main>
   );
 }
+
+
+
