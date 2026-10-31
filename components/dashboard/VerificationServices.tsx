@@ -50,9 +50,6 @@ export default function VerificationServices() {
           <h2 className="text-lg font-bold tracking-tight text-foreground">
             Verification Services
           </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Choose a service to continue.
-          </p>
         </div>
 
         <span className="shrink-0 rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[10px] font-semibold text-muted-foreground">
@@ -68,7 +65,7 @@ export default function VerificationServices() {
             <Link
               key={service.slug}
               href={service.href}
-              className="group flex min-w-0 min-h-[154px] flex-col rounded-xl border border-border bg-card p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md active:scale-[0.98] sm:min-h-[165px] sm:p-3.5"
+              className="group flex min-w-0 min-h-[110px] flex-col rounded-xl border border-border bg-card p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md active:scale-[0.98] sm:min-h-[120px] sm:p-3.5"
             >
               <div className="flex items-center justify-between gap-1.5">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:h-9 sm:w-9">
@@ -84,10 +81,6 @@ export default function VerificationServices() {
                 <h3 className="break-words text-xs font-bold leading-[17px] text-foreground sm:text-[13px] sm:leading-5">
                   {service.title}
                 </h3>
-
-                <p className="mt-1 line-clamp-2 break-words text-[10px] leading-[15px] text-muted-foreground sm:text-[11px] sm:leading-[17px]">
-                  {service.desc}
-                </p>
 
                 {service.slug === "nin" && (
                   <p className="mt-2 text-[11px] font-bold text-primary sm:text-xs">
@@ -113,3 +106,4 @@ export default function VerificationServices() {
     </section>
   );
 }
+
