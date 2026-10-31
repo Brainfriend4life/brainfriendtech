@@ -74,15 +74,6 @@ export async function POST(
         message: "This request has already been received.",
       }, { status: existingRequest.status === "PROCESSING" ? 202 : 200 });
     }
-    const priceVariable = PRICE_ENV[service];
-    const price = Number(priceVariable ? process.env[priceVariable] : undefined);
-
-    if (!Number.isFinite(price) || price <= 0) {
-      return NextResponse.json(
-        { error: "This service has no valid selling price configured." },
-        { status: 503 },
-      );
-    }
 
     let payload: Record<string, any>;
     let pin = "";
@@ -125,6 +116,31 @@ export async function POST(
       return NextResponse.json(
         { error: "A valid payload object is required." },
         { status: 400 },
+      );
+    }
+    let price: number;
+
+    if (service === "nin" || service === "nin-phone" || service === "bvn") {
+      const slipType = String(payload.slip_type ?? "").toLowerCase();
+      const priceVariable = NIN_SLIP_PRICES[slipType];
+
+      if (!priceVariable) {
+        return NextResponse.json(
+          { error: "Select a valid slip type: regular, standard or premium." },
+          { status: 400 },
+        );
+      }
+
+      price = Number(process.env[priceVariable]);
+    } else {
+      const priceVariable = PRICE_ENV[service];
+      price = Number(priceVariable ? process.env[priceVariable] : undefined);
+    }
+
+    if (!Number.isFinite(price) || price <= 0) {
+      return NextResponse.json(
+        { error: "This service has no valid selling price configured." },
+        { status: 503 },
       );
     }
 
@@ -489,6 +505,8 @@ async function refundVerification(verificationId: string) {
     });
   });
 }
+
+
 
 
 
