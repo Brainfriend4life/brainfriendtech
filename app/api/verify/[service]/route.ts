@@ -18,6 +18,11 @@ const PRICE_ENV: Record<string, string> = {
   "bvn-retrieval": "AGEVERIFY_BVN_RETRIEVAL_PRICE",
   "ipe-special": "AGEVERIFY_IPE_SPECIAL_PRICE",
 };
+const NIN_SLIP_PRICES: Record<string, string> = {
+  regular: "AGEVERIFY_NIN_REGULAR_SLIP_PRICE",
+  standard: "AGEVERIFY_NIN_STANDARD_SLIP_PRICE",
+  premium: "AGEVERIFY_NIN_PREMIUM_SLIP_PRICE",
+};
 
 function accepted(body: any) {
   return body?.status === true;
@@ -484,4 +489,5 @@ async function refundVerification(verificationId: string) {
     });
   });
 }
+
 

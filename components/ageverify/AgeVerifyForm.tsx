@@ -249,12 +249,11 @@ export default function AgeVerifyForm({ service }: { service: string }) {
   }, []);
 
   const currentPrice =
-    service === "nin"
-      ? values.slip_type
-        ? prices[`nin-${values.slip_type}`]
-        : null
-      : prices[service];
-
+  service === "nin" || service === "nin-phone"
+    ? values.slip_type
+      ? prices[`nin-${values.slip_type}`]
+      : null
+    : prices[service];
   if (!config) return <p>Unknown verification service.</p>;
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -619,6 +618,7 @@ export default function AgeVerifyForm({ service }: { service: string }) {
     </main>
   );
 }
+
 
 
 
