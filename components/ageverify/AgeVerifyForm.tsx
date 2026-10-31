@@ -249,7 +249,7 @@ export default function AgeVerifyForm({ service }: { service: string }) {
   }, []);
 
   const currentPrice =
-  service === "nin" || service === "nin-phone"
+  service === "nin" || service === "nin-phone" || service === "bvn"
     ? values.slip_type
       ? prices[`nin-${values.slip_type}`]
       : null
@@ -618,6 +618,7 @@ export default function AgeVerifyForm({ service }: { service: string }) {
     </main>
   );
 }
+
 
 
 
