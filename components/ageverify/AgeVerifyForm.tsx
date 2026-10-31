@@ -247,9 +247,8 @@ export default function AgeVerifyForm({ service }: { service: string }) {
       active = false;
     };
   }, []);
-
   const currentPrice =
-    service === "nin" || service === "nin-phone" || service === "bvn"
+    service === "nin" || service === "bvn"
       ? values.slip_type
         ? prices[`nin-${values.slip_type}`]
         : null
