@@ -171,3 +171,90 @@
     @apply bg-background text-foreground;
   }
 }
+/* ===== Brainfriend AgeVerify: Compact Modern UI ===== */
+:root {
+  --av-radius: 12px;
+  --av-border: #e5e7eb;
+}
+
+/* Compact form layout */
+main form {
+  gap: 14px !important;
+}
+
+main form label {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  margin-bottom: 5px !important;
+}
+
+main form input,
+main form select,
+main form textarea {
+  min-height: 40px !important;
+  padding: 9px 12px !important;
+  font-size: 13px !important;
+  border-radius: 9px !important;
+  border: 1px solid var(--av-border) !important;
+  box-shadow: none !important;
+}
+
+main form textarea {
+  min-height: 90px !important;
+}
+
+main form button {
+  min-height: 38px !important;
+  padding: 9px 16px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  border-radius: 9px !important;
+}
+
+/* Reduce oversized cards and panels */
+main form > div,
+main form section {
+  border-radius: var(--av-radius);
+}
+
+main table {
+  width: 100%;
+  font-size: 13px !important;
+  border-collapse: collapse;
+}
+
+main table th,
+main table td {
+  padding: 10px 12px !important;
+  font-size: 12px !important;
+  white-space: nowrap;
+}
+
+main table th {
+  font-weight: 600 !important;
+}
+
+/* Smaller status labels */
+main [class*="badge"],
+main [class*="Badge"] {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  border-radius: 20px !important;
+}
+
+/* More compact mobile layout */
+@media (max-width: 640px) {
+  main form input,
+  main form select,
+  main form textarea {
+    font-size: 13px !important;
+  }
+
+  main table th,
+  main table td {
+    padding: 8px !important;
+    font-size: 11px !important;
+  }
+}
+/* ===== End AgeVerify UI styling ===== */
+

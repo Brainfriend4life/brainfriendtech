@@ -8,6 +8,24 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model NinDocument {
+  id           String   @id @default(cuid())
+  userId       String
+  nin          String
+  serviceSlug  String
+  documentType String
+  fileUrl      String
+  providerRef  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([nin])
+  @@index([serviceSlug])
+}
+
 model Review {
   id          String   @id @default(cuid())
   displayName String
@@ -34,9 +52,10 @@ model User {
   phone    String @unique
   password String
   transactionPinResetOtp          String?
-  transactionPinResetOtpExpires   DateTime? 
+  transactionPinResetOtpExpires   DateTime?
   transactionPinResetAttempts     Int      @default(0)
   reviews Review[]
+  ninDocuments NinDocument[]
 
   // ===============================
   // TRANSACTION SECURITY
@@ -121,6 +140,8 @@ model User {
   examPins ExamPin[]
 
   ninVerifications NinVerification[]
+
+  identityVerifications IdentityVerification[]
 
   transactions Transaction[]
 
@@ -559,3 +580,23 @@ enum BusinessWithdrawalMethod {
   MANUAL
   PAYSTACK
 }
+
+model IdentityVerification {
+  id          String   @id @default(cuid())
+  userId      String
+  service     String
+  reference   String   @unique
+  idempotencyKey String? @unique
+  amount      Float
+  status      String   @default("PROCESSING") // PROCESSING | COMPLETED | FAILED
+  upstreamRef String?  // provider reference, never sent to the browser
+  result      Json?
+  refunded    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+

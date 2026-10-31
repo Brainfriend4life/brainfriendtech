@@ -2,6 +2,7 @@ import BalanceCard from "@/components/dashboard/BalanceCard";
 import QuickActions from "@/components/dashboard/QuickActions";
 import RecentTransactions from "@/components/dashboard/RecentTransactions";
 import ProfileCard from "@/components/dashboard/ProfileCard";
+import VerificationServices from "@/components/dashboard/VerificationServices";
 
 export default function DashboardPage() {
   return (
@@ -73,6 +74,8 @@ export default function DashboardPage() {
       </a>
 
       <QuickActions />
+
+      <VerificationServices />
 
       <RecentTransactions />
 

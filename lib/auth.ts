@@ -191,3 +191,25 @@ export const authOptions: AuthOptions = {
   },
 };
 
+
+export async function getSessionUser() {
+  const { getServerSession } = await import("next-auth");
+
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.email) {
+    return null;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: {
+      email: session.user.email,
+    },
+  });
+
+  if (!user || user.status !== "ACTIVE") {
+    return null;
+  }
+
+  return user;
+}
