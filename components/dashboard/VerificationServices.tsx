@@ -57,7 +57,7 @@ export default function VerificationServices() {
         </span>
       </div>
 
-      <div className="grid w-full grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 xl:grid-cols-4">
+      <div className="grid w-full grid-cols-3 gap-2 sm:gap-3 md:grid-cols-3 xl:grid-cols-4">
         {SERVICES.map((service) => {
           const Icon = ICONS[service.icon] ?? CircleHelp;
 
@@ -69,7 +69,10 @@ export default function VerificationServices() {
             >
               <div className="flex items-center justify-between gap-1.5">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground sm:h-9 sm:w-9">
-                  <Icon className="h-4 w-4 sm:h-[17px] sm:w-[17px]" strokeWidth={1.8} />
+                  <Icon
+                    className="h-4 w-4 sm:h-[17px] sm:w-[17px]"
+                    strokeWidth={1.8}
+                  />
                 </span>
 
                 <span className="rounded-full bg-emerald-500/10 px-1.5 py-1 text-[9px] font-semibold text-emerald-600 sm:px-2 sm:text-[10px]">
@@ -106,4 +109,3 @@ export default function VerificationServices() {
     </section>
   );
 }
-
