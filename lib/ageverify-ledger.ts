@@ -50,7 +50,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
         throw new Error("AgeVerify charge transaction not found.");
       }
 
-      // Unique transactionId makes this finalization idempotent.
+      // Prevent duplicate revenue and referral credits.
       const existingRevenue = await tx.businessRevenue.findUnique({
         where: {
           transactionId: chargeTransaction.id,
@@ -61,26 +61,36 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
         return { alreadyRecorded: true };
       }
 
-      const setting = await getReferralPercentage(tx);
-
-      const providerCost = Number(chargeTransaction.cost);
-
+      // Customer selling price.
       const amount = Number(verification.amount);
-      const grossProfit = Number((amount - providerCost).toFixed(2));
+
+      // Actual provider deduction saved for this transaction.
+      // This must be populated by the AgeVerify transaction route.
+      const providerCost = Number(chargeTransaction.cost);
 
       if (
         !Number.isFinite(amount) ||
+        amount <= 0 ||
         !Number.isFinite(providerCost) ||
-        providerCost < 0 ||
+        providerCost <= 0 ||
         providerCost > amount
       ) {
-        throw new Error("Invalid saved AgeVerify pricing.");
+        throw new Error(
+          `Actual AgeVerify provider deduction is missing or invalid for ${verification.reference}. Revenue was not recorded.`,
+        );
       }
 
+      // Gross profit = customer payment - actual provider deduction.
+      const grossProfit = Number((amount - providerCost).toFixed(2));
+
+      // Referral commission is calculated from gross profit.
+      const referralPercentage = await getReferralPercentage(tx);
+
       const referralCommission = verification.user.referredBy
-        ? Number(Math.min(grossProfit, (amount * setting) / 100).toFixed(2))
+        ? Number(((grossProfit * referralPercentage) / 100).toFixed(2))
         : 0;
 
+      // Remaining profit belongs to Brainfriend Global Tech.
       const profit = Number((grossProfit - referralCommission).toFixed(2));
 
       let businessWallet = await tx.businessWallet.findUnique({
@@ -138,6 +148,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
         },
       });
 
+      // Credit the referrer only when one exists.
       if (verification.user.referredBy && referralCommission > 0) {
         await tx.user.update({
           where: {
@@ -156,7 +167,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
             referredUserId: verification.userId,
             transactionId: chargeTransaction.id,
             amount: referralCommission,
-            percentage: setting,
+            percentage: referralPercentage,
             transactionAmount: amount,
             type: "NIN",
             status: "SUCCESS",
@@ -167,7 +178,9 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
       }
 
       await tx.transaction.update({
-        where: { id: chargeTransaction.id },
+        where: {
+          id: chargeTransaction.id,
+        },
         data: {
           status: "SUCCESS",
           cost: providerCost,
@@ -180,7 +193,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
         amount,
         providerCost,
         grossProfit,
-        referralPercentage: setting,
+        referralPercentage,
         referralCommission,
         profit,
         businessBalance: newBusinessBalance,
@@ -223,7 +236,9 @@ export async function refundAgeVerify(verificationId: string) {
     }
 
     await tx.user.update({
-      where: { id: verification.userId },
+      where: {
+        id: verification.userId,
+      },
       data: {
         walletBalance: {
           increment: verification.amount,

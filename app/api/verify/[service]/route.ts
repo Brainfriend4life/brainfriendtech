@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { getAgeVerifyService } from "@/lib/ageverify-config";
 import { av } from "@/lib/ageverify";
-import { getAgeVerifyProviderCost } from "@/lib/ageverify-pricing";
 import { finalizeAgeVerifySuccess, refundAgeVerify } from "@/lib/ageverify-ledger";
 
 const PRICE_ENV: Record<string, string> = {
@@ -163,9 +162,6 @@ export async function POST(
         { status: 503 },
       );
     }
-    const providerCost = getAgeVerifyProviderCost(service, payload);
-
-
     if (!/^\d{4}$/.test(pin)) {
       return NextResponse.json(
         { error: "Enter your 4-digit transaction PIN." },
@@ -285,7 +281,7 @@ export async function POST(
           status: "PENDING",
           reference: `CHARGE-${reference}`,
           provider: "AGEVERIFY",
-          cost: providerCost,
+          cost: 0,
           profit: 0,
         },
       });
