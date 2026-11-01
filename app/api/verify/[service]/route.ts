@@ -47,6 +47,8 @@ function extractProviderCost(response: unknown): number | null {
     root.amount,
     root.price,
     root.cost_ngn,
+    root.amount_charged,
+    nested.amount_charged,
     nested.cost,
     nested.amount,
     nested.price,
@@ -78,7 +80,7 @@ function extractProviderCost(response: unknown): number | null {
  */
 function hideProvider(message: unknown): string | null {
   if (typeof message !== "string" || !message.trim()) return null;
-  return message.replace(/age\s*verify/gi, "the verification service");
+  return message.replace(/(age|amb)\s*verify/gi, "the verification service");
 }
 
 /**
@@ -137,6 +139,17 @@ export async function POST(
           error: "A valid payload object is required.",
           example: { payload: { nin: "YOUR_NIN" } },
         },
+        { status: 400 },
+      );
+    }
+
+    // The provider bills per accepted ID, but your selling price is per
+    // request, so batches are limited to one ID until pricing is multiplied.
+    const idList = (payload as any).tracking_ids ?? (payload as any).nins;
+
+    if (Array.isArray(idList) && idList.length > 1) {
+      return NextResponse.json(
+        { error: "Please submit one ID per request." },
         { status: 400 },
       );
     }
@@ -258,8 +271,18 @@ export async function POST(
       null;
 
     // Provider failure: preserve the existing refund flow.
+    // This API answers { status: false } on errors, and for batch-style
+    // services it can accept nothing (accepted_count / submitted = 0), in
+    // which case the provider charged nothing and the customer is refunded.
+    const nothingAccepted =
+      providerData?.accepted_count === 0 ||
+      (typeof providerData?.submitted === "number" &&
+        providerData.submitted === 0);
+
     if (
       !response.ok ||
+      response.body?.status === false ||
+      nothingAccepted ||
       ["failed", "failure", "rejected", "declined"].includes(providerStatus)
     ) {
       await prisma.identityVerification.update({
@@ -275,9 +298,10 @@ export async function POST(
 
       return NextResponse.json(
         {
-          error:
-            hideProvider(response.body?.message) ||
-            "Verification failed. Your wallet has been refunded.",
+          error: nothingAccepted
+            ? "Your request was not accepted. Your wallet has been refunded."
+            : hideProvider(response.body?.message) ||
+              "Verification failed. Your wallet has been refunded.",
           reference,
           status: "FAILED",
           refunded: true,
@@ -296,6 +320,8 @@ export async function POST(
       "submitted",
       "in_progress",
       "awaiting",
+      "review",
+      "new",
     ];
     const hasResultData =
       providerData &&
