@@ -40,7 +40,7 @@ export default function VerificationServices() {
   const money = (value: number | null | undefined) =>
     typeof value === "number" && value > 0
       ? `₦${value.toLocaleString("en-NG")}`
-      : "Price unavailable";
+      : "select";
 
   return (
     <section className="w-full space-y-4">
