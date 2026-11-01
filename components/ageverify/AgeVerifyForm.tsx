@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -248,11 +248,15 @@ export default function AgeVerifyForm({ service }: { service: string }) {
     };
   }, []);
   const currentPrice =
-    service === "nin" || service === "bvn"
+    service === "nin-phone"
       ? values.slip_type
-        ? prices[`nin-${values.slip_type}`]
+        ? prices[`nin-phone-${values.slip_type}`]
         : null
-      : prices[service];
+      : service === "nin" || service === "bvn"
+        ? values.slip_type
+          ? prices[`nin-${values.slip_type}`]
+          : null
+        : prices[service];
   if (!config) return <p>Unknown verification service.</p>;
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {

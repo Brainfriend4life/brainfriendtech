@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { getAgeVerifyService } from "@/lib/ageverify-config";
@@ -22,6 +22,12 @@ const NIN_SLIP_PRICES: Record<string, string> = {
   regular: "AGEVERIFY_NIN_REGULAR_SLIP_PRICE",
   standard: "AGEVERIFY_NIN_STANDARD_SLIP_PRICE",
   premium: "AGEVERIFY_NIN_PREMIUM_SLIP_PRICE",
+};
+
+const NIN_PHONE_PRICES: Record<string, string> = {
+  regular: "AGEVERIFY_NIN_PHONE_REGULAR_PRICE",
+  standard: "AGEVERIFY_NIN_PHONE_STANDARD_PRICE",
+  premium: "AGEVERIFY_NIN_PHONE_PREMIUM_PRICE",
 };
 
 function accepted(body: any) {
@@ -120,7 +126,19 @@ export async function POST(
     }
     let price: number;
 
-    if (service === "nin" || service === "nin-phone" || service === "bvn") {
+    if (service === "nin-phone") {
+      const slipType = String(payload.slip_type ?? "standard").toLowerCase();
+      const priceVariable = NIN_PHONE_PRICES[slipType];
+
+      if (!priceVariable) {
+        return NextResponse.json(
+          { error: "Select a valid phone slip type: regular, standard or premium." },
+          { status: 400 },
+        );
+      }
+
+      price = Number(process.env[priceVariable]);
+    } else if (service === "nin" || service === "bvn") {
       const slipType = String(payload.slip_type ?? "").toLowerCase();
       const priceVariable = NIN_SLIP_PRICES[slipType];
 
@@ -503,7 +521,7 @@ async function refundVerification(verificationId: string) {
         profit: 0,
       },
     });
-  });
+  }, { maxWait: 10000, timeout: 20000 });
 }
 
 
