@@ -2,6 +2,10 @@
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { av } from "@/lib/ageverify";
+import {
+  finalizeAgeVerifySuccess,
+  refundAgeVerify,
+} from "@/lib/ageverify-ledger";
 
 const STATUS_ENDPOINTS: Record<string, string> = {
   "nin-validation": "api/v1/nin_validation_status.php",
@@ -33,7 +37,10 @@ export async function POST(req: Request) {
     }
 
     const record = await prisma.identityVerification.findFirst({
-      where: { reference, userId: user.id },
+      where: {
+        reference,
+        userId: user.id,
+      },
     });
 
     if (!record) {
@@ -43,7 +50,23 @@ export async function POST(req: Request) {
       );
     }
 
-    if (record.status === "COMPLETED" || record.status === "FAILED") {
+    if (record.status === "COMPLETED") {
+      try {
+        await finalizeAgeVerifySuccess(record.id);
+      } catch (error) {
+        console.error("AGEVERIFY LEDGER RETRY ERROR:", error);
+
+        return NextResponse.json(
+          {
+            error:
+              "Verification is completed, but business transaction recording needs attention.",
+            reference: record.reference,
+            status: record.status,
+          },
+          { status: 500 },
+        );
+      }
+
       return NextResponse.json({
         reference: record.reference,
         status: record.status,
@@ -52,25 +75,43 @@ export async function POST(req: Request) {
       });
     }
 
+    if (record.status === "FAILED") {
+      const refundResult = await refundAgeVerify(record.id);
+
+      return NextResponse.json({
+        reference: record.reference,
+        status: record.status,
+        result: record.result,
+        refunded: refundResult.refunded || record.refunded,
+      });
+    }
     const endpoint = STATUS_ENDPOINTS[record.service];
 
     if (!endpoint) {
-      return NextResponse.json({
-        error: "Status checking is not available for this service.",
-        reference,
-        status: record.status,
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: "Status checking is not available for this service.",
+          reference,
+          status: record.status,
+        },
+        { status: 400 },
+      );
     }
 
     const savedResult = record.result as Record<string, any> | null;
+
     const upstreamRef = record.upstreamRef;
 
     if (!upstreamRef) {
-      return NextResponse.json({
-        error: "Provider reference is not available yet. Please contact support.",
-        reference,
-        status: record.status,
-      }, { status: 409 });
+      return NextResponse.json(
+        {
+          error:
+            "Provider reference is not available yet. Please contact support.",
+          reference,
+          status: record.status,
+        },
+        { status: 409 },
+      );
     }
 
     let statusPayload: Record<string, any> = {};
@@ -122,24 +163,31 @@ export async function POST(req: Request) {
     });
 
     if (!response.ok || response.body?.status !== true) {
-      return NextResponse.json({
-        error: response.body?.message || "Unable to retrieve provider status.",
-        reference,
-        status: record.status,
-      }, { status: response.status || 502 });
+      return NextResponse.json(
+        {
+          error:
+            response.body?.message || "Unable to retrieve provider status.",
+          reference,
+          status: record.status,
+        },
+        { status: response.status || 502 },
+      );
     }
 
     const providerData = response.body?.data ?? {};
     const providerStatus = String(providerData.status ?? "").toLowerCase();
 
     const completedStatuses = [
-      "completed", "complete", "success", "successful",
-      "approved", "cleared", "done",
+      "completed",
+      "complete",
+      "success",
+      "successful",
+      "approved",
+      "cleared",
+      "done",
     ];
 
-    const failedStatuses = [
-      "failed", "failure", "rejected", "declined",
-    ];
+    const failedStatuses = ["failed", "failure", "rejected", "declined"];
 
     let newStatus = record.status;
 
@@ -174,18 +222,45 @@ export async function POST(req: Request) {
       },
     });
 
+    if (newStatus === "COMPLETED") {
+      try {
+        await finalizeAgeVerifySuccess(record.id);
+      } catch (ledgerError) {
+        console.error("AGEVERIFY STATUS LEDGER ERROR:", ledgerError);
+
+        return NextResponse.json(
+          {
+            error:
+              "Verification completed, but transaction recording needs attention. Please contact support with this reference.",
+            reference: updated.reference,
+            status: updated.status,
+            result: updated.result,
+          },
+          { status: 500 },
+        );
+      }
+    }
+
+    let refunded = updated.refunded;
+
+    if (newStatus === "FAILED") {
+      const refundResult = await refundAgeVerify(record.id);
+      refunded = refundResult.refunded || updated.refunded;
+    }
+
     return NextResponse.json({
       reference: updated.reference,
       status: updated.status,
       result: updated.result,
-      refunded: updated.refunded,
+      refunded,
       message: response.body?.message,
     });
   } catch (error) {
     console.error("AGEVERIFY STATUS ERROR:", error);
 
-    return NextResponse.json({
-      error: "Unable to check verification status.",
-    }, { status: 500 });
+    return NextResponse.json(
+      { error: "Unable to check verification status." },
+      { status: 500 },
+    );
   }
 }

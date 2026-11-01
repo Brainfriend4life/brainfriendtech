@@ -1,13 +1,14 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 
 const PRICE_ENV: Record<string, string> = {
   "nin-regular": "AGEVERIFY_NIN_REGULAR_SLIP_PRICE",
   "nin-standard": "AGEVERIFY_NIN_STANDARD_SLIP_PRICE",
   "nin-premium": "AGEVERIFY_NIN_PREMIUM_SLIP_PRICE",
-  "nin-phone": "AGEVERIFY_NIN_PHONE_PRICE",
+
   "nin-phone-regular": "AGEVERIFY_NIN_PHONE_REGULAR_PRICE",
   "nin-phone-standard": "AGEVERIFY_NIN_PHONE_STANDARD_PRICE",
   "nin-phone-premium": "AGEVERIFY_NIN_PHONE_PREMIUM_PRICE",
+
   "nin-demo": "AGEVERIFY_NIN_DEMO_PRICE",
   bvn: "AGEVERIFY_BVN_VERIFY_PRICE",
   "nin-validation": "AGEVERIFY_NIN_VALIDATION_PRICE",
@@ -25,6 +26,7 @@ export async function GET() {
 
   for (const [service, variable] of Object.entries(PRICE_ENV)) {
     const value = Number(process.env[variable]);
+
     prices[service] = Number.isFinite(value) && value > 0 ? value : null;
   }
 
