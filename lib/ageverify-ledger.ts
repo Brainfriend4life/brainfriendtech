@@ -13,9 +13,7 @@ async function getReferralPercentage(
 
   const percentage = Number(setting?.value ?? 1);
 
-  if (!Number.isFinite(percentage)) {
-    return 1;
-  }
+  if (!Number.isFinite(percentage)) return 1;
 
   return Math.max(0, Math.min(100, percentage));
 }
@@ -39,44 +37,37 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
       }
 
       if (verification.status !== "COMPLETED") {
-        throw new Error("Cannot record business revenue before completion.");
+        throw new Error("Cannot record revenue before completion.");
       }
 
-      const chargeTransaction = await tx.transaction.findUnique({
+      const charge = await tx.transaction.findUnique({
         where: {
           reference: `CHARGE-${verification.reference}`,
         },
       });
 
-      if (!chargeTransaction) {
-        throw new Error("AgeVerify charge transaction not found.");
+      if (!charge || charge.provider !== "AGEVERIFY") {
+        throw new Error("AgeVerify customer charge not found.");
       }
 
-      // Prevent duplicate revenue recording.
       const existingRevenue = await tx.businessRevenue.findUnique({
-        where: {
-          transactionId: chargeTransaction.id,
-        },
+        where: { transactionId: charge.id },
       });
 
       if (existingRevenue) {
-        // Repair the charge status if it was left pending.
         await tx.transaction.update({
-          where: {
-            id: chargeTransaction.id,
-          },
-          data: {
-            status: "SUCCESS",
-          },
+          where: { id: charge.id },
+          data: { status: "SUCCESS" },
         });
 
         return {
           alreadyRecorded: true,
+          revenueId: existingRevenue.id,
         };
       }
 
       const amount = Number(verification.amount);
-      const providerCost = Number(chargeTransaction.cost);
+      const providerCost = Number(charge.cost);
 
       if (
         !Number.isFinite(amount) ||
@@ -85,33 +76,26 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
         providerCost <= 0
       ) {
         throw new Error(
-          `Actual AgeVerify provider deduction is missing or invalid for ${verification.reference}. Revenue was not recorded.`,
+          `Valid selling price or provider cost is missing for ${verification.reference}.`,
         );
       }
 
-      // Actual business result before referral commission.
       const grossProfit = Number((amount - providerCost).toFixed(2));
-
       const referralPercentage = await getReferralPercentage(tx);
 
-      // Referral commission is paid only when there is positive
-      // gross profit and the customer has a referrer.
       const referralCommission =
         verification.user.referredBy && grossProfit > 0
           ? Number(((grossProfit * referralPercentage) / 100).toFixed(2))
           : 0;
 
-      // Negative profit is preserved as a genuine business loss.
-      const profit = Number((grossProfit - referralCommission).toFixed(2));
+      const netProfit = Number((grossProfit - referralCommission).toFixed(2));
 
-      let businessWallet = await tx.businessWallet.findUnique({
-        where: {
-          name: BUSINESS_NAME,
-        },
+      let wallet = await tx.businessWallet.findUnique({
+        where: { name: BUSINESS_NAME },
       });
 
-      if (!businessWallet) {
-        businessWallet = await tx.businessWallet.create({
+      if (!wallet) {
+        wallet = await tx.businessWallet.create({
           data: {
             name: BUSINESS_NAME,
             balance: 0,
@@ -124,95 +108,80 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
         });
       }
 
-      const newBusinessBalance = Number(
-        (Number(businessWallet.balance) + profit).toFixed(2),
+      const newBalance = Number(
+        (Number(wallet.balance) + netProfit).toFixed(2),
       );
 
       await tx.businessWallet.update({
-        where: {
-          id: businessWallet.id,
-        },
+        where: { id: wallet.id },
         data: {
-          balance: newBusinessBalance,
-          totalRevenue: {
-            increment: amount,
-          },
-          totalCost: {
-            increment: providerCost,
-          },
-          totalProfit: {
-            increment: profit,
-          },
-          availableProfit: {
-            increment: profit,
-          },
+          balance: newBalance,
+          totalRevenue: { increment: amount },
+          totalCost: { increment: providerCost },
+          totalProfit: { increment: netProfit },
+          availableProfit: { increment: netProfit },
         },
       });
 
-      await tx.businessRevenue.create({
+      const revenue = await tx.businessRevenue.create({
         data: {
-          transactionId: chargeTransaction.id,
+          transactionId: charge.id,
           type: "NIN",
           provider: "AGEVERIFY",
           amount,
           cost: providerCost,
-          profit,
+          profit: netProfit,
           reference: verification.reference,
           description: `AgeVerify ${verification.service} verification (${verification.reference})`,
-          businessWalletId: businessWallet.id,
+          businessWalletId: wallet.id,
         },
       });
 
-      // Credit the referrer only when an actual commission is due.
       if (verification.user.referredBy && referralCommission > 0) {
+        const referrerId = verification.user.referredBy.id;
+
         await tx.user.update({
-          where: {
-            id: verification.user.referredBy.id,
-          },
+          where: { id: referrerId },
           data: {
-            referralBalance: {
-              increment: referralCommission,
-            },
+            referralBalance: { increment: referralCommission },
           },
         });
 
         await tx.referralEarning.create({
           data: {
-            referrerId: verification.user.referredBy.id,
+            referrerId,
             referredUserId: verification.userId,
-            transactionId: chargeTransaction.id,
+            transactionId: charge.id,
             amount: referralCommission,
             percentage: referralPercentage,
             transactionAmount: amount,
             type: "NIN",
             status: "SUCCESS",
-            description: `Referral earning from ${verification.user.fullName}'s AgeVerify ${verification.service} verification of ₦${amount}`,
+            description: `Referral earning from AgeVerify ${verification.service} verification`,
             reference: `REF-${verification.reference}`,
           },
         });
       }
 
-      // Finalize the original customer charge.
       await tx.transaction.update({
-        where: {
-          id: chargeTransaction.id,
-        },
+        where: { id: charge.id },
         data: {
           status: "SUCCESS",
           cost: providerCost,
-          profit,
+          profit: netProfit,
         },
       });
 
       return {
         alreadyRecorded: false,
+        revenueId: revenue.id,
         amount,
         providerCost,
         grossProfit,
         referralPercentage,
         referralCommission,
-        profit,
-        businessBalance: newBusinessBalance,
+        netProfit,
+        businessBalance: newBalance,
       };
     },
     {
@@ -225,49 +194,34 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
 export async function refundAgeVerify(verificationId: string) {
   return prisma.$transaction(async (tx) => {
     const verification = await tx.identityVerification.findUnique({
-      where: {
-        id: verificationId,
-      },
+      where: { id: verificationId },
     });
 
     if (!verification || verification.refunded) {
-      return {
-        refunded: false,
-      };
+      return { refunded: false };
     }
 
     if (verification.status !== "FAILED") {
-      return {
-        refunded: false,
-      };
+      return { refunded: false };
     }
 
-    // Claim the refund once to prevent duplicate wallet credits.
     const claimed = await tx.identityVerification.updateMany({
       where: {
         id: verificationId,
         refunded: false,
         status: "FAILED",
       },
-      data: {
-        refunded: true,
-      },
+      data: { refunded: true },
     });
 
     if (claimed.count === 0) {
-      return {
-        refunded: false,
-      };
+      return { refunded: false };
     }
 
     await tx.user.update({
-      where: {
-        id: verification.userId,
-      },
+      where: { id: verification.userId },
       data: {
-        walletBalance: {
-          increment: verification.amount,
-        },
+        walletBalance: { increment: verification.amount },
       },
     });
 
@@ -288,6 +242,7 @@ export async function refundAgeVerify(verificationId: string) {
     await tx.transaction.updateMany({
       where: {
         reference: `CHARGE-${verification.reference}`,
+        provider: "AGEVERIFY",
         status: "PENDING",
       },
       data: {
@@ -297,8 +252,6 @@ export async function refundAgeVerify(verificationId: string) {
       },
     });
 
-    return {
-      refunded: true,
-    };
+    return { refunded: true };
   });
 }

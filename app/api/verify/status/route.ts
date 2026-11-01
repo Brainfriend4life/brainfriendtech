@@ -18,6 +18,22 @@ const STATUS_ENDPOINTS: Record<string, string> = {
   "ipe-special": "api/v1/ipe_special_status.php",
 };
 
+/**
+ * Confirmed provider tariffs supplied for these exact service slugs.
+ * Unknown services must be reconciled rather than assigned an invented cost.
+ *
+ * Environment variables can override a tariff:
+ * AGEVERIFY_PROVIDER_COST_<SERVICE_SLUG_IN_UPPERCASE>
+ * Example: AGEVERIFY_PROVIDER_COST_IPE_CLEARANCE=350
+ */
+const PROVIDER_COSTS: Record<string, number> = {
+  personalization: 170,
+  "ipe-clearance": 350,
+  "bvn-crm": 1000,
+  "bvn-retrieval": 1100,
+  "modification-ipe": 1500,
+};
+
 function toPositiveNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === "") {
     return null;
@@ -32,11 +48,6 @@ function toPositiveNumber(value: unknown): number | null {
   return parsed;
 }
 
-/**
- * Extract the actual provider deduction.
- * Kobo values are converted to naira.
- * Never use the customer's selling price as provider cost.
- */
 function extractProviderCost(response: unknown): number | null {
   if (!response || typeof response !== "object") {
     return null;
@@ -45,23 +56,14 @@ function extractProviderCost(response: unknown): number | null {
   const root = response as Record<string, any>;
   const nested = root.data && typeof root.data === "object" ? root.data : {};
 
-  const candidates = [
+  for (const candidate of [
     root.cost,
-    root.amount,
-    root.price,
     root.cost_ngn,
     nested.cost,
-    nested.amount,
-    nested.price,
     nested.cost_ngn,
-  ];
-
-  for (const candidate of candidates) {
+  ]) {
     const value = toPositiveNumber(candidate);
-
-    if (value !== null) {
-      return value;
-    }
+    if (value !== null) return value;
   }
 
   const kobo =
@@ -70,27 +72,46 @@ function extractProviderCost(response: unknown): number | null {
   return kobo === null ? null : kobo / 100;
 }
 
-/**
- * Mark the customer charge successful after provider-confirmed
- * completion. This does not itself create business revenue.
- */
+function getTariffFallback(service: string): number | null {
+  const envKey = `AGEVERIFY_PROVIDER_COST_${service
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "_")}`;
+
+  const configuredCost = toPositiveNumber(process.env[envKey]);
+
+  return configuredCost ?? PROVIDER_COSTS[service] ?? null;
+}
+
+function publicResult(result: unknown) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return result;
+  }
+
+  const { status_check: _privateStatusCheck, ...safeResult } = result as Record<
+    string,
+    unknown
+  >;
+
+  return safeResult;
+}
+
 async function markChargeSuccess(reference: string) {
-  await prisma.transaction.updateMany({
+  const result = await prisma.transaction.updateMany({
     where: {
       reference: `CHARGE-${reference}`,
+      provider: "AGEVERIFY",
       status: "PENDING",
     },
     data: {
       status: "SUCCESS",
     },
   });
+
+  return result.count;
 }
 
-/**
- * Save provider cost before calling the business ledger.
- */
 async function saveProviderCost(reference: string, providerCost: number) {
-  await prisma.transaction.updateMany({
+  const result = await prisma.transaction.updateMany({
     where: {
       reference: `CHARGE-${reference}`,
       provider: "AGEVERIFY",
@@ -99,21 +120,21 @@ async function saveProviderCost(reference: string, providerCost: number) {
       cost: providerCost,
     },
   });
+
+  if (result.count !== 1) {
+    throw new Error(
+      `Could not save provider cost for AgeVerify reference ${reference}.`,
+    );
+  }
 }
 
-/**
- * Finalize a completed verification.
- *
- * If the provider did not return its deduction, do not invent
- * a cost or record inaccurate business revenue.
- */
 async function finalizeCompletedVerification(
   record: {
     id: string;
     reference: string;
-    amount: any;
+    service: string;
   },
-  providerCost: number | null,
+  providerResponse: unknown,
 ) {
   const charge = await prisma.transaction.findUnique({
     where: {
@@ -121,11 +142,22 @@ async function finalizeCompletedVerification(
     },
   });
 
-  const actualCost =
-    providerCost ?? (charge ? toPositiveNumber(charge.cost) : null);
+  if (!charge || charge.provider !== "AGEVERIFY") {
+    throw new Error(
+      `AgeVerify charge transaction not found for ${record.reference}.`,
+    );
+  }
 
-  // The verification is complete, so the customer's charge
-  // should no longer remain pending.
+  // Prefer a clearly identified provider deduction.
+  const responseCost = extractProviderCost(providerResponse);
+
+  // Use the saved transaction cost or confirmed tariff as fallback.
+  const actualCost =
+    responseCost ??
+    toPositiveNumber(charge.cost) ??
+    getTariffFallback(record.service);
+
+  // Provider has confirmed completion: customer charge becomes SUCCESS.
   await markChargeSuccess(record.reference);
 
   if (actualCost === null) {
@@ -133,7 +165,7 @@ async function finalizeCompletedVerification(
       revenueRecorded: false,
       providerCost: null,
       warning:
-        "Verification completed, but the actual provider deduction is unavailable. Business revenue requires cost reconciliation.",
+        "Verification completed. Provider cost is not confirmed for this service, so business revenue requires reconciliation.",
     };
   }
 
@@ -150,7 +182,7 @@ async function finalizeCompletedVerification(
   } catch (error) {
     console.error("AGEVERIFY LEDGER FINALIZATION ERROR:", {
       reference: record.reference,
-      providerCost: actualCost,
+      service: record.service,
       error,
     });
 
@@ -158,7 +190,7 @@ async function finalizeCompletedVerification(
       revenueRecorded: false,
       providerCost: actualCost,
       warning:
-        "Verification completed, but business revenue recording needs reconciliation.",
+        "Verification completed, but business revenue recording requires reconciliation.",
     };
   }
 }
@@ -195,42 +227,32 @@ export async function POST(req: Request) {
       );
     }
 
-    /**
-     * Already completed:
-     * Retry business-ledger finalization safely.
-     */
+    // Retry ledger finalization for an already completed verification.
     if (record.status === "COMPLETED") {
       const savedResult = record.result as Record<string, any> | null;
 
-      const savedStatusResponse = savedResult?.status_check;
-
-      const savedProviderCost = extractProviderCost(savedStatusResponse);
-
       const finalization = await finalizeCompletedVerification(
         record,
-        savedProviderCost,
+        savedResult?.status_check,
       );
 
       return NextResponse.json({
         reference: record.reference,
         status: record.status,
-        result: record.result,
+        result: publicResult(record.result),
         refunded: record.refunded,
         ...finalization,
       });
     }
 
-    /**
-     * Already failed:
-     * Retry the existing idempotent refund process.
-     */
+    // Retry an idempotent refund for an already failed verification.
     if (record.status === "FAILED") {
       const refundResult = await refundAgeVerify(record.id);
 
       return NextResponse.json({
         reference: record.reference,
         status: record.status,
-        result: record.result,
+        result: publicResult(record.result),
         refunded: refundResult.refunded || record.refunded,
       });
     }
@@ -249,7 +271,6 @@ export async function POST(req: Request) {
     }
 
     const savedResult = record.result as Record<string, any> | null;
-
     const upstreamRef = record.upstreamRef;
 
     if (!upstreamRef) {
@@ -270,9 +291,7 @@ export async function POST(req: Request) {
 
     switch (record.service) {
       case "nin-validation":
-        statusPayload = {
-          reference: upstreamRef,
-        };
+        statusPayload = { reference: upstreamRef };
         break;
 
       case "nin-validation-v2":
@@ -289,16 +308,12 @@ export async function POST(req: Request) {
         break;
 
       case "ipe-clearance":
-        statusPayload = {
-          batch_id: upstreamRef,
-        };
+        statusPayload = { batch_id: upstreamRef };
         break;
 
       case "bvn-crm":
       case "bvn-retrieval":
-        statusPayload = {
-          reference: upstreamRef,
-        };
+        statusPayload = { reference: upstreamRef };
         break;
 
       case "modification-ipe":
@@ -322,7 +337,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error:
-            response.body?.message || "Unable to retrieve provider status.",
+            response.body?.message || "Unable to retrieve verification status.",
           reference,
           status: record.status,
         },
@@ -331,7 +346,6 @@ export async function POST(req: Request) {
     }
 
     const providerData = response.body?.data ?? {};
-
     const providerStatus = String(providerData.status ?? "").toLowerCase();
 
     const completedStatuses = [
@@ -387,9 +401,7 @@ export async function POST(req: Request) {
         : null;
 
     const updated = await prisma.identityVerification.update({
-      where: {
-        id: record.id,
-      },
+      where: { id: record.id },
       data: {
         status: newStatus,
         result: {
@@ -401,54 +413,38 @@ export async function POST(req: Request) {
       },
     });
 
-    /**
-     * Provider confirms completion:
-     * save actual provider cost, finalize revenue,
-     * and mark the customer charge successful.
-     */
     if (newStatus === "COMPLETED") {
-      const providerCost =
-        extractProviderCost(providerData) ?? extractProviderCost(response.body);
-
       const finalization = await finalizeCompletedVerification(
         updated,
-        providerCost,
+        providerData,
       );
 
       return NextResponse.json({
         reference: updated.reference,
         status: updated.status,
-        result: updated.result,
+        result: publicResult(updated.result),
         refunded: updated.refunded,
         ...finalization,
         message: response.body?.message,
       });
     }
 
-    /**
-     * Provider confirms failure:
-     * refund the customer using the existing refund function.
-     */
     if (newStatus === "FAILED") {
       const refundResult = await refundAgeVerify(record.id);
 
       return NextResponse.json({
         reference: updated.reference,
         status: updated.status,
-        result: updated.result,
+        result: publicResult(updated.result),
         refunded: refundResult.refunded || updated.refunded,
         message: response.body?.message,
       });
     }
 
-    /**
-     * Still pending:
-     * leave the charge pending and do not record revenue.
-     */
     return NextResponse.json({
       reference: updated.reference,
       status: updated.status,
-      result: updated.result,
+      result: publicResult(updated.result),
       refunded: updated.refunded,
       revenueRecorded: false,
       message:
@@ -459,9 +455,7 @@ export async function POST(req: Request) {
     console.error("AGEVERIFY STATUS ERROR:", error);
 
     return NextResponse.json(
-      {
-        error: "Unable to check verification status.",
-      },
+      { error: "Unable to check verification status." },
       { status: 500 },
     );
   }

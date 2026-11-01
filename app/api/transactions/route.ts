@@ -10,10 +10,7 @@ export async function GET() {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.email) {
-      return NextResponse.json(
-        { message: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
     const user = await prisma.user.findUnique({
@@ -23,10 +20,7 @@ export async function GET() {
     });
 
     if (!user) {
-      return NextResponse.json(
-        { message: "User not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
     const transactions = await prisma.transaction.findMany({
@@ -57,9 +51,6 @@ export async function GET() {
   } catch (error) {
     console.error(error);
 
-    return NextResponse.json(
-      { message: "Server Error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ message: "Server Error" }, { status: 500 });
   }
 }

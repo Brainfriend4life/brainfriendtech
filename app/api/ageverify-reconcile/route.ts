@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { finalizeAgeVerifySuccess } from "@/lib/ageverify-ledger";
+import { getAgeVerifyPricing } from "@/lib/ageverify-pricing";
 
 // Protect this route: set CRON_SECRET in your .env and call it with
 //   /api/ageverify-reconcile?secret=YOUR_CRON_SECRET
@@ -13,8 +14,39 @@ function toPositiveNumber(value: unknown): number | null {
   return parsed;
 }
 
-function costKey(service: string) {
-  return `AGEVERIFY_${service.toUpperCase().replace(/[^A-Z0-9]/g, "_")}_COST`;
+/**
+ * Old rows do not store the payload, so find the tier whose current selling
+ * price equals the amount the customer paid, and use that tier's cost.
+ */
+function findCost(service: string, amount: number) {
+  const payloads: any[] =
+    service === "nin" || service === "bvn" || service === "nin-phone"
+      ? [
+          { slip_type: "regular" },
+          { slip_type: "standard" },
+          { slip_type: "premium" },
+        ]
+      : [{}];
+
+  const errors: string[] = [];
+
+  for (const payload of payloads) {
+    try {
+      const p = getAgeVerifyPricing(service, payload, 0, false);
+      if (p.sellingPrice === amount) {
+        return {
+          cost: toPositiveNumber(p.providerCost),
+          key: p.priceKey as string | null,
+          errors,
+        };
+      }
+      errors.push(`${p.priceKey} price is ${p.sellingPrice}, not ${amount}`);
+    } catch (e: any) {
+      errors.push(e?.message ?? String(e));
+    }
+  }
+
+  return { cost: null as number | null, key: null as string | null, errors };
 }
 
 export async function GET(req: Request) {
@@ -66,7 +98,7 @@ export async function GET(req: Request) {
       }
 
       const amount = Number(v.amount);
-      const cost = toPositiveNumber(process.env[costKey(v.service)]);
+      const { cost, key, errors } = findCost(v.service, amount);
 
       if (cost === null || cost > amount) {
         // Cannot record revenue, but never leave the customer's charge pending.
@@ -80,9 +112,11 @@ export async function GET(req: Request) {
           reference: v.reference,
           action: "skipped revenue",
           reason:
-            cost === null
-              ? `missing ENV ${costKey(v.service)}`
-              : "cost is higher than price",
+            key === null
+              ? `no usable tier for amount ${amount}: ${errors.join(" | ")}`
+              : cost === null
+                ? `cost for ${key} is missing or 0`
+                : "cost is higher than price",
         });
         continue;
       }
