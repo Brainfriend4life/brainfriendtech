@@ -35,7 +35,7 @@ type DataPlan = {
   isAvailable?: boolean;
 };
 
-type ServerType = "CHEAPDATAHUB" | "NETWORKDATASUB" | "SMEPLUG";
+type ServerType = "CHEAPDATAHUB" | "NETWORKDATASUB";
 
 const NETWORKS = ["MTN", "AIRTEL", "GLO", "9MOBILE"];
 
@@ -50,10 +50,6 @@ const SERVERS: Array<{
   {
     value: "NETWORKDATASUB",
     label: "Server 2",
-  },
-  {
-    value: "SMEPLUG",
-    label: "Server 3",
   },
 ];
 
@@ -186,7 +182,6 @@ export default function BuyDataPage() {
 
   const [plans, setPlans] = useState<DataPlan[]>([]);
   const [networkDataPlans, setNetworkDataPlans] = useState<DataPlan[]>([]);
-  const [smePlugPlans, setSmePlugPlans] = useState<DataPlan[]>([]);
 
   // ============================================================
   // LOADED STATE
@@ -195,8 +190,6 @@ export default function BuyDataPage() {
   const [cheapDataHubLoaded, setCheapDataHubLoaded] = useState(false);
 
   const [networkDataSubLoaded, setNetworkDataSubLoaded] = useState(false);
-
-  const [smePlugLoaded, setSmePlugLoaded] = useState(false);
 
   // ============================================================
   // FORM
@@ -221,8 +214,6 @@ export default function BuyDataPage() {
   const [loadingPlans, setLoadingPlans] = useState(false);
 
   const [loadingNetworkPlans, setLoadingNetworkPlans] = useState(false);
-
-  const [loadingSmePlugPlans, setLoadingSmePlugPlans] = useState(false);
 
   const [buying, setBuying] = useState(false);
 
@@ -347,45 +338,6 @@ export default function BuyDataPage() {
   }
 
   // ============================================================
-  // LOAD SMEPLUG PLANS
-  // ============================================================
-
-  async function loadSmePlugPlans() {
-    if (smePlugLoaded) {
-      return;
-    }
-
-    try {
-      setLoadingSmePlugPlans(true);
-      setError("");
-
-      /*
-       * IMPORTANT:
-       *
-       * This endpoint MUST read from DataPlan.
-       * It should NOT synchronize SMEPlug every time
-       * a customer opens the data page.
-       */
-      const result = await fetchJson("/api/smeplug/data-plans");
-
-      const receivedPlans = Array.isArray(result.data)
-        ? result.data.map(normalizePlan)
-        : [];
-
-      setSmePlugPlans(receivedPlans);
-      setSmePlugLoaded(true);
-    } catch (err) {
-      console.error("SMEPLUG CUSTOMER PLANS ERROR:", err);
-
-      setError(
-        err instanceof Error ? err.message : "Unable to load SMEPlug plans.",
-      );
-    } finally {
-      setLoadingSmePlugPlans(false);
-    }
-  }
-
-  // ============================================================
   // INITIAL CHEAPDATAHUB LOAD
   // ============================================================
 
@@ -404,10 +356,6 @@ export default function BuyDataPage() {
   useEffect(() => {
     if (server === "NETWORKDATASUB") {
       loadNetworkDataPlans();
-    }
-
-    if (server === "SMEPLUG") {
-      loadSmePlugPlans();
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -448,13 +396,8 @@ export default function BuyDataPage() {
       return networkDataPlans;
     }
 
-    if (server === "SMEPLUG") {
-      return smePlugPlans;
-    }
-
     return plans;
-  }, [server, networkDataPlans, smePlugPlans, plans]);
-
+  }, [server, networkDataPlans, plans]);
   // ============================================================
   // FILTER PLANS
   // ============================================================
@@ -721,11 +664,6 @@ export default function BuyDataPage() {
       return;
     }
 
-    if (server === "SMEPLUG" && (!smePlugPurchaseId || !smePlugNetworkId)) {
-      setError("This plan is temporarily unavailable. Please pick another.");
-      return;
-    }
-
     if (customerTotal <= 0) {
       setError("Invalid data plan price.");
       return;
@@ -774,61 +712,6 @@ export default function BuyDataPage() {
           server: "NETWORKDATASUB",
 
           data_plan_id: networkDataSubPurchaseId,
-
-          phone_number: cleanedPhone,
-
-          transactionPin: pin,
-        };
-
-        const response = await fetch("/api/data/purchase", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(purchaseBody),
-        });
-
-        const result = await response.json();
-
-        if (!response.ok || !result.success) {
-          throw new Error(
-            result.message || result.error || "Data purchase failed.",
-          );
-        }
-
-        const chargedAmount = Number(result.amount);
-
-        setMessage(
-          `Data purchase successful. You were charged ₦${formatPrice(
-            Number.isFinite(chargedAmount) ? chargedAmount : customerTotal,
-          )}.`,
-        );
-
-        setPhone("");
-        setPlanId("");
-
-        if (Number.isFinite(Number(result.serviceFeePercentage))) {
-          setServiceFeePercent(Number(result.serviceFeePercentage));
-        }
-
-        return;
-      }
-
-      // ========================================================
-      // SMEPLUG
-      // ========================================================
-
-      if (server === "SMEPLUG") {
-        if (!smePlugPurchaseId || !smePlugNetworkId) {
-          throw new Error("This plan is temporarily unavailable.");
-        }
-
-        const purchaseBody = {
-          server: "SMEPLUG",
-
-          network_id: smePlugNetworkId,
-
-          plan_id: smePlugPurchaseId,
 
           phone_number: cleanedPhone,
 
@@ -933,11 +816,7 @@ export default function BuyDataPage() {
   // ============================================================
 
   const loadingCurrentPlans =
-    server === "NETWORKDATASUB"
-      ? loadingNetworkPlans
-      : server === "SMEPLUG"
-        ? loadingSmePlugPlans
-        : loadingPlans;
+    server === "NETWORKDATASUB" ? loadingNetworkPlans : loadingPlans;
 
   const currentServerLabel =
     SERVERS.find((item) => item.value === server)?.label || "Server 1";
