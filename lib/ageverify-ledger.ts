@@ -13,7 +13,9 @@ async function getReferralPercentage(
 
   const percentage = Number(setting?.value ?? 1);
 
-  if (!Number.isFinite(percentage)) return 1;
+  if (!Number.isFinite(percentage)) {
+    return 1;
+  }
 
   return Math.max(0, Math.min(100, percentage));
 }
@@ -50,7 +52,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
         throw new Error("AgeVerify charge transaction not found.");
       }
 
-      // Prevent duplicate revenue and referral credits.
+      // Prevent duplicate revenue recording.
       const existingRevenue = await tx.businessRevenue.findUnique({
         where: {
           transactionId: chargeTransaction.id,
@@ -58,43 +60,54 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
       });
 
       if (existingRevenue) {
-        return { alreadyRecorded: true };
+        // Repair the charge status if it was left pending.
+        await tx.transaction.update({
+          where: {
+            id: chargeTransaction.id,
+          },
+          data: {
+            status: "SUCCESS",
+          },
+        });
+
+        return {
+          alreadyRecorded: true,
+        };
       }
 
-      // Customer selling price.
       const amount = Number(verification.amount);
-
-      // Actual provider deduction saved for this transaction.
-      // This must be populated by the AgeVerify transaction route.
       const providerCost = Number(chargeTransaction.cost);
 
       if (
         !Number.isFinite(amount) ||
         amount <= 0 ||
         !Number.isFinite(providerCost) ||
-        providerCost <= 0 ||
-        providerCost > amount
+        providerCost <= 0
       ) {
         throw new Error(
           `Actual AgeVerify provider deduction is missing or invalid for ${verification.reference}. Revenue was not recorded.`,
         );
       }
 
-      // Gross profit = customer payment - actual provider deduction.
+      // Actual business result before referral commission.
       const grossProfit = Number((amount - providerCost).toFixed(2));
 
-      // Referral commission is calculated from gross profit.
       const referralPercentage = await getReferralPercentage(tx);
 
-      const referralCommission = verification.user.referredBy
-        ? Number(((grossProfit * referralPercentage) / 100).toFixed(2))
-        : 0;
+      // Referral commission is paid only when there is positive
+      // gross profit and the customer has a referrer.
+      const referralCommission =
+        verification.user.referredBy && grossProfit > 0
+          ? Number(((grossProfit * referralPercentage) / 100).toFixed(2))
+          : 0;
 
-      // Remaining profit belongs to Brainfriend Global Tech.
+      // Negative profit is preserved as a genuine business loss.
       const profit = Number((grossProfit - referralCommission).toFixed(2));
 
       let businessWallet = await tx.businessWallet.findUnique({
-        where: { name: BUSINESS_NAME },
+        where: {
+          name: BUSINESS_NAME,
+        },
       });
 
       if (!businessWallet) {
@@ -116,7 +129,9 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
       );
 
       await tx.businessWallet.update({
-        where: { id: businessWallet.id },
+        where: {
+          id: businessWallet.id,
+        },
         data: {
           balance: newBusinessBalance,
           totalRevenue: {
@@ -148,7 +163,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
         },
       });
 
-      // Credit the referrer only when one exists.
+      // Credit the referrer only when an actual commission is due.
       if (verification.user.referredBy && referralCommission > 0) {
         await tx.user.update({
           where: {
@@ -177,6 +192,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
         });
       }
 
+      // Finalize the original customer charge.
       await tx.transaction.update({
         where: {
           id: chargeTransaction.id,
@@ -209,17 +225,24 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
 export async function refundAgeVerify(verificationId: string) {
   return prisma.$transaction(async (tx) => {
     const verification = await tx.identityVerification.findUnique({
-      where: { id: verificationId },
+      where: {
+        id: verificationId,
+      },
     });
 
     if (!verification || verification.refunded) {
-      return { refunded: false };
+      return {
+        refunded: false,
+      };
     }
 
     if (verification.status !== "FAILED") {
-      return { refunded: false };
+      return {
+        refunded: false,
+      };
     }
 
+    // Claim the refund once to prevent duplicate wallet credits.
     const claimed = await tx.identityVerification.updateMany({
       where: {
         id: verificationId,
@@ -232,7 +255,9 @@ export async function refundAgeVerify(verificationId: string) {
     });
 
     if (claimed.count === 0) {
-      return { refunded: false };
+      return {
+        refunded: false,
+      };
     }
 
     await tx.user.update({
@@ -272,6 +297,8 @@ export async function refundAgeVerify(verificationId: string) {
       },
     });
 
-    return { refunded: true };
+    return {
+      refunded: true,
+    };
   });
 }
