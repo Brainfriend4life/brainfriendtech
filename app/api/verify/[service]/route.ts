@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { getAgeVerifyService } from "@/lib/ageverify-config";
 import { av } from "@/lib/ageverify";
+import { getAgeVerifyProviderCost } from "@/lib/ageverify-pricing";
+import { finalizeAgeVerifySuccess, refundAgeVerify } from "@/lib/ageverify-ledger";
 
 const PRICE_ENV: Record<string, string> = {
   nin: "AGEVERIFY_NIN_VERIFY_PRICE",
@@ -161,6 +163,8 @@ export async function POST(
         { status: 503 },
       );
     }
+    const providerCost = getAgeVerifyProviderCost(service, payload);
+
 
     if (!/^\d{4}$/.test(pin)) {
       return NextResponse.json(
@@ -278,10 +282,10 @@ export async function POST(
           type: "NIN",
           amount: price,
           description: `AgeVerify ${svc.title} charge (${reference})`,
-          status: "SUCCESS",
+          status: "PENDING",
           reference: `CHARGE-${reference}`,
           provider: "AGEVERIFY",
-          cost: 0,
+          cost: providerCost,
           profit: 0,
         },
       });
@@ -379,7 +383,7 @@ export async function POST(
         },
       });
 
-      await refundVerification(verification.id);
+      await refundAgeVerify(verification.id);
 
       return NextResponse.json(
         {

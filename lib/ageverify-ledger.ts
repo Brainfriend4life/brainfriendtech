@@ -78,7 +78,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
       }
 
       const referralCommission = verification.user.referredBy
-        ? Number(((grossProfit * setting) / 100).toFixed(2))
+        ? Number(Math.min(grossProfit, (amount * setting) / 100).toFixed(2))
         : 0;
 
       const profit = Number((grossProfit - referralCommission).toFixed(2));

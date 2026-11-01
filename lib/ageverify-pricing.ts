@@ -52,10 +52,10 @@ const COST_ENV: Record<string, string> = {
 
 export function getAgeVerifyPriceKey(service: string, payload: any): string {
   const tier = String(
-    payload?.slip_type ?? payload?.slipType ?? "regular",
+    payload?.slip_type ?? payload?.slipType ?? (service === "nin-phone" ? "standard" : "regular"),
   ).toLowerCase();
 
-  if (service === "nin") {
+  if (service === "nin" || service === "bvn") {
     return `nin-${tier}`;
   }
 
@@ -118,4 +118,19 @@ export function getAgeVerifyPricing(
     referralCommission,
     profit,
   };
+}
+
+export function getAgeVerifyProviderCost(
+  service: string,
+  payload: any,
+): number {
+  const priceKey = getAgeVerifyPriceKey(service, payload);
+  const costVariable = COST_ENV[priceKey];
+  const cost = Number(costVariable ? process.env[costVariable] : undefined);
+
+  if (!Number.isFinite(cost) || cost < 0) {
+    throw new Error(`Invalid provider cost: ${costVariable ?? priceKey}`);
+  }
+
+  return cost;
 }
