@@ -33,7 +33,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
       });
 
       if (!verification) {
-        throw new Error("AgeVerify record not found.");
+        throw new Error("Verification record not found.");
       }
 
       if (verification.status !== "COMPLETED") {
@@ -47,7 +47,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
       });
 
       if (!charge || charge.provider !== "AGEVERIFY") {
-        throw new Error("AgeVerify customer charge not found.");
+        throw new Error("Verification customer charge not found.");
       }
 
       const existingRevenue = await tx.businessRevenue.findUnique({
@@ -108,14 +108,12 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
         });
       }
 
-      const newBalance = Number(
-        (Number(wallet.balance) + netProfit).toFixed(2),
-      );
-
-      await tx.businessWallet.update({
+      // Atomic increments: two verifications finishing at the same moment
+      // can no longer overwrite each other's wallet balance.
+      const updatedWallet = await tx.businessWallet.update({
         where: { id: wallet.id },
         data: {
-          balance: newBalance,
+          balance: { increment: netProfit },
           totalRevenue: { increment: amount },
           totalCost: { increment: providerCost },
           totalProfit: { increment: netProfit },
@@ -132,7 +130,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
           cost: providerCost,
           profit: netProfit,
           reference: verification.reference,
-          description: `AgeVerify ${verification.service} verification (${verification.reference})`,
+          description: `${verification.service} verification (${verification.reference})`,
           businessWalletId: wallet.id,
         },
       });
@@ -157,7 +155,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
             transactionAmount: amount,
             type: "NIN",
             status: "SUCCESS",
-            description: `Referral earning from AgeVerify ${verification.service} verification`,
+            description: `Referral earning from ${verification.service} verification`,
             reference: `REF-${verification.reference}`,
           },
         });
@@ -181,7 +179,7 @@ export async function finalizeAgeVerifySuccess(verificationId: string) {
         referralPercentage,
         referralCommission,
         netProfit,
-        businessBalance: newBalance,
+        businessBalance: Number(updatedWallet.balance),
       };
     },
     {
@@ -230,7 +228,7 @@ export async function refundAgeVerify(verificationId: string) {
         userId: verification.userId,
         type: "NIN",
         amount: verification.amount,
-        description: `Refund for AgeVerify request (${verification.reference})`,
+        description: `Refund for request (${verification.reference})`,
         status: "SUCCESS",
         reference: `REFUND-${verification.reference}`,
         provider: "AGEVERIFY",
