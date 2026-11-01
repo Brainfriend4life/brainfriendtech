@@ -50,15 +50,83 @@ const COST_ENV: Record<string, string> = {
   "ipe-special": "AGEVERIFY_IPE_SPECIAL_COST",
 };
 
+/**
+ * Default provider tariffs in naira.
+ * Environment variables in COST_ENV override these values.
+ */
+const DEFAULT_PROVIDER_COST: Record<string, number> = {
+  "nin-regular": 100,
+  "nin-standard": 100,
+  "nin-premium": 100,
+
+  "nin-phone-regular": 100,
+  "nin-phone-standard": 100,
+  "nin-phone-premium": 100,
+
+  "nin-demo": 100,
+  bvn: 100,
+
+  // Validation tariff supplied: ₦750 per call.
+  "nin-validation": 750,
+  "nin-validation-v2": 750,
+
+  personalization: 170,
+  "ipe-clearance": 350,
+  "bvn-crm": 1000,
+  "modification-ipe": 1500,
+  "bvn-retrieval": 1100,
+
+  // IPE blocked/hit/ready ABIS tariff supplied: ₦500.
+  "ipe-special": 500,
+};
+
+function readProviderCost(priceKey: string): number {
+  const costVariable = COST_ENV[priceKey];
+
+  if (!costVariable) {
+    throw new Error(`Provider cost configuration is missing for ${priceKey}.`);
+  }
+
+  const envValue = process.env[costVariable];
+
+  const providerCost =
+    envValue !== undefined && envValue.trim() !== ""
+      ? Number(envValue)
+      : DEFAULT_PROVIDER_COST[priceKey];
+
+  if (
+    providerCost === undefined ||
+    !Number.isFinite(providerCost) ||
+    providerCost < 0
+  ) {
+    throw new Error(`Invalid provider cost: ${costVariable}`);
+  }
+
+  return Number(providerCost.toFixed(2));
+}
+
+function roundMoney(value: number): number {
+  return Number(value.toFixed(2));
+}
+
 export function getAgeVerifyPriceKey(service: string, payload: any): string {
   const tier = String(
-    payload?.slip_type ?? payload?.slipType ?? (service === "nin-phone" ? "standard" : "regular"),
+    payload?.slip_type ??
+      payload?.slipType ??
+      (service === "nin-phone" ? "standard" : "regular"),
   ).toLowerCase();
 
-  if (service === "nin" || service === "bvn") {
+  // NIN slip tiers.
+  if (service === "nin") {
     return `nin-${tier}`;
   }
 
+  // BVN has its own price and cost configuration.
+  if (service === "bvn") {
+    return "bvn";
+  }
+
+  // NIN phone tiers.
   if (service === "nin-phone") {
     return `nin-phone-${tier}`;
   }
@@ -73,45 +141,38 @@ export function getAgeVerifyPricing(
   hasReferrer: boolean,
 ): AgeVerifyPricing {
   const priceKey = getAgeVerifyPriceKey(service, payload);
-  const priceVariable = PRICE_ENV[priceKey];
-  const costVariable = COST_ENV[priceKey];
 
-  if (!priceVariable || !costVariable) {
+  const priceVariable = PRICE_ENV[priceKey];
+
+  if (!priceVariable) {
     throw new Error(
-      `AgeVerify pricing configuration is missing for ${priceKey}.`,
+      `AgeVerify selling-price configuration is missing for ${priceKey}.`,
     );
   }
 
   const sellingPrice = Number(process.env[priceVariable]);
-  const providerCost = Number(process.env[costVariable]);
 
   if (!Number.isFinite(sellingPrice) || sellingPrice <= 0) {
     throw new Error(`Invalid selling price: ${priceVariable}`);
   }
 
-  if (!Number.isFinite(providerCost) || providerCost < 0) {
-    throw new Error(`Invalid provider cost: ${costVariable}`);
-  }
+  const providerCost = readProviderCost(priceKey);
 
-  if (providerCost > sellingPrice) {
-    throw new Error(`Provider cost exceeds selling price for ${priceKey}.`);
-  }
-
-  const grossProfit = Number((sellingPrice - providerCost).toFixed(2));
+  // A negative gross profit is permitted and recorded as a business loss.
+  const grossProfit = roundMoney(sellingPrice - providerCost);
 
   const percentage = hasReferrer
-    ? Math.max(0, Math.min(100, referralPercentage))
+    ? Math.max(0, Math.min(100, Number(referralPercentage) || 0))
     : 0;
 
-  const referralCommission = Number(
-    ((grossProfit * percentage) / 100).toFixed(2),
-  );
+  const referralCommission =
+    grossProfit > 0 ? roundMoney((grossProfit * percentage) / 100) : 0;
 
-  const profit = Number((grossProfit - referralCommission).toFixed(2));
+  const profit = roundMoney(grossProfit - referralCommission);
 
   return {
     priceKey,
-    sellingPrice,
+    sellingPrice: roundMoney(sellingPrice),
     providerCost,
     grossProfit,
     referralPercentage: percentage,
@@ -125,12 +186,5 @@ export function getAgeVerifyProviderCost(
   payload: any,
 ): number {
   const priceKey = getAgeVerifyPriceKey(service, payload);
-  const costVariable = COST_ENV[priceKey];
-  const cost = Number(costVariable ? process.env[costVariable] : undefined);
-
-  if (!Number.isFinite(cost) || cost < 0) {
-    throw new Error(`Invalid provider cost: ${costVariable ?? priceKey}`);
-  }
-
-  return cost;
+  return readProviderCost(priceKey);
 }

@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
@@ -5,12 +6,12 @@ import { getAgeVerifyService } from "@/lib/ageverify-config";
 import { av } from "@/lib/ageverify";
 import { verifyUserTransactionPin } from "@/lib/security/verifyUserTransactionPin";
 import { getAgeVerifyPricing } from "@/lib/ageverify-pricing";
+import { publicResult, documentPath } from "@/lib/ageverify-public";
 import {
   finalizeAgeVerifySuccess,
   refundAgeVerify,
 } from "@/lib/ageverify-ledger";
 
-// Change this if your Transaction status enum uses a different value.
 const TX_SUCCESS_STATUS = "SUCCESS";
 
 function toPositiveNumber(value: unknown): number | null {
@@ -20,28 +21,20 @@ function toPositiveNumber(value: unknown): number | null {
 
   const parsed = Number(value);
 
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null;
-  }
-
-  return parsed;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 /**
- * Extract provider deduction (in NAIRA) from the actual provider response.
- *
- * The customer's selling price is NOT used as a provider cost.
- * Kobo values are converted to naira.
+ * Extract provider deduction in naira.
+ * The customer's selling price is never used as provider cost.
  */
 function extractProviderCost(response: unknown): number | null {
-  if (!response || typeof response !== "object") {
-    return null;
-  }
+  if (!response || typeof response !== "object") return null;
 
   const root = response as Record<string, any>;
-  const nested = root.data && typeof root.data === "object" ? root.data : {};
+  const nested =
+    root.data && typeof root.data === "object" ? root.data : {};
 
-  // Naira values
   const nairaCandidates = [
     root.cost,
     root.amount,
@@ -57,50 +50,45 @@ function extractProviderCost(response: unknown): number | null {
 
   for (const candidate of nairaCandidates) {
     const value = toPositiveNumber(candidate);
-
-    if (value !== null) {
-      return value;
-    }
+    if (value !== null) return value;
   }
 
-  // Kobo values -> convert to naira
   const kobo =
-    toPositiveNumber(root.cost_kobo) ?? toPositiveNumber(nested.cost_kobo);
+    toPositiveNumber(root.cost_kobo) ??
+    toPositiveNumber(nested.cost_kobo);
 
-  if (kobo !== null) {
-    return kobo / 100;
-  }
-
-  return null;
+  return kobo === null ? null : kobo / 100;
 }
 
-/**
- * Never show the provider's name to customers (also strips it from
- * provider error messages before they are returned).
- */
 function hideProvider(message: unknown): string | null {
   if (typeof message !== "string" || !message.trim()) return null;
-  return message.replace(/(age|amb)\s*verify/gi, "the verification service");
+
+  return message.replace(
+    /(age|amb)\s*verify/gi,
+    "the verification service",
+  );
 }
 
 /**
- * Make sure the customer charge transaction never stays PENDING
- * after the verification has actually been delivered.
- * Safe to call more than once; only touches rows still PENDING.
+ * Only updates the original AgeVerify charge.
  */
 async function markChargeTransactionSuccess(reference: string) {
   try {
     await prisma.transaction.updateMany({
       where: {
         reference: `CHARGE-${reference}`,
+        provider: "AGEVERIFY",
         status: "PENDING",
       },
       data: {
-        status: TX_SUCCESS_STATUS as any,
+        status: TX_SUCCESS_STATUS,
       },
     });
   } catch (error) {
-    console.error("AGEVERIFY TX STATUS UPDATE ERROR:", { reference, error });
+    console.error("AGEVERIFY TX STATUS UPDATE ERROR:", {
+      reference,
+      error,
+    });
   }
 }
 
@@ -112,7 +100,10 @@ export async function POST(
     const user = await getSessionUser();
 
     if (!user) {
-      return NextResponse.json({ error: "Sign in first." }, { status: 401 });
+      return NextResponse.json(
+        { error: "Sign in first." },
+        { status: 401 },
+      );
     }
 
     const { service } = await params;
@@ -125,8 +116,6 @@ export async function POST(
       );
     }
 
-    // Most services send JSON. BVN CRM sends multipart/form-data with the
-    // enrollment screenshot attached.
     let payload: any = null;
     let pinValue = "";
     let screenshot: File | null = null;
@@ -146,6 +135,7 @@ export async function POST(
         pinValue = String(form.get("pin") ?? "");
 
         const upload = form.get("enrollment_screenshot");
+
         if (upload && typeof upload !== "string") {
           screenshot = upload as File;
         }
@@ -186,7 +176,6 @@ export async function POST(
         );
       }
 
-      // Vercel functions accept request bodies up to about 4.5 MB.
       if (screenshot.size > 4 * 1024 * 1024) {
         return NextResponse.json(
           { error: "The screenshot must be smaller than 4 MB." },
@@ -195,9 +184,8 @@ export async function POST(
       }
     }
 
-    // The provider bills per accepted ID, but your selling price is per
-    // request, so batches are limited to one ID until pricing is multiplied.
-    const idList = (payload as any).tracking_ids ?? (payload as any).nins;
+    const idList =
+      (payload as any).tracking_ids ?? (payload as any).nins;
 
     if (Array.isArray(idList) && idList.length > 1) {
       return NextResponse.json(
@@ -206,7 +194,10 @@ export async function POST(
       );
     }
 
-    const pinCheck = await verifyUserTransactionPin(user.id, pinValue);
+    const pinCheck = await verifyUserTransactionPin(
+      user.id,
+      pinValue,
+    );
 
     if (!pinCheck.valid) {
       return NextResponse.json(
@@ -215,8 +206,14 @@ export async function POST(
       );
     }
 
-    // Existing ENV selling price remains the customer's price.
-    const pricing = getAgeVerifyPricing(service, payload, 0, false);
+    // Preserve the existing customer selling-price configuration.
+    const pricing = getAgeVerifyPricing(
+      service,
+      payload,
+      0,
+      false,
+    );
+
     const price = Number(pricing.sellingPrice);
 
     if (!Number.isFinite(price) || price <= 0) {
@@ -291,7 +288,10 @@ export async function POST(
           screenshot.name || "screenshot.jpg",
         );
 
-        response = await av(svc.endpoint, { method: "POST", body: formData });
+        response = await av(svc.endpoint, {
+          method: "POST",
+          body: formData,
+        });
       } else {
         response = await av(svc.endpoint, {
           method: "POST",
@@ -335,10 +335,6 @@ export async function POST(
       providerData?.id ??
       null;
 
-    // Provider failure: preserve the existing refund flow.
-    // This API answers { status: false } on errors, and for batch-style
-    // services it can accept nothing (accepted_count / submitted = 0), in
-    // which case the provider charged nothing and the customer is refunded.
     const nothingAccepted =
       providerData?.accepted_count === 0 ||
       (typeof providerData?.submitted === "number" &&
@@ -348,7 +344,9 @@ export async function POST(
       !response.ok ||
       response.body?.status === false ||
       nothingAccepted ||
-      ["failed", "failure", "rejected", "declined"].includes(providerStatus)
+      ["failed", "failure", "rejected", "declined"].includes(
+        providerStatus,
+      )
     ) {
       await prisma.identityVerification.update({
         where: { id: verification.id },
@@ -375,9 +373,6 @@ export async function POST(
       );
     }
 
-    // Only genuinely pending requests stay pending: manual services, an
-    // explicit pending-type provider status, or a 202 with no result data.
-    // A 202 that already carries the result is treated as completed.
     const pendingStatuses = [
       "pending",
       "processing",
@@ -388,6 +383,7 @@ export async function POST(
       "review",
       "new",
     ];
+
     const hasResultData =
       providerData &&
       typeof providerData === "object" &&
@@ -414,16 +410,19 @@ export async function POST(
           service: updated.service,
           amount: updated.amount,
           status: updated.status,
-          result: updated.result,
+          result: publicResult(updated.result),
+          download_path: documentPath(
+            updated.id,
+            updated.result,
+          ),
           refunded: updated.refunded,
         },
         { status: 202 },
       );
     }
 
-    // Provider cost: the tier-aware value from your pricing file
-    // (the same tier that decided the selling price), then fall back to
-    // whatever the provider response reports.
+    // Provider cost is independent of customer selling price.
+    // Prefer the tier-aware provider cost from the pricing configuration.
     const providerCost =
       toPositiveNumber(pricing.providerCost) ??
       extractProviderCost(providerData) ??
@@ -437,11 +436,9 @@ export async function POST(
       providerCost,
     });
 
-    // Provider cost missing or invalid.
-    // The verification was delivered and the customer was charged, so the
-    // charge transaction must be closed (not left PENDING) and flagged
-    // for manual reconciliation.
-    if (providerCost === null || providerCost > price) {
+    // Verification was delivered but provider cost is unavailable.
+    // Close the customer charge and leave business revenue for reconciliation.
+    if (providerCost === null) {
       const updated = await prisma.identityVerification.update({
         where: { id: verification.id },
         data: {
@@ -453,14 +450,16 @@ export async function POST(
 
       await markChargeTransactionSuccess(reference);
 
-      console.error("AGEVERIFY PROVIDER COST NOT AVAILABLE (RECONCILE):", {
-        reference,
-        providerCost,
-        customerPayment: price,
-        providerResponse: response.body,
-      });
+      console.error(
+        "AGEVERIFY PROVIDER COST NOT AVAILABLE - RECONCILIATION REQUIRED:",
+        {
+          reference,
+          service,
+          customerPayment: price,
+          providerResponse: response.body,
+        },
+      );
 
-      // Customer got what they paid for, so return the result normally.
       return NextResponse.json(
         {
           id: updated.id,
@@ -468,7 +467,11 @@ export async function POST(
           service: updated.service,
           amount: updated.amount,
           status: updated.status,
-          result: updated.result,
+          result: publicResult(updated.result),
+          download_path: documentPath(
+            updated.id,
+            updated.result,
+          ),
           refunded: updated.refunded,
           revenueRecorded: false,
         },
@@ -476,7 +479,8 @@ export async function POST(
       );
     }
 
-    // Save the actual deduction before business-ledger finalization.
+    // Save provider deduction, including when it exceeds the selling price.
+    // A higher provider cost is a business loss, not a failed verification.
     await prisma.transaction.update({
       where: {
         reference: `CHARGE-${reference}`,
@@ -486,7 +490,6 @@ export async function POST(
       },
     });
 
-    // Mark verification completed.
     const updated = await prisma.identityVerification.update({
       where: { id: verification.id },
       data: {
@@ -496,13 +499,14 @@ export async function POST(
       },
     });
 
-    // Record BusinessRevenue and referral commission.
     try {
       await finalizeAgeVerifySuccess(verification.id);
     } catch (ledgerError) {
-      console.error("AGEVERIFY BUSINESS LEDGER ERROR:", ledgerError);
+      console.error(
+        "AGEVERIFY BUSINESS LEDGER ERROR:",
+        ledgerError,
+      );
 
-      // Verification was delivered; don't leave the charge PENDING.
       await markChargeTransactionSuccess(reference);
 
       return NextResponse.json(
@@ -512,17 +516,20 @@ export async function POST(
           service: updated.service,
           amount: updated.amount,
           status: updated.status,
-          result: updated.result,
+          result: publicResult(updated.result),
+          download_path: documentPath(
+            updated.id,
+            updated.result,
+          ),
           refunded: updated.refunded,
           revenueRecorded: false,
           warning:
-            "Verification completed, but transaction recording needs attention. Contact support with this reference if the record looks wrong.",
+            "Verification completed, but business accounting needs reconciliation.",
         },
         { status: 200 },
       );
     }
 
-    // Safety net: if the ledger finalizer did not flip the status, do it now.
     await markChargeTransactionSuccess(reference);
 
     return NextResponse.json({
@@ -531,15 +538,20 @@ export async function POST(
       service: updated.service,
       amount: updated.amount,
       status: updated.status,
-      result: updated.result,
+      result: publicResult(updated.result),
+      download_path: documentPath(
+        updated.id,
+        updated.result,
+      ),
       refunded: updated.refunded,
       revenueRecorded: true,
-      providerCost,
     });
   } catch (error: any) {
     if (error?.message === "INSUFFICIENT_BALANCE") {
       return NextResponse.json(
-        { error: "Insufficient balance. Please fund your wallet." },
+        {
+          error: "Insufficient balance. Please fund your wallet.",
+        },
         { status: 402 },
       );
     }

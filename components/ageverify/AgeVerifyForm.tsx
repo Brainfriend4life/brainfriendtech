@@ -219,12 +219,6 @@ const STATUS_TEXT: Record<string, string> = {
   FAILED: "Failed. Your wallet has been refunded.",
 };
 
-// Never show a link that points at the provider's own domain.
-function safeUrl(url?: string): string | null {
-  if (!url || typeof url !== "string") return null;
-  return /ageverify/i.test(url) ? null : url;
-}
-
 export default function AgeVerifyForm({ service }: { service: string }) {
   const config = FORMS[service];
   const [values, setValues] = useState<Record<string, string>>({});
@@ -465,9 +459,6 @@ export default function AgeVerifyForm({ service }: { service: string }) {
     }
   };
 
-  const pdfLink = safeUrl(result?.pdf_url);
-  const downloadLink = safeUrl(result?.download_url);
-
   return (
     <main className="mx-auto max-w-2xl space-y-6">
       <Link
@@ -634,25 +625,12 @@ export default function AgeVerifyForm({ service }: { service: string }) {
             </button>
           )}
 
-          {pdfLink && (
+          {result.download_path && (
             <a
-              href={pdfLink}
-              target="_blank"
-              rel="noreferrer"
+              href={result.download_path}
               className="block text-sm font-semibold text-primary hover:underline"
             >
-              Open verification PDF
-            </a>
-          )}
-
-          {downloadLink && (
-            <a
-              href={downloadLink}
-              target="_blank"
-              rel="noreferrer"
-              className="block text-sm font-semibold text-primary hover:underline"
-            >
-              Download personalized slip
+              Download document
             </a>
           )}
 

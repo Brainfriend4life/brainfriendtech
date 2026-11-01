@@ -10,9 +10,11 @@ export const AGEVERIFY_SERVICES = {
     endpoint: "api/v1/verify.php",
     manual: false,
   },
+  // verify.php returns a PDF slip. nin_phone_verify.php returns raw identity
+  // data only (no PDF), which the pages do not display.
   "nin-phone": {
     title: "NIN Phone Search",
-    endpoint: "api/v1/nin_phone_verify.php",
+    endpoint: "api/v1/verify.php",
     manual: false,
   },
   "nin-demo": {

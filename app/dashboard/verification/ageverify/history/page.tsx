@@ -3,8 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft, Clock3, FileDown, History,
-  RefreshCw, ShieldCheck,
+  ArrowLeft,
+  Clock3,
+  FileDown,
+  History,
+  RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 
 type RecordItem = {
@@ -15,24 +19,25 @@ type RecordItem = {
   status: string;
   refunded: boolean;
   createdAt: string;
-  result: unknown;
+  hasDocument?: boolean;
+  resultText?: string | null;
   recordType?: "verification" | "document-download";
 };
 
-function getDocumentUrl(result: unknown): string | null {
-  if (!result || typeof result !== "object") return null;
-
-  const data = result as Record<string, unknown>;
-  const candidates = [data.pdf_url, data.download_url];
-
-  return (
-    candidates.find(
-      (url): url is string =>
-        typeof url === "string" &&
-        url.startsWith("https://ageverify.com.ng/")
-    ) ?? null
-  );
-}
+const SERVICE_NAMES: Record<string, string> = {
+  nin: "NIN Verification",
+  "nin-phone": "NIN Phone Search",
+  "nin-demo": "NIN Demographic Search",
+  bvn: "BVN Verification",
+  "nin-validation": "NIN Validation",
+  "nin-validation-v2": "NIN Validation V2",
+  personalization: "NIN Personalization",
+  "ipe-clearance": "IPE Clearance",
+  "bvn-crm": "BVN CRM",
+  "modification-ipe": "Modification IPE",
+  "bvn-retrieval": "BVN Retrieval",
+  "ipe-special": "IPE Special",
+};
 
 function statusStyle(status: string) {
   switch (status.toUpperCase()) {
@@ -92,7 +97,7 @@ export default function AgeVerifyHistoryPage() {
               Verification History
             </h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Track your previous AgeVerify requests.
+              Track your previous verification requests.
             </p>
           </div>
         </div>
@@ -124,7 +129,7 @@ export default function AgeVerifyHistoryPage() {
             {loading
               ? "—"
               : records.filter((r) =>
-                  ["SUCCESS", "COMPLETED"].includes(r.status.toUpperCase())
+                  ["SUCCESS", "COMPLETED"].includes(r.status.toUpperCase()),
                 ).length}
           </p>
         </div>
@@ -178,7 +183,7 @@ export default function AgeVerifyHistoryPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left">
+            <table className="w-full min-w-[860px] text-left">
               <thead className="bg-muted/40">
                 <tr className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                   <th className="px-3 py-3">Service</th>
@@ -186,6 +191,7 @@ export default function AgeVerifyHistoryPage() {
                   <th className="px-3 py-3">Reference</th>
                   <th className="px-3 py-3">Amount</th>
                   <th className="px-3 py-3">Status</th>
+                  <th className="px-3 py-3">Result</th>
                   <th className="px-3 py-3">Date</th>
                   <th className="px-3 py-3">Document</th>
                 </tr>
@@ -193,7 +199,11 @@ export default function AgeVerifyHistoryPage() {
 
               <tbody>
                 {records.map((record) => {
-                  const documentUrl = getDocumentUrl(record.result);
+                  const canDownload =
+                    record.recordType !== "document-download" &&
+                    record.hasDocument === true;
+
+                  const resultText = record.resultText ?? null;
 
                   return (
                     <tr
@@ -201,7 +211,7 @@ export default function AgeVerifyHistoryPage() {
                       className="border-t border-border/70 text-xs transition hover:bg-muted/30"
                     >
                       <td className="px-3 py-3 font-semibold text-foreground">
-                        {record.service}
+                        {SERVICE_NAMES[record.service] ?? record.service}
                       </td>
 
                       <td className="px-3 py-3">
@@ -217,16 +227,25 @@ export default function AgeVerifyHistoryPage() {
                       </td>
 
                       <td className="whitespace-nowrap px-3 py-3 font-medium text-foreground">
-                        ₦{Number(record.amount).toLocaleString("en-NG", {
+                        ₦
+                        {Number(record.amount).toLocaleString("en-NG", {
                           minimumFractionDigits: 2,
                         })}
                       </td>
 
                       <td className="px-3 py-3">
                         <div className="flex flex-col items-start gap-1">
-                          <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${statusStyle(record.status)}`}>
+                          <span
+                            className={`rounded-full px-2 py-1 text-[10px] font-semibold ${statusStyle(record.status)}`}
+                          >
                             {record.status}
                           </span>
+                          {record.status.toUpperCase() === "PROCESSING" && (
+                            <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <Clock3 className="h-3 w-3" />
+                              Updates automatically
+                            </span>
+                          )}
                           {record.refunded && (
                             <span className="text-[10px] font-semibold text-emerald-600">
                               Refunded
@@ -235,20 +254,24 @@ export default function AgeVerifyHistoryPage() {
                         </div>
                       </td>
 
+                      <td className="max-w-[220px] px-3 py-3 text-[11px] text-foreground">
+                        {resultText ?? (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+
                       <td className="whitespace-nowrap px-3 py-3 text-[11px] text-muted-foreground">
                         {new Date(record.createdAt).toLocaleString()}
                       </td>
 
                       <td className="px-3 py-3">
-                        {documentUrl ? (
+                        {canDownload ? (
                           <a
-                            href={documentUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            href={`/api/verification/ageverify/file/${record.id}`}
                             className="inline-flex items-center gap-1 font-semibold text-primary hover:underline"
                           >
                             <FileDown className="h-3.5 w-3.5" />
-                            PDF
+                            Download
                           </a>
                         ) : (
                           <span className="text-[10px] text-muted-foreground">
@@ -264,7 +287,7 @@ export default function AgeVerifyHistoryPage() {
           </div>
 
           <div className="border-t border-border px-4 py-2.5 text-[10px] text-muted-foreground">
-            Showing all available records.
+            Showing your latest records.
           </div>
         </div>
       )}
