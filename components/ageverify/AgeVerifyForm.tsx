@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -99,13 +99,13 @@ const FORMS: Record<
     ],
   },
   "nin-validation-v2": {
-    title: "NIN Validation V2 (Batch)",
-    description: "Submit up to 20 NINs. Enter one NIN per line.",
+    title: "NIN Validation V2",
+    description: "Submit one NIN per request for validation.",
     fields: [
       {
         name: "nins",
-        label: "NIN Numbers (maximum 20)",
-        placeholder: "Enter one NIN per line",
+        label: "NIN",
+        placeholder: "Enter 11-digit NIN",
       },
       {
         name: "validation_type",
@@ -140,12 +140,12 @@ const FORMS: Record<
   },
   "ipe-clearance": {
     title: "IPE Clearance",
-    description: "Enter one or more tracking IDs, one per line.",
+    description: "Enter the tracking ID to clear. One ID per request.",
     fields: [
       {
         name: "tracking_ids",
-        label: "Tracking IDs",
-        placeholder: "Enter tracking IDs, one per line",
+        label: "Tracking ID",
+        placeholder: "Enter tracking ID",
       },
     ],
   },
@@ -194,7 +194,8 @@ const FORMS: Record<
   },
   "ipe-special": {
     title: "IPE Special",
-    description: "Submit tracking IDs for the selected IPE service.",
+    description:
+      "Enter the 15-character tracking ID and select the IPE type. One ID per request.",
     fields: [
       {
         name: "ipe_type",
@@ -204,12 +205,25 @@ const FORMS: Record<
       },
       {
         name: "tracking_ids",
-        label: "Tracking IDs",
-        placeholder: "Enter tracking IDs, one per line",
+        label: "Tracking ID",
+        placeholder: "Enter 15-character tracking ID",
       },
     ],
   },
 };
+
+const STATUS_TEXT: Record<string, string> = {
+  PROCESSING:
+    "Processing. This can take a while, and the status updates automatically.",
+  COMPLETED: "Completed",
+  FAILED: "Failed. Your wallet has been refunded.",
+};
+
+// Never show a link that points at the provider's own domain.
+function safeUrl(url?: string): string | null {
+  if (!url || typeof url !== "string") return null;
+  return /ageverify/i.test(url) ? null : url;
+}
 
 export default function AgeVerifyForm({ service }: { service: string }) {
   const config = FORMS[service];
@@ -247,16 +261,23 @@ export default function AgeVerifyForm({ service }: { service: string }) {
       active = false;
     };
   }, []);
+
+  // BVN has its own price key. The NIN-tier price is only a fallback, and it
+  // must match what getAgeVerifyPriceKey charges on the server.
   const currentPrice =
     service === "nin-phone"
       ? values.slip_type
         ? prices[`nin-phone-${values.slip_type}`]
         : null
-      : service === "nin" || service === "bvn"
-        ? values.slip_type
-          ? prices[`nin-${values.slip_type}`]
-          : null
-        : prices[service];
+      : service === "bvn"
+        ? (prices.bvn ??
+          (values.slip_type ? prices[`nin-${values.slip_type}`] : null))
+        : service === "nin"
+          ? values.slip_type
+            ? prices[`nin-${values.slip_type}`]
+            : null
+          : prices[service];
+
   if (!config) return <p>Unknown verification service.</p>;
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -268,11 +289,41 @@ export default function AgeVerifyForm({ service }: { service: string }) {
     setError("");
     setResult(null);
 
-    if (!/^\d{4}$/.test(pin)) {
-      setError("Enter your 4-digit transaction PIN.");
+    const fail = (message: string) => {
+      setError(message);
       setLoading(false);
       submitLock.current = false;
+    };
+
+    if (!/^\d{4}$/.test(pin)) {
+      fail("Enter your 4-digit transaction PIN.");
       return;
+    }
+
+    // The provider bills per ID, so only one ID is accepted per request.
+    if (
+      ["ipe-clearance", "ipe-special", "nin-validation-v2"].includes(service)
+    ) {
+      const key = service === "nin-validation-v2" ? "nins" : "tracking_ids";
+      const items = (values[key] || "")
+        .split(/[\n,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      if (items.length !== 1) {
+        fail("Please submit one ID per request.");
+        return;
+      }
+
+      if (service === "ipe-special" && items[0].length !== 15) {
+        fail("The tracking ID must be exactly 15 characters.");
+        return;
+      }
+
+      if (service === "nin-validation-v2" && !/^\d{11}$/.test(items[0])) {
+        fail("Enter a valid 11-digit NIN.");
+        return;
+      }
     }
 
     const payload: Record<string, any> = { ...values };
@@ -293,6 +344,12 @@ export default function AgeVerifyForm({ service }: { service: string }) {
     if (service === "nin-demo") {
       payload.service = "demographic";
       payload.slip_type = "premium";
+
+      // The date input gives YYYY-MM-DD; the provider expects DD-MM-YYYY.
+      const [year, month, day] = String(values.dob || "").split("-");
+      if (year && month && day) {
+        payload.dob = `${day}-${month}-${year}`;
+      }
     }
 
     if (["ipe-clearance", "ipe-special"].includes(service)) {
@@ -408,6 +465,9 @@ export default function AgeVerifyForm({ service }: { service: string }) {
     }
   };
 
+  const pdfLink = safeUrl(result?.pdf_url);
+  const downloadLink = safeUrl(result?.download_url);
+
   return (
     <main className="mx-auto max-w-2xl space-y-6">
       <Link
@@ -434,7 +494,8 @@ export default function AgeVerifyForm({ service }: { service: string }) {
                 : `₦${currentPrice.toLocaleString("en-NG")}`}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {service === "nin"
+            {config.fields.some((field) => field.name === "slip_type") &&
+            service !== "nin-demo"
               ? "Price updates automatically when you select a slip type."
               : "This is the current configured price for this service."}
           </p>
@@ -483,28 +544,13 @@ export default function AgeVerifyForm({ service }: { service: string }) {
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                   className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground"
                 />
-              ) : ["tracking_ids", "nins"].includes(field.name) ? (
-                <textarea
-                  id={field.name}
-                  required
-                  rows={4}
-                  value={values[field.name] || ""}
-                  placeholder={field.placeholder}
-                  onChange={(e) =>
-                    setValues((old) => ({
-                      ...old,
-                      [field.name]: e.target.value,
-                    }))
-                  }
-                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground outline-none focus:border-primary"
-                />
               ) : (
                 <input
                   id={field.name}
                   type={field.type || "text"}
                   required
                   maxLength={
-                    ["nin", "bvn"].includes(field.name) ? 11 : undefined
+                    ["nin", "bvn", "nins"].includes(field.name) ? 11 : undefined
                   }
                   value={values[field.name] || ""}
                   placeholder={field.placeholder}
@@ -565,12 +611,16 @@ export default function AgeVerifyForm({ service }: { service: string }) {
 
       {result && (
         <section className="space-y-3 rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-semibold text-foreground">Request Submitted</h2>
+          <h2 className="font-semibold text-foreground">
+            {result.status === "COMPLETED"
+              ? "Request Completed"
+              : "Request Submitted"}
+          </h2>
           <p className="text-sm text-muted-foreground">
             Reference: {result.reference}
           </p>
           <p className="text-sm text-muted-foreground">
-            Status: {result.status}
+            Status: {STATUS_TEXT[result.status] ?? result.status}
           </p>
 
           {result.status === "PROCESSING" && (
@@ -584,9 +634,9 @@ export default function AgeVerifyForm({ service }: { service: string }) {
             </button>
           )}
 
-          {result.pdf_url && (
+          {pdfLink && (
             <a
-              href={result.pdf_url}
+              href={pdfLink}
               target="_blank"
               rel="noreferrer"
               className="block text-sm font-semibold text-primary hover:underline"
@@ -595,9 +645,9 @@ export default function AgeVerifyForm({ service }: { service: string }) {
             </a>
           )}
 
-          {result.download_url && (
+          {downloadLink && (
             <a
-              href={result.download_url}
+              href={downloadLink}
               target="_blank"
               rel="noreferrer"
               className="block text-sm font-semibold text-primary hover:underline"

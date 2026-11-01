@@ -125,8 +125,36 @@ export async function POST(
       );
     }
 
-    const body = await req.json().catch(() => null);
-    const payload = body?.payload;
+    // Most services send JSON. BVN CRM sends multipart/form-data with the
+    // enrollment screenshot attached.
+    let payload: any = null;
+    let pinValue = "";
+    let screenshot: File | null = null;
+
+    const contentType = req.headers.get("content-type") ?? "";
+
+    if (contentType.includes("multipart/form-data")) {
+      const form = await req.formData().catch(() => null);
+
+      if (form) {
+        try {
+          payload = JSON.parse(String(form.get("payload") ?? ""));
+        } catch {
+          payload = null;
+        }
+
+        pinValue = String(form.get("pin") ?? "");
+
+        const upload = form.get("enrollment_screenshot");
+        if (upload && typeof upload !== "string") {
+          screenshot = upload as File;
+        }
+      }
+    } else {
+      const body = await req.json().catch(() => null);
+      payload = body?.payload;
+      pinValue = String(body?.pin ?? "");
+    }
 
     if (
       !payload ||
@@ -143,6 +171,30 @@ export async function POST(
       );
     }
 
+    if (service === "bvn-crm") {
+      if (!screenshot) {
+        return NextResponse.json(
+          { error: "Please attach the enrollment screenshot." },
+          { status: 400 },
+        );
+      }
+
+      if (!screenshot.type.startsWith("image/")) {
+        return NextResponse.json(
+          { error: "The screenshot must be an image file." },
+          { status: 400 },
+        );
+      }
+
+      // Vercel functions accept request bodies up to about 4.5 MB.
+      if (screenshot.size > 4 * 1024 * 1024) {
+        return NextResponse.json(
+          { error: "The screenshot must be smaller than 4 MB." },
+          { status: 400 },
+        );
+      }
+    }
+
     // The provider bills per accepted ID, but your selling price is per
     // request, so batches are limited to one ID until pricing is multiplied.
     const idList = (payload as any).tracking_ids ?? (payload as any).nins;
@@ -154,10 +206,7 @@ export async function POST(
       );
     }
 
-    const pinCheck = await verifyUserTransactionPin(
-      user.id,
-      String(body?.pin ?? ""),
-    );
+    const pinCheck = await verifyUserTransactionPin(user.id, pinValue);
 
     if (!pinCheck.valid) {
       return NextResponse.json(
@@ -229,10 +278,26 @@ export async function POST(
     let response: any;
 
     try {
-      response = await av(svc.endpoint, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      if (service === "bvn-crm" && screenshot) {
+        const formData = new FormData();
+
+        for (const [key, value] of Object.entries(payload)) {
+          formData.append(key, String(value));
+        }
+
+        formData.append(
+          "enrollment_screenshot",
+          screenshot,
+          screenshot.name || "screenshot.jpg",
+        );
+
+        response = await av(svc.endpoint, { method: "POST", body: formData });
+      } else {
+        response = await av(svc.endpoint, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
     } catch (error) {
       console.error("AGEVERIFY CONNECTION ERROR:", error);
 
