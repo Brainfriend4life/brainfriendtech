@@ -59,6 +59,8 @@ export default function AgeVerifyHistoryPage() {
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [checking, setChecking] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -84,6 +86,39 @@ export default function AgeVerifyHistoryPage() {
       active = false;
     };
   }, []);
+
+  // Asks for the latest result of a request that is still processing, then
+  // refreshes the list.
+  async function checkStatus(reference: string) {
+    setChecking(reference);
+    setNotice("");
+
+    try {
+      const response = await fetch("/api/verify/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reference }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setNotice(data.error || "Unable to check status.");
+      } else if (data.status === "PROCESSING") {
+        setNotice("Still processing. Please check again later.");
+      }
+
+      const history = await fetch("/api/verification/history", {
+        cache: "no-store",
+      });
+      const historyData = await history.json();
+
+      if (history.ok) setRecords(historyData.records || []);
+    } catch {
+      setNotice("Unable to check status right now.");
+    } finally {
+      setChecking(null);
+    }
+  }
 
   return (
     <main className="mx-auto max-w-6xl space-y-5">
@@ -145,6 +180,12 @@ export default function AgeVerifyHistoryPage() {
       {error && (
         <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-xs text-red-700">
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
+          {notice}
         </div>
       )}
 
@@ -241,10 +282,17 @@ export default function AgeVerifyHistoryPage() {
                             {record.status}
                           </span>
                           {record.status.toUpperCase() === "PROCESSING" && (
-                            <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <button
+                              type="button"
+                              onClick={() => checkStatus(record.reference)}
+                              disabled={checking === record.reference}
+                              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] font-semibold text-foreground transition hover:bg-muted disabled:opacity-50"
+                            >
                               <Clock3 className="h-3 w-3" />
-                              Updates automatically
-                            </span>
+                              {checking === record.reference
+                                ? "Checking..."
+                                : "Check status"}
+                            </button>
                           )}
                           {record.refunded && (
                             <span className="text-[10px] font-semibold text-emerald-600">
