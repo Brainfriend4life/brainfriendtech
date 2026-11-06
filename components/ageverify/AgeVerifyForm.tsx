@@ -481,7 +481,7 @@ export default function AgeVerifyForm({ service }: { service: string }) {
             {pricesLoading
               ? "Loading price..."
               : currentPrice == null
-                ? "Price unavailable"
+                ? "Let's verify a NIN"
                 : `₦${currentPrice.toLocaleString("en-NG")}`}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -588,7 +588,7 @@ export default function AgeVerifyForm({ service }: { service: string }) {
             {loading
               ? "Submitting..."
               : currentPrice == null
-                ? "Price unavailable"
+                ? "Let's verify a NIN"
                 : "Submit Verification"}
           </button>
         </form>
