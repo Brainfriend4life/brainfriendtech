@@ -170,7 +170,6 @@ export async function createVirtualAccount(user: AccountUser) {
       identificationStatus: "SUCCESS",
       status: "ASSIGNED",
       assignedAt: new Date(),
-      isTest: isTestKey(),
     },
   });
 }
@@ -299,7 +298,7 @@ export async function handleDedicatedAccountEvent(event: any): Promise<{
     };
   }
 
-  // Validate payment amount.
+  // Validate payment amount. Paystack sends amount and fees in kobo.
   const grossKobo = Number(data.amount);
 
   if (!Number.isFinite(grossKobo) || grossKobo <= 0) {
