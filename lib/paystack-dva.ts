@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
-// Paystack Dedicated Virtual Accounts: creating a customer's account number
-// and crediting their wallet when a bank transfer arrives.
+// Paystack Dedicated Virtual Accounts:
+// Create customer accounts and credit wallets from successful transfers.
 
 const PAYSTACK_BASE = "https://api.paystack.co";
 
@@ -10,6 +10,7 @@ export class DvaError extends Error {
 
   constructor(message: string, needsVerification = false) {
     super(message);
+    this.name = "DvaError";
     this.needsVerification = needsVerification;
   }
 }
@@ -32,6 +33,7 @@ async function paystack(path: string, init: RequestInit = {}) {
     headers: {
       Authorization: `Bearer ${secretKey()}`,
       "Content-Type": "application/json",
+      ...init.headers,
     },
     cache: "no-store",
   });
@@ -76,9 +78,11 @@ type AccountUser = {
   phone: string;
 };
 
-/** Creates (or returns) the user's dedicated virtual account. */
+/**
+ * Creates or returns the user's dedicated virtual account.
+ */
 export async function createVirtualAccount(user: AccountUser) {
-  const existing = await prisma.virtualAccount.findUnique({
+  const existing = await prisma.paystackVirtualAccount.findUnique({
     where: { userId: user.id },
   });
 
@@ -86,7 +90,7 @@ export async function createVirtualAccount(user: AccountUser) {
 
   const { first, last } = splitName(user.fullName);
 
-  // 1. The customer record on Paystack.
+  // 1. Create or retrieve the Paystack customer.
   const created = await paystack("/customer", {
     method: "POST",
     body: JSON.stringify({
@@ -101,6 +105,7 @@ export async function createVirtualAccount(user: AccountUser) {
 
   if (!customerCode) {
     const found = await paystack(`/customer/${encodeURIComponent(user.email)}`);
+
     customerCode = found.body?.data?.customer_code ?? null;
   }
 
@@ -109,7 +114,7 @@ export async function createVirtualAccount(user: AccountUser) {
     throw new DvaError("Unable to set up your account right now.");
   }
 
-  // 2. The account number. If the customer already has one, reuse it.
+  // 2. Assign the dedicated account.
   const assigned = await paystack("/dedicated_account", {
     method: "POST",
     body: JSON.stringify({
@@ -120,8 +125,12 @@ export async function createVirtualAccount(user: AccountUser) {
 
   let account: any = assigned.ok ? assigned.body?.data : null;
 
+  // If an account already exists, retrieve it from the customer record.
   if (!account?.account_number) {
-    const customer = await paystack(`/customer/${customerCode}`);
+    const customer = await paystack(
+      `/customer/${encodeURIComponent(customerCode)}`,
+    );
+
     account = customer.body?.data?.dedicated_account ?? null;
   }
 
@@ -136,22 +145,39 @@ export async function createVirtualAccount(user: AccountUser) {
     );
   }
 
-  return prisma.virtualAccount.upsert({
+  return prisma.paystackVirtualAccount.upsert({
     where: { userId: user.id },
-    update: {},
+    update: {
+      customerCode,
+      accountId: account.id ? String(account.id) : undefined,
+      accountNumber: String(account.account_number),
+      accountName: account.account_name ?? user.fullName,
+      bankName: account.bank?.name ?? "Bank",
+      bankSlug: account.bank?.slug ?? null,
+      assignmentStatus: "SUCCESS",
+      status: "ASSIGNED",
+      assignedAt: new Date(),
+    },
     create: {
       userId: user.id,
       customerCode,
+      accountId: account.id ? String(account.id) : null,
       bankName: account.bank?.name ?? "Bank",
       bankSlug: account.bank?.slug ?? null,
       accountName: account.account_name ?? user.fullName,
       accountNumber: String(account.account_number),
+      assignmentStatus: "SUCCESS",
+      identificationStatus: "SUCCESS",
+      status: "ASSIGNED",
+      assignedAt: new Date(),
       isTest: isTestKey(),
     },
   });
 }
 
-/** Asks Paystack to re-check an account for transfers it has not reported. */
+/**
+ * Requery a dedicated account for a transfer Paystack has not reported.
+ */
 export async function requeryVirtualAccount(account: {
   accountNumber: string;
   bankSlug: string | null;
@@ -172,78 +198,121 @@ export async function requeryVirtualAccount(account: {
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 /**
- * Call this from the Paystack webhook with the parsed event, AFTER the
- * signature has been verified. Returns { handled: true } for transfers to a
- * dedicated virtual account (the caller should then respond 200 and stop).
- *
- * The customer is credited the amount sent minus Paystack's fee, once per
- * payment, even if Paystack sends the same event again.
+ * Handles a successful Paystack Dedicated Nuban payment.
+ * Call only after verifying the webhook signature.
  */
 export async function handleDedicatedAccountEvent(event: any): Promise<{
   handled: boolean;
   credited?: boolean;
   reason?: string;
 }> {
-  if (event?.event !== "charge.success") return { handled: false };
+  if (event?.event !== "charge.success") {
+    return { handled: false };
+  }
 
   const data = event.data ?? {};
   const channel = data.authorization?.channel ?? data.channel;
 
-  if (channel !== "dedicated_nuban") return { handled: false };
+  if (channel !== "dedicated_nuban") {
+    return { handled: false };
+  }
 
-  // Test payments must never credit a live wallet.
+  if (data.status !== "success") {
+    return {
+      handled: true,
+      credited: false,
+      reason: "payment not successful",
+    };
+  }
+
   if (data.domain === "test" && !isTestKey()) {
-    return { handled: true, credited: false, reason: "test event ignored" };
+    return {
+      handled: true,
+      credited: false,
+      reason: "test payment ignored",
+    };
   }
 
-  if (data.status && data.status !== "success") {
-    return { handled: true, credited: false, reason: "payment not successful" };
+  const reference = String(data.reference ?? "").trim();
+
+  if (!reference) {
+    return {
+      handled: true,
+      credited: false,
+      reason: "missing payment reference",
+    };
   }
 
-  const accountNumber = data.authorization?.receiver_bank_account_number;
-  const customerCode = data.customer?.customer_code;
-  const email = data.customer?.email;
+  // Find the receiving virtual account.
+  const accountNumber = String(
+    data.authorization?.receiver_bank_account_number ??
+      data.receiver?.account_number ??
+      data.dedicated_account?.account_number ??
+      "",
+  ).trim();
 
-  let userId: string | null = null;
+  const customerCode = String(data.customer?.customer_code ?? "").trim();
 
-  if (accountNumber) {
-    const account = await prisma.virtualAccount.findUnique({
-      where: { accountNumber: String(accountNumber) },
+  const email = String(data.customer?.email ?? "")
+    .trim()
+    .toLowerCase();
+
+  let virtualAccount = accountNumber
+    ? await prisma.paystackVirtualAccount.findFirst({
+        where: {
+          accountNumber,
+          status: "ASSIGNED",
+        },
+      })
+    : null;
+
+  if (!virtualAccount && customerCode) {
+    virtualAccount = await prisma.paystackVirtualAccount.findFirst({
+      where: { customerCode },
     });
-    userId = account?.userId ?? null;
   }
 
-  if (!userId && customerCode) {
-    const account = await prisma.virtualAccount.findFirst({
-      where: { customerCode: String(customerCode) },
-    });
-    userId = account?.userId ?? null;
-  }
+  let userId: string | null = virtualAccount?.userId ?? null;
 
+  // Email fallback for manually created Paystack accounts.
   if (!userId && email) {
     const user = await prisma.user.findUnique({
-      where: { email: String(email).toLowerCase() },
+      where: { email },
       select: { id: true },
     });
+
     userId = user?.id ?? null;
   }
 
   if (!userId) {
-    console.error("DVA PAYMENT: no matching customer:", {
-      reference: data.reference,
+    console.error("DVA PAYMENT: no matching Brainfriend customer.", {
+      reference,
       accountNumber,
+      customerCode,
+      email,
     });
-    return { handled: true, credited: false, reason: "unknown account" };
+
+    return {
+      handled: true,
+      credited: false,
+      reason: "customer not found",
+    };
   }
 
+  // Validate payment amount.
   const grossKobo = Number(data.amount);
 
   if (!Number.isFinite(grossKobo) || grossKobo <= 0) {
-    return { handled: true, credited: false, reason: "invalid amount" };
+    return {
+      handled: true,
+      credited: false,
+      reason: "invalid amount",
+    };
   }
 
-  // Paystack's reported fee; fall back to 1% capped at N300.
+  // Use Paystack's reported fee.
   const reportedFee = Number(data.fees);
+
   const feeKobo =
     Number.isFinite(reportedFee) && reportedFee >= 0
       ? reportedFee
@@ -253,21 +322,25 @@ export async function handleDedicatedAccountEvent(event: any): Promise<{
   const fee = round2(feeKobo / 100);
   const credit = round2((grossKobo - feeKobo) / 100);
 
-  if (credit <= 0 || !data.reference) {
-    return { handled: true, credited: false, reason: "nothing to credit" };
+  if (credit <= 0) {
+    return {
+      handled: true,
+      credited: false,
+      reason: "payment amount is not greater than fee",
+    };
   }
 
+  // Credit the wallet exactly once.
   try {
     await prisma.$transaction(async (tx) => {
-      // The reference is unique, so a repeated webhook cannot credit twice.
       await tx.transaction.create({
         data: {
-          userId: userId as string,
+          userId,
           type: "FUND_WALLET",
           amount: credit,
           description: `Wallet funding by bank transfer (N${gross} sent, N${fee} fee)`,
           status: "SUCCESS",
-          reference: `DVA-${data.reference}`,
+          reference,
           provider: "PAYSTACK",
           cost: 0,
           profit: 0,
@@ -276,18 +349,40 @@ export async function handleDedicatedAccountEvent(event: any): Promise<{
       });
 
       await tx.user.update({
-        where: { id: userId as string },
-        data: { walletBalance: { increment: credit } },
+        where: { id: userId },
+        data: {
+          walletBalance: {
+            increment: credit,
+          },
+        },
       });
     });
 
-    return { handled: true, credited: true };
+    console.log("PAYSTACK DVA WALLET CREDIT SUCCESS", {
+      userId,
+      reference,
+      accountNumber,
+      gross,
+      fee,
+      credited: credit,
+    });
+
+    return {
+      handled: true,
+      credited: true,
+    };
   } catch (error: any) {
     if (error?.code === "P2002") {
-      return { handled: true, credited: false, reason: "already credited" };
+      return {
+        handled: true,
+        credited: false,
+        reason: "already credited",
+      };
     }
 
-    // Let the webhook answer with an error so Paystack retries it.
+    console.error("DVA WALLET CREDIT ERROR:", error);
+
+    // Allow Paystack to retry if the database operation fails.
     throw error;
   }
 }
