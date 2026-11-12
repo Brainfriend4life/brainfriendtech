@@ -15,6 +15,23 @@ import { USER_PAYS_FEE, transferFee } from "@/lib/transfer-fee";
 
 const MIN_WITHDRAWAL = 100;
 
+// Most one user can withdraw in any rolling 24 hours (in naira)
+const DAILY_WITHDRAWAL_LIMIT = 10000;
+
+// Wrong PIN tries allowed before withdrawals lock
+const MAX_PIN_ATTEMPTS = 5;
+const PIN_LOCK_MINUTES = 60;
+
+class DailyLimitError extends Error {
+  remaining: number;
+  constructor(remaining: number) {
+    super("DAILY_LIMIT_EXCEEDED");
+    this.remaining = remaining;
+  }
+}
+
+const naira = (n: number) => `₦${n.toLocaleString("en-NG")}`;
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -36,7 +53,16 @@ export async function POST(request: Request) {
 
     if (!Number.isFinite(amount) || amount < MIN_WITHDRAWAL) {
       return NextResponse.json(
-        { error: `Minimum withdrawal is ₦${MIN_WITHDRAWAL}.` },
+        { error: `Minimum withdrawal is ${naira(MIN_WITHDRAWAL)}.` },
+        { status: 400 },
+      );
+    }
+
+    if (amount > DAILY_WITHDRAWAL_LIMIT) {
+      return NextResponse.json(
+        {
+          error: `The maximum you can withdraw in 24 hours is ${naira(DAILY_WITHDRAWAL_LIMIT)}.`,
+        },
         { status: 400 },
       );
     }
@@ -55,7 +81,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Transaction PIN check (before anything touches money)
     if (!/^\d{4,6}$/.test(pin)) {
       return NextResponse.json(
         { error: "Enter your transaction PIN." },
@@ -63,9 +88,16 @@ export async function POST(request: Request) {
       );
     }
 
+    // ---------------------------------------------------------
+    // Transaction PIN check with lockout
+    // ---------------------------------------------------------
     const pinUser = await prisma.user.findUnique({
       where: { email },
-      select: { transactionPinHash: true },
+      select: {
+        id: true,
+        transactionPinHash: true,
+        transactionPinLockedUntil: true,
+      },
     });
 
     if (!pinUser) {
@@ -79,16 +111,100 @@ export async function POST(request: Request) {
       );
     }
 
+    const now = new Date();
+
+    // Currently locked: refuse without even looking at the PIN
+    if (
+      pinUser.transactionPinLockedUntil &&
+      pinUser.transactionPinLockedUntil > now
+    ) {
+      const mins = Math.ceil(
+        (pinUser.transactionPinLockedUntil.getTime() - now.getTime()) / 60000,
+      );
+      return NextResponse.json(
+        {
+          error: `Too many wrong PIN attempts. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+        },
+        { status: 429 },
+      );
+    }
+
+    // An old lock has expired: start fresh
+    if (pinUser.transactionPinLockedUntil) {
+      await prisma.user.update({
+        where: { id: pinUser.id },
+        data: { transactionPinAttempts: 0, transactionPinLockedUntil: null },
+      });
+    }
+
+    // Count this attempt BEFORE checking the PIN. The increment is atomic, so
+    // many guesses fired at once cannot slip past the limit.
+    const counted = await prisma.user.update({
+      where: { id: pinUser.id },
+      data: { transactionPinAttempts: { increment: 1 } },
+      select: { transactionPinAttempts: true },
+    });
+    const attempts = counted.transactionPinAttempts;
+
+    if (attempts > MAX_PIN_ATTEMPTS) {
+      await prisma.user.updateMany({
+        where: { id: pinUser.id, transactionPinLockedUntil: null },
+        data: {
+          transactionPinLockedUntil: new Date(
+            Date.now() + PIN_LOCK_MINUTES * 60000,
+          ),
+        },
+      });
+      return NextResponse.json(
+        {
+          error: `Too many wrong PIN attempts. Withdrawals are locked for ${PIN_LOCK_MINUTES} minutes.`,
+        },
+        { status: 429 },
+      );
+    }
+
     const pinMatches = await bcrypt.compare(pin, pinUser.transactionPinHash);
 
     if (!pinMatches) {
+      if (attempts >= MAX_PIN_ATTEMPTS) {
+        await prisma.user.update({
+          where: { id: pinUser.id },
+          data: {
+            transactionPinLockedUntil: new Date(
+              Date.now() + PIN_LOCK_MINUTES * 60000,
+            ),
+          },
+        });
+        return NextResponse.json(
+          {
+            error: `Too many wrong PIN attempts. Withdrawals are locked for ${PIN_LOCK_MINUTES} minutes.`,
+          },
+          { status: 429 },
+        );
+      }
+
+      const left = MAX_PIN_ATTEMPTS - attempts;
       return NextResponse.json(
-        { error: "Incorrect transaction PIN." },
+        {
+          error: `Incorrect transaction PIN. ${left} attempt${left === 1 ? "" : "s"} left.`,
+        },
         { status: 403 },
       );
     }
 
-    // Verify the account with Paystack. Never trust the name sent by the browser.
+    // Correct PIN: clear the failed-attempt counter
+    await prisma.user.update({
+      where: { id: pinUser.id },
+      data: {
+        transactionPinAttempts: 0,
+        transactionPinLockedUntil: null,
+        lastTransactionPinCheck: new Date(),
+      },
+    });
+
+    // ---------------------------------------------------------
+    // Verify the destination account with Paystack
+    // ---------------------------------------------------------
     let accountName: string;
     try {
       accountName = (await resolveAccount(accountNumber, bankCode))
@@ -109,7 +225,9 @@ export async function POST(request: Request) {
     // Lowercase letters, numbers, "_" and "-" only: required by Paystack references
     const reference = `wd_${Date.now()}_${randomUUID().replace(/-/g, "").slice(0, 10)}`;
 
+    // ---------------------------------------------------------
     // 1) Debit the wallet and record the withdrawal (atomic)
+    // ---------------------------------------------------------
     const walletBalance = await prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
         where: { email },
@@ -119,12 +237,33 @@ export async function POST(request: Request) {
       if (!user) throw new Error("USER_NOT_FOUND");
       if (user.status !== "ACTIVE") throw new Error("ACCOUNT_SUSPENDED");
 
-      // Only debits if the balance is still enough: blocks double-spend races
+      // Only debits if the balance is still enough. This also locks the user's
+      // row until the transaction ends, so two withdrawals started at the same
+      // time are handled one after the other (the cap check below stays accurate).
       const debited = await tx.user.updateMany({
         where: { id: user.id, walletBalance: { gte: amount } },
         data: { walletBalance: { decrement: amount } },
       });
       if (debited.count === 0) throw new Error("INSUFFICIENT_BALANCE");
+
+      // Daily cap: everything this user withdrew in the last 24 hours
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recent = await tx.withdrawal.aggregate({
+        _sum: { amount: true },
+        where: {
+          userId: user.id,
+          createdAt: { gte: since },
+          status: { in: ["PENDING", "APPROVED", "PAID"] },
+        },
+      });
+      const usedToday = recent._sum.amount ?? 0;
+
+      if (usedToday + amount > DAILY_WITHDRAWAL_LIMIT) {
+        // Throwing rolls back the debit above
+        throw new DailyLimitError(
+          Math.max(DAILY_WITHDRAWAL_LIMIT - usedToday, 0),
+        );
+      }
 
       await tx.withdrawal.create({
         data: {
@@ -157,7 +296,9 @@ export async function POST(request: Request) {
       return fresh?.walletBalance ?? 0;
     });
 
+    // ---------------------------------------------------------
     // 2) Send the money through Paystack
+    // ---------------------------------------------------------
     try {
       const recipient = await createRecipient({
         name: accountName,
@@ -209,6 +350,19 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("WITHDRAWAL REQUEST ERROR:", error);
+
+    if (error instanceof DailyLimitError) {
+      const left = error.remaining;
+      return NextResponse.json(
+        {
+          error:
+            left > 0
+              ? `Daily withdrawal limit reached. You can withdraw up to ${naira(left)} more in the next 24 hours.`
+              : `Daily withdrawal limit of ${naira(DAILY_WITHDRAWAL_LIMIT)} reached. Try again later.`,
+        },
+        { status: 400 },
+      );
+    }
 
     if (error instanceof Error) {
       if (error.message === "USER_NOT_FOUND") {
