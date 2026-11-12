@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { handleTransferEvent } from "@/lib/transfer-webhook";
 
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY;
 
@@ -74,6 +75,12 @@ export async function POST(req: NextRequest) {
 
     const event = JSON.parse(rawBody);
     const data = event.data;
+    if (
+      typeof event.event === "string" &&
+      event.event.startsWith("transfer.")
+    ) {
+      return handleTransferEvent(event);
+    }
 
     // ==========================================
     // DVA IDENTITY / ASSIGNMENT EVENTS
