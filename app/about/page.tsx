@@ -39,9 +39,9 @@ export default function AboutPage() {
               </h1>
 
               <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-gray-600 dark:text-gray-300 sm:text-xl">
-                Brainfriend Global Tech is a Nigerian digital services
-                platform created to make essential digital services
-                easier, faster and more accessible.
+                Brainfriend Global Tech is a Nigerian digital services platform
+                created to make essential digital services easier, faster and
+                more accessible.
               </p>
             </div>
           </div>
@@ -60,8 +60,8 @@ export default function AboutPage() {
 
               <div className="relative overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-800">
                 <Image
-                  src="/founder.jpg"
-                  alt="Emmanuel - Founder of Brainfriend Global Tech"
+                  src="/logo.jpg"
+                  alt="Brainfriend Global Tech logo"
                   width={600}
                   height={700}
                   priority
@@ -82,23 +82,22 @@ export default function AboutPage() {
               </h2>
 
               <p className="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-300">
-                Brainfriend Global Tech is a Nigerian digital services
-                platform built to make everyday digital transactions
-                easier and more convenient.
+                Brainfriend Global Tech is a Nigerian digital services platform
+                built to make everyday digital transactions easier and more
+                convenient.
               </p>
 
               <p className="mt-5 text-lg leading-8 text-gray-600 dark:text-gray-300">
                 From buying data and airtime to paying electricity bills,
-                renewing cable TV subscriptions, accessing NIN
-                verification services and handling educational needs,
-                our goal is to bring essential digital services together
-                on one reliable platform.
+                renewing cable TV subscriptions, accessing NIN verification
+                services and handling educational needs, our goal is to bring
+                essential digital services together on one reliable platform.
               </p>
 
               <p className="mt-5 text-lg leading-8 text-gray-600 dark:text-gray-300">
-                We believe technology should solve real problems. That
-                belief continues to guide the way we build our platform,
-                improve our services and serve our customers.
+                We believe technology should solve real problems. That belief
+                continues to guide the way we build our platform, improve our
+                services and serve our customers.
               </p>
             </div>
           </div>
@@ -120,22 +119,22 @@ export default function AboutPage() {
               </h2>
 
               <p className="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-300">
-                Brainfriend Global Tech was created with a simple
-                vision: to make essential digital services available
-                to people whenever and wherever they need them.
+                Brainfriend Global Tech was created with a simple vision: to
+                make essential digital services available to people whenever and
+                wherever they need them.
               </p>
 
               <p className="mt-5 text-lg leading-8 text-gray-600 dark:text-gray-300">
-                We understand that everyday transactions should not
-                be stressful. Our platform brings multiple services
-                together so customers can complete their transactions
-                conveniently from one place.
+                We understand that everyday transactions should not be
+                stressful. Our platform brings multiple services together so
+                customers can complete their transactions conveniently from one
+                place.
               </p>
 
               <p className="mt-5 text-lg leading-8 text-gray-600 dark:text-gray-300">
-                As we continue to grow, we remain focused on improving
-                our technology, expanding our services and creating
-                better experiences for our customers.
+                As we continue to grow, we remain focused on improving our
+                technology, expanding our services and creating better
+                experiences for our customers.
               </p>
             </div>
           </div>
@@ -156,8 +155,8 @@ export default function AboutPage() {
             </h2>
 
             <p className="mt-5 text-lg leading-8 text-gray-600 dark:text-gray-300">
-              We provide convenient digital and VTU services designed
-              to make everyday transactions easier.
+              We provide convenient digital and VTU services designed to make
+              everyday transactions easier.
             </p>
           </div>
 
@@ -220,8 +219,8 @@ export default function AboutPage() {
                 </h3>
 
                 <p className="mt-3 leading-7 text-gray-600 dark:text-gray-300">
-                  Complete your digital transactions quickly without
-                  unnecessary stress or complicated processes.
+                  Complete your digital transactions quickly without unnecessary
+                  stress or complicated processes.
                 </p>
               </div>
 
@@ -237,8 +236,8 @@ export default function AboutPage() {
                 </h3>
 
                 <p className="mt-3 leading-7 text-gray-600 dark:text-gray-300">
-                  We work continuously to provide dependable services
-                  and a smooth transaction experience.
+                  We work continuously to provide dependable services and a
+                  smooth transaction experience.
                 </p>
               </div>
 
@@ -254,8 +253,8 @@ export default function AboutPage() {
                 </h3>
 
                 <p className="mt-3 leading-7 text-gray-600 dark:text-gray-300">
-                  We strive to provide competitive prices and good
-                  value for the services you use.
+                  We strive to provide competitive prices and good value for the
+                  services you use.
                 </p>
               </div>
 
@@ -271,8 +270,8 @@ export default function AboutPage() {
                 </h3>
 
                 <p className="mt-3 leading-7 text-gray-600 dark:text-gray-300">
-                  Our platform is designed to be simple and easy to
-                  navigate on both phones and computers.
+                  Our platform is designed to be simple and easy to navigate on
+                  both phones and computers.
                 </p>
               </div>
 
@@ -288,8 +287,8 @@ export default function AboutPage() {
                 </h3>
 
                 <p className="mt-3 leading-7 text-gray-600 dark:text-gray-300">
-                  Our customers are at the heart of what we do. We
-                  listen, improve and provide support when needed.
+                  Our customers are at the heart of what we do. We listen,
+                  improve and provide support when needed.
                 </p>
               </div>
 
@@ -305,8 +304,8 @@ export default function AboutPage() {
                 </h3>
 
                 <p className="mt-3 leading-7 text-gray-600 dark:text-gray-300">
-                  Access several essential digital services from one
-                  convenient platform.
+                  Access several essential digital services from one convenient
+                  platform.
                 </p>
               </div>
             </div>
@@ -314,18 +313,18 @@ export default function AboutPage() {
         </section>
 
         {/* ===================================================== */}
-        {/* FOUNDER */}
+        {/* OUR COMMITMENT (replaces the founder section) */}
         {/* ===================================================== */}
 
         <section className="mx-auto max-w-7xl px-6 py-20 lg:px-8 lg:py-24">
           <div className="grid items-center gap-12 rounded-3xl bg-gray-50 p-8 dark:bg-gray-900 sm:p-12 lg:grid-cols-[0.8fr_1.2fr] lg:p-16">
-            {/* FOUNDER IMAGE */}
+            {/* LOGO IMAGE */}
 
             <div className="flex justify-center">
               <div className="overflow-hidden rounded-3xl shadow-xl ring-1 ring-gray-200 dark:ring-gray-800">
                 <Image
-                  src="/founder.jpg"
-                  alt="Emmanuel, Founder of Brainfriend Global Tech"
+                  src="/logo.jpg"
+                  alt="Brainfriend Global Tech logo"
                   width={450}
                   height={550}
                   className="h-auto w-full max-w-sm object-cover"
@@ -333,43 +332,36 @@ export default function AboutPage() {
               </div>
             </div>
 
-            {/* FOUNDER CONTENT */}
+            {/* CONTENT */}
 
             <div>
               <p className="font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">
-                Meet the Founder
+                Our Commitment
               </p>
 
               <h2 className="mt-3 text-2xl font-bold text-gray-900 dark:text-white sm:text-3xl">
-                Odjuvwederhie Emmanuel Oghenevovwero
+                Brainfriend Global Tech
               </h2>
 
               <p className="mt-2 text-lg font-medium text-indigo-600 dark:text-indigo-400">
-                Founder, Brainfriend Global Tech
-              </p>
-
-              <p className="mt-1 font-bold text-gray-700 dark:text-gray-200">
-                Fullstack Dev / Next.js / React / TypeScript / JavaScript
-                / Tailwind CSS
+                Digital services made simple
               </p>
 
               <p className="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-300">
-                Brainfriend Global Tech was founded with the vision of
-                building a technology-driven platform that makes
-                essential digital services easier and more accessible
-                to Nigerians.
+                Brainfriend Global Tech was founded with the vision of building
+                a technology-driven platform that makes essential digital
+                services easier and more accessible to Nigerians.
               </p>
 
               <p className="mt-5 text-lg leading-8 text-gray-600 dark:text-gray-300">
-                With a passion for technology, digital solutions and
-                creating useful services, the journey continues with
-                a commitment to building a trusted digital services
-                brand.
+                With a passion for technology, digital solutions and creating
+                useful services, we are committed to building a trusted digital
+                services brand.
               </p>
 
               <p className="mt-5 text-lg font-medium leading-8 text-gray-900 dark:text-white">
-                “Our goal is simple: To build technology that solves
-                real problems and makes everyday life easier.”
+                “Our goal is simple: To build technology that solves real
+                problems and makes everyday life easier.”
               </p>
             </div>
           </div>
@@ -388,9 +380,9 @@ export default function AboutPage() {
                 </h2>
 
                 <p className="mt-5 text-lg leading-8 text-gray-600 dark:text-gray-300">
-                  To provide fast, reliable, affordable and accessible
-                  digital services while continuously improving the
-                  technology and customer experience behind them.
+                  To provide fast, reliable, affordable and accessible digital
+                  services while continuously improving the technology and
+                  customer experience behind them.
                 </p>
               </div>
 
@@ -400,9 +392,9 @@ export default function AboutPage() {
                 </h2>
 
                 <p className="mt-5 text-lg leading-8 text-gray-600 dark:text-gray-300">
-                  To become a trusted and widely recognized digital
-                  services platform in Nigeria, providing convenient
-                  technology solutions that people can rely on every day.
+                  To become a trusted and widely recognized digital services
+                  platform in Nigeria, providing convenient technology solutions
+                  that people can rely on every day.
                 </p>
               </div>
             </div>
@@ -442,9 +434,9 @@ export default function AboutPage() {
 
               <div className="max-w-md">
                 <p className="leading-7 text-indigo-100">
-                  We are proudly Nigerian and focused on providing
-                  digital services that meet the everyday needs of
-                  customers across Nigeria.
+                  We are proudly Nigerian and focused on providing digital
+                  services that meet the everyday needs of customers across
+                  Nigeria.
                 </p>
               </div>
             </div>
@@ -462,9 +454,9 @@ export default function AboutPage() {
             </h2>
 
             <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-gray-600 dark:text-gray-300">
-              Whether you need data, airtime, electricity payment,
-              cable TV renewal, NIN services or educational services,
-              Brainfriend Global Tech is here to make the process easier.
+              Whether you need data, airtime, electricity payment, cable TV
+              renewal, NIN services or educational services, Brainfriend Global
+              Tech is here to make the process easier.
             </p>
 
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
