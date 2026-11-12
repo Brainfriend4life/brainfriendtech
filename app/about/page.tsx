@@ -60,8 +60,8 @@ export default function AboutPage() {
 
               <div className="relative overflow-hidden rounded-3xl bg-white shadow-xl ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-800">
                 <Image
-                  src="/logo.jpg"
-                  alt="Brainfriend Global Tech logo"
+                  src="/logo.png"
+                  alt=""
                   width={600}
                   height={700}
                   priority
@@ -323,7 +323,7 @@ export default function AboutPage() {
             <div className="flex justify-center">
               <div className="overflow-hidden rounded-3xl shadow-xl ring-1 ring-gray-200 dark:ring-gray-800">
                 <Image
-                  src="/logo.jpg"
+                  src="/logo.png"
                   alt="Brainfriend Global Tech logo"
                   width={450}
                   height={550}
