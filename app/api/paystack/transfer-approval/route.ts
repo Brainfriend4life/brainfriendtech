@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { fetchRecipient } from "@/lib/paystack";
 import { USER_PAYS_FEE, transferFee } from "@/lib/transfer-fee";
 
+// app/api/paystack/transfer-approval/route.ts
+//
 // IMPORTANT: this route only READS. It never changes balances or statuses.
 // Anyone can call a public URL, so it must have no side effects.
 
@@ -19,17 +21,18 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
-    const reference = typeof body?.reference === "string" ? body.reference : "";
+    // Temporary: remove once you've confirmed the real payload shape
+    console.log("APPROVAL BODY:", JSON.stringify(body));
+
+    const reference: string =
+      [body?.reference, body?.transfer_reference, body?.data?.reference].find(
+        (v) => typeof v === "string" && v,
+      ) ?? "";
     const amountKobo = Number(body?.amount);
     const recipient = body?.recipient;
 
-    if (
-      !reference ||
-      !Number.isFinite(amountKobo) ||
-      amountKobo <= 0 ||
-      recipient == null
-    ) {
-      return reject("malformed payload", { reference });
+    if (!Number.isFinite(amountKobo) || amountKobo <= 0 || recipient == null) {
+      return reject("malformed payload", { body });
     }
 
     if (body?.source && body.source !== "balance") {
@@ -40,43 +43,57 @@ export async function POST(request: Request) {
       return reject("unexpected currency", { reference });
     }
 
+    // Destination account number, whether `recipient` is an object, a code or an id
+    let acctNo = "";
+    if (typeof recipient === "object") {
+      acctNo = recipient?.details?.account_number ?? "";
+      if (!acctNo) {
+        const code = recipient?.recipient_code ?? recipient?.id;
+        if (code != null) {
+          acctNo = (await fetchRecipient(String(code))).details.account_number;
+        }
+      }
+    } else {
+      acctNo = (await fetchRecipient(String(recipient))).details.account_number;
+    }
+
+    if (!acctNo) {
+      return reject("could not resolve destination account", { reference });
+    }
+
     // ---------- Customer withdrawals ----------
-    const withdrawal = await prisma.withdrawal.findFirst({
-      where: { reference },
+    const candidates = await prisma.withdrawal.findMany({
+      where: reference
+        ? { reference }
+        : { accountNumber: acctNo, status: { in: ["PENDING", "APPROVED"] } },
+      orderBy: { createdAt: "desc" },
+      take: 10,
       select: { amount: true, accountNumber: true, status: true },
     });
 
-    if (withdrawal) {
-      if (withdrawal.status !== "PENDING" && withdrawal.status !== "APPROVED") {
-        return reject("withdrawal already finished", { reference });
-      }
+    const withdrawal = candidates.find((w) => {
+      const fee = USER_PAYS_FEE ? transferFee(w.amount) : 0;
+      return (
+        (w.status === "PENDING" || w.status === "APPROVED") &&
+        Math.round((w.amount - fee) * 100) === amountKobo &&
+        w.accountNumber === acctNo
+      );
+    });
 
-      const fee = USER_PAYS_FEE ? transferFee(withdrawal.amount) : 0;
-      const expectedKobo = Math.round((withdrawal.amount - fee) * 100);
-
-      if (amountKobo !== expectedKobo) {
-        return reject("amount mismatch", {
-          reference,
-          amountKobo,
-          expectedKobo,
-        });
-      }
-
-      const found = await fetchRecipient(recipient);
-      if (found.details.account_number !== withdrawal.accountNumber) {
-        return reject("destination account mismatch", { reference });
-      }
-
-      return approve();
-    }
+    if (withdrawal) return approve();
 
     // ---------- Admin business wallet withdrawals ----------
     const business = await prisma.businessWithdrawal.findFirst({
-      where: { OR: [{ reference }, { paystackReference: reference }] },
+      where: reference
+        ? { OR: [{ reference }, { paystackReference: reference }] }
+        : {
+            accountNumber: acctNo,
+            status: { in: ["PENDING", "PROCESSING"] },
+          },
+      orderBy: { createdAt: "desc" },
       select: {
         amount: true,
         accountNumber: true,
-        recipientCode: true,
         status: true,
       },
     });
@@ -90,21 +107,15 @@ export async function POST(request: Request) {
         return reject("business amount mismatch", { reference, amountKobo });
       }
 
-      const codeMatches =
-        typeof recipient === "string" && business.recipientCode === recipient;
-
-      if (!codeMatches) {
-        const found = await fetchRecipient(recipient);
-        if (found.details.account_number !== business.accountNumber) {
-          return reject("business destination mismatch", { reference });
-        }
+      if (business.accountNumber !== acctNo) {
+        return reject("business destination mismatch", { reference });
       }
 
       return approve();
     }
 
     // Not one of our withdrawals: someone else is trying to send your money
-    return reject("unknown reference", { reference });
+    return reject("no matching withdrawal", { reference, amountKobo, acctNo });
   } catch (error) {
     // Fail closed: if anything goes wrong, the transfer is NOT approved
     console.error("TRANSFER APPROVAL ERROR:", error);

@@ -317,6 +317,10 @@ export async function POST(request: Request) {
         throw new PaystackError("Transfer OTP is still enabled on Paystack.");
       }
 
+      if (["failed", "rejected", "reversed"].includes(transfer.status)) {
+        throw new PaystackError(`Transfer ${transfer.status}`);
+      }
+
       // Mark as sent to Paystack (skipped if the webhook already settled it)
       await prisma.withdrawal.updateMany({
         where: { reference, status: "PENDING" },
