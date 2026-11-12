@@ -324,7 +324,7 @@ export default function AboutPage() {
               <div className="overflow-hidden rounded-3xl shadow-xl ring-1 ring-gray-200 dark:ring-gray-800">
                 <Image
                   src="/logo.png"
-                  alt="Brainfriend Global Tech logo"
+                  alt=""
                   width={450}
                   height={550}
                   className="h-auto w-full max-w-sm object-cover"
