@@ -105,3 +105,15 @@ export function initiateTransfer(p: {
     }),
   });
 }
+
+// Used by the transfer approval route. Short timeout, because Paystack
+// blocks a transfer if our server is slow to answer.
+export function fetchRecipient(idOrCode: string | number, timeoutMs = 2500) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  return paystack<{ details: { account_number: string } }>(
+    `/transferrecipient/${encodeURIComponent(String(idOrCode))}`,
+    { signal: controller.signal },
+  ).finally(() => clearTimeout(timer));
+}
