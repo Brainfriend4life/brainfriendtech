@@ -29,6 +29,7 @@ import {
   SlidersHorizontal,
   Star,
   Database,
+  Mail,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -84,6 +85,11 @@ const managementItems: NavItem[] = [
     label: "Data Prices",
     href: "/dashboard/admin/data-prices",
     icon: Database,
+  },
+  {
+    label: "Email Broadcast",
+    href: "/dashboard/admin/broadcast",
+    icon: Mail,
   },
 ];
 
@@ -151,16 +157,6 @@ const financeItems: NavItem[] = [
     href: "/dashboard/admin/wallet",
     icon: Activity,
   },
-  {
-    label: "Revenue & Profit",
-    href: "/dashboard/admin/revenue",
-    icon: TrendingUp,
-  },
-  {
-    label: "Withdraw Revenue",
-    href: "/dashboard/admin/revenue/withdraw",
-    icon: ArrowDownToLine,
-  },
 ];
 
 /* =========================================================
@@ -168,11 +164,6 @@ const financeItems: NavItem[] = [
 ========================================================= */
 
 const systemItems: NavItem[] = [
-  {
-    label: "Settings",
-    href: "/dashboard/admin/settings",
-    icon: Settings,
-  },
   {
     label: "Service Fees",
     href: "/dashboard/admin/service-fees",
@@ -194,7 +185,8 @@ export default function AdminSidebar() {
     pathname.startsWith("/dashboard/admin/purchases") ||
       pathname.startsWith("/dashboard/admin/nin") ||
       pathname.startsWith("/dashboard/admin/reviews") ||
-      pathname.startsWith("/dashboard/admin/data-prices"),
+      pathname.startsWith("/dashboard/admin/data-prices") ||
+      pathname.startsWith("/dashboard/admin/broadcast"),
   );
 
   const [educationOpen, setEducationOpen] = useState(
